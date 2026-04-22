@@ -6488,6 +6488,23 @@ let seoResults = {}; // { asin: { '.fr': {...}, backendKW: '...' } }
 let seoActiveTab = null;
 let seoDrawerAsin = null; // ASIN actuellement affiché dans le drawer
 
+// ── seoGetPendingVerifications — déclarée tôt car utilisée par le badge nav ──
+function seoGetPendingVerifications() {
+  var c = cl();
+  if (!c || !c.ficheOptimisee) return [];
+  var now = new Date();
+  var pending = [];
+  Object.entries(c.ficheOptimisee).forEach(function(entry) {
+    var asin = entry[0]; var fiche = entry[1];
+    (fiche.actions || []).forEach(function(action) {
+      if (action.verified === null && action.verificationDue && new Date(action.verificationDue) < now) {
+        pending.push({ asin: asin, action: action });
+      }
+    });
+  });
+  return pending;
+}
+
 // ── Score SEO défaillant ────────────────────────────────────────
 function calcSEODefaillance(a, c) {
   const asins = c.asins || [];
