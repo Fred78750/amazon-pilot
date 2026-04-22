@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23232F3E'/%3E%3Cpath d='M7 17 Q16 22 25 17' stroke='%23FF9900' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='24' cy='15.5' r='1.8' fill='%23FF9900'/%3E%3Cpath d='M15 9 L15 23 L19 20 L23 23 L23 9' fill='%23FF9900' opacity='0.9'/%3E%3C/svg%3E">
-<title>Amazon Pilot v3.1.13 — Pilotage Vendor Central</title>
+<title>Amazon Pilot v3.1.14 — Pilotage Vendor Central</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" onerror="console.warn('[AP] PapaParse CDN failed')"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" onerror="console.warn('[AP] Chart.js CDN failed')"></script>
@@ -379,7 +379,7 @@ a:hover { text-decoration: underline; }
   <div class="sb">
     <div class="sb-logo">
       <div class="sb-logo-ic">AP</div>
-      <div class="sb-logo-text"><b>Amazon Pilot</b><small>v3.1.13 — Vendor Central</small></div>
+      <div class="sb-logo-text"><b>Amazon Pilot</b><small>v3.1.14 — Vendor Central</small></div>
     </div>
     <div class="sb-section">Navigation</div>
     <div class="sb-nav" id="nav-list"></div>
@@ -2284,7 +2284,7 @@ function renderContent() {
 function renderWelcome() {
   return `<div class="welcome-wrap">
     <div class="welcome-icon">🛒</div>
-    <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">Amazon Pilot v3.1.13</h1>
+    <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">Amazon Pilot v3.1.14</h1>
     <p style="color:var(--tx2);margin-bottom:24px;max-width:400px;line-height:1.7">Pilotez vos comptes Vendor Central avec l'IA. Import multi-périodes, diagnostic CA, revue hebdomadaire.</p>
     <button class="btn btn-p" style="padding:11px 22px;font-size:14px" onclick="startOnboarding()">+ Créer un client</button>
   </div>`;
@@ -7169,6 +7169,152 @@ function seoSearchGo() {
 
 function seoLaunchNewRef() {
   showToast('Route A \u2014 Cr\u00e9ation nouvelle r\u00e9f\u00e9rence : fonctionnalit\u00e9 en pr\u00e9paration', 'alr-b');
+}
+
+function buildSEOPrompt(a, c, lang, isBackendKW) {
+  const langLabels = { fr:'français', de:'allemand', it:'italien', es:'espagnol',
+                       en:'anglais', nl:'néerlandais', sv:'suédois', pl:'polonais' };
+  const langName = langLabels[lang] || lang;
+  const ppm = (c.ppmData||{})[a.asin];
+  const niveau = ppm?.ppm >= 30 ? 'haut de gamme'
+               : ppm?.ppm >= 15 ? 'milieu de gamme'
+               : ppm?.ppm >= 5  ? 'entrée de gamme'
+               : 'niveau non déterminé';
+  const pot = calcPotential(a, c);
+  const trend = calcTrend(a);
+  const convRate = a.glanceViews > 0 && a.revenue > 0
+    ? (a.revenue / a.glanceViews * 100).toFixed(1) + '%' : 'N/D';
+  const totalCA = c.asins.reduce((s,x) => s+(x.revenue||0), 0);
+
+  const dataCtx = [
+    'Titre actuel : ' + (a.title || 'N/D'),
+    'ASIN : ' + a.asin + ' | Marque : ' + (a.brand || 'N/D'),
+    'CA semaine : ' + fmtEur(a.revenue || 0) + ' | Tendance : ' + (trend?.label || 'N/D'),
+    'Taux de conversion : ' + convRate,
+    'Retours : ' + (a.returns || 0) + ' | Retail % : ' + (a.retailPct || 'N/D'),
+    'Segment : ' + calcSegment(a, totalCA),
+    'Niveau de gamme estimé (PPM) : ' + niveau + (ppm?.ppm != null ? ' (' + ppm.ppm.toFixed(1) + '%)' : ''),
+    'Score potentiel : ' + pot.score + '/100',
+    pot.signals.filter(s => s.cls === 'r').length > 0
+      ? 'Alertes : ' + pot.signals.filter(s => s.cls === 'r').map(s => s.label).join(', ')
+      : '',
+  ].filter(Boolean).join('\n');
+
+  if (isBackendKW) {
+    return 'Tu es un expert Amazon SEO.\n'
+      + 'Génère UNIQUEMENT les backend keywords en ' + langName + '.\n'
+      + 'RÈGLES STRICTES :\n'
+      + '- Séparateur : espace uniquement (jamais de virgule)\n'
+      + '- Maximum 250 BYTES (les accents comptent double en FR/ES/IT — sois économe)\n'
+      + '- Zéro répétition — les mots déjà dans le titre sont déjà indexés, ne pas les répéter\n'
+      + '- Zéro nom de marque concurrente\n'
+      + '- Zéro superlatif (meilleur, top, n°1)\n'
+      + '- Inclure : synonymes, fautes courantes, termes métier, variantes de taille, longue traîne\n'
+      + '- Les mots-clés doivent raconter une histoire sémantique cohérente — pas une liste disparate\n'
+      + 'Réponds UNIQUEMENT avec les mots clés, rien d\'autre.\n\n'
+      + dataCtx;
+  }
+
+  return 'Tu es un expert Amazon SEO, e-commerce et stratégie marketplace. Tu travailles comme un consultant senior Amazon Vendor, pas comme un simple rédacteur.\n\n'
+    + 'Ta mission : créer une fiche produit Amazon ultra-performante EN ' + langName.toUpperCase() + ' pour maximiser :\n'
+    + '- le référencement organique\n'
+    + '- le taux de clic (CTR)\n'
+    + '- le taux de conversion\n'
+    + '- la réduction des retours et des avis négatifs\n\n'
+    + 'DONNÉES PRODUIT :\n' + dataCtx + '\n\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
+    + 'ÉTAPE 1 — ANALYSE STRATÉGIQUE OBLIGATOIRE\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
+    + 'Avant toute rédaction, analyse :\n'
+    + '1. Positionnement réel : ' + niveau + ' — usage principal, usage secondaire, bénéfice différenciant\n'
+    + '2. Environnement concurrentiel : familles dominantes SERP, arguments surutilisés, opportunités sous-exploitées\n'
+    + '3. Risques de mauvaise compréhension : dimensions, compatibilité, usage, contenu du pack, niveau de qualité\n'
+    + '4. Stratégie de positionnement : angle marketing pertinent, mot-clé prioritaire, longues traînes qualifiées\n\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
+    + 'ÉTAPE 2 — RÈGLES DE RÉDACTION IMPÉRATIVES\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
+    + '1. Toujours écrire en ' + langName + ' naturel, clair et vendeur\n'
+    + '2. Toujours rester crédible et exact — ne jamais inventer une caractéristique\n'
+    + '3. Ne jamais sur-promettre — adapter au vrai niveau du produit (' + niveau + ')\n'
+    + '4. Toujours raisonner en intention d\'achat\n'
+    + '5. Intégrer une logique "anti-déception" — filtrer les mauvais clients\n'
+    + '6. Penser comme Amazon : ce produit est-il la réponse exacte à cette recherche ?\n\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
+    + 'ÉTAPE 3 — CRÉATION DE LA FICHE EN ' + langName.toUpperCase() + '\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
+    + 'GÉNÈRE EXACTEMENT dans cet ordre :\n\n'
+    + 'NOM_TYPE_PRODUIT: [en ' + langName + ', minuscules, sans marque, précis, sans underscore — ex: tenaille russe / cric rouleur hydraulique]\n\n'
+    + 'TITRE: [80-150 caractères recommandés, 200 max — structure : Marque + Référence - Type produit + Taille - Matériau/Attribut clé - Usage principal]\n'
+    + 'RÈGLES TITRE STRICTES :\n'
+    + '- Séparateurs : tirets - uniquement (JAMAIS de | / ! ? *)\n'
+    + '- Mot-clé principal dans les 30 premiers caractères\n'
+    + '- Un même mot maximum 2 fois\n'
+    + '- INTERDIT dans le titre : prix, promotions, "meilleur", "n°1", "gratuit"\n'
+    + '- Pas de répétition de la taille ou des specs\n'
+    + '- Majuscule à chaque mot sauf articles/prépositions\n\n'
+    + 'BULLET_1: [🔧 ou icône pertinente — BÉNÉFICE PRINCIPAL + mot-clé central + usage terrain spécifique]\n'
+    + 'BULLET_2: [💪 ou icône pertinente — MATÉRIAUX / QUALITÉ + specs techniques + différenciation vs concurrents]\n'
+    + 'BULLET_3: [🌱 ou icône pertinente — PROFIL CLIENT + cas d\'usage concrets + polyvalence]\n'
+    + 'BULLET_4: [📏 ou icône pertinente — DIMENSIONS / SPECS + ergonomie + compatibilité]\n'
+    + 'BULLET_5: [🛡️ ou icône pertinente — GARANTIE + marque/distributeur + réassurance achat]\n\n'
+    + 'RÈGLES BULLETS STRICTES :\n'
+    + '- Exactement 5 bullets, jamais 4, jamais 6\n'
+    + '- Une seule icône par bullet, en PREMIER avant le texte\n'
+    + '- Icône choisie intelligemment selon le contexte (🔧 outil 💪 résistance 🌱 jardin/agri 📏 taille 🛡️ garantie ⚡ électricité 💧 étanchéité 🔒 sécurité 🚗 auto 🔥 chaleur 🧰 kit)\n'
+    + '- Pas d\'emojis gadgets, pas de répétition d\'icône\n'
+    + '- 200-250 caractères par bullet recommandés\n'
+    + '- Pas de HTML, pas de prix, pas de référence interne dans le corps\n\n'
+    + 'DESCRIPTION: [HTML pédagogique avec <b>, <br>, <ul><li> — expliquer pour qui, dans quel contexte, avec quelles limites — inclure liste technique lisible]\n\n'
+    + 'BACKEND_KEYWORDS: [espaces uniquement, max 250 bytes, zéro répétition, zéro concurrent, histoire sémantique cohérente — synonymes + fautes courantes + termes métier + longue traîne]\n\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
+    + 'ÉTAPE 4 — SYNTHÈSE STRATÉGIQUE\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
+    + 'POSITIONNEMENT_AMAZON: [positionnement retenu sur Amazon — 1 phrase claire]\n'
+    + 'LEVIERS_RANKING: [3 leviers principaux pour gagner du ranking sur cet ASIN]\n'
+    + 'ERREURS_A_EVITER: [erreurs absolues à ne pas commettre sur cette fiche]\n'
+    + 'OPPORTUNITE_SEO: [1 opportunité concurrentielle non exploitée]';
+}
+
+function parseSEOResponse(text, lang) {
+  const result = { titre: '', bullets: ['','','','',''], description: '',
+                   nomType: '', backendKW: '',
+                   positionnement: '', leviers: '', erreurs: '', opportunite: '' };
+  try {
+    // Utiliser split par lignes pour éviter les regex multilignes
+    function extractField(t, key) {
+      const lines = t.split('\n');
+      for (let li = 0; li < lines.length; li++) {
+        const line = lines[li];
+        const idx = line.indexOf(key + ':');
+        if (idx !== -1) {
+          let val = line.slice(idx + key.length + 1).trim();
+          // Récupérer les lignes suivantes si la valeur continue
+          let li2 = li + 1;
+          while (li2 < lines.length && lines[li2] && !lines[li2].match(/^[A-Z_]{3,}:/)) {
+            val += ' ' + lines[li2].trim();
+            li2++;
+          }
+          return val.trim();
+        }
+      }
+      return '';
+    }
+
+    result.nomType      = extractField(text, 'NOM_TYPE_PRODUIT');
+    result.titre        = extractField(text, 'TITRE');
+    result.backendKW    = extractField(text, 'BACKEND_KEYWORDS');
+    result.positionnement = extractField(text, 'POSITIONNEMENT_AMAZON');
+    result.leviers      = extractField(text, 'LEVIERS_RANKING');
+    result.erreurs      = extractField(text, 'ERREURS_A_EVITER');
+    result.opportunite  = extractField(text, 'OPPORTUNITE_SEO');
+
+    for (let i = 1; i <= 5; i++) {
+      result.bullets[i-1] = extractField(text, 'BULLET_' + i);
+    }
+    const descMatch = text.match(/DESCRIPTION:\s*([\s\S]+?)$/);
+    if (descMatch) result.description = descMatch[1].trim();
+  } catch(e) { /* parsing partiel OK */ }
+  return result;
 }
 
 async function runSEOFiche(asin) {
