@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23232F3E'/%3E%3Cpath d='M7 17 Q16 22 25 17' stroke='%23FF9900' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='24' cy='15.5' r='1.8' fill='%23FF9900'/%3E%3Cpath d='M15 9 L15 23 L19 20 L23 23 L23 9' fill='%23FF9900' opacity='0.9'/%3E%3C/svg%3E">
-<title>Amazon Pilot v3.1.12 — Pilotage Vendor Central</title>
+<title>Amazon Pilot v3.1.13 — Pilotage Vendor Central</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" onerror="console.warn('[AP] PapaParse CDN failed')"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" onerror="console.warn('[AP] Chart.js CDN failed')"></script>
@@ -379,7 +379,7 @@ a:hover { text-decoration: underline; }
   <div class="sb">
     <div class="sb-logo">
       <div class="sb-logo-ic">AP</div>
-      <div class="sb-logo-text"><b>Amazon Pilot</b><small>v3.1.12 — Vendor Central</small></div>
+      <div class="sb-logo-text"><b>Amazon Pilot</b><small>v3.1.13 — Vendor Central</small></div>
     </div>
     <div class="sb-section">Navigation</div>
     <div class="sb-nav" id="nav-list"></div>
@@ -2284,7 +2284,7 @@ function renderContent() {
 function renderWelcome() {
   return `<div class="welcome-wrap">
     <div class="welcome-icon">🛒</div>
-    <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">Amazon Pilot v3.1.12</h1>
+    <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">Amazon Pilot v3.1.13</h1>
     <p style="color:var(--tx2);margin-bottom:24px;max-width:400px;line-height:1.7">Pilotez vos comptes Vendor Central avec l'IA. Import multi-périodes, diagnostic CA, revue hebdomadaire.</p>
     <button class="btn btn-p" style="padding:11px 22px;font-size:14px" onclick="startOnboarding()">+ Créer un client</button>
   </div>`;
@@ -6828,7 +6828,7 @@ function refreshSEODrawer() {
   var r = res[activeMkt];
   var status = seoGetStatus(asin, c);
   var shortTitle = (a.title || asin).substring(0, 50) + ((a.title||'').length > 50 ? '\u2026' : '');
-  var asinJ = JSON.stringify(asin);
+  var asinJ = "'" + asin + "'";
 
   var h = '';
 
@@ -6940,7 +6940,7 @@ function drawSEOContent(asin, activeMkt, res, mtp, compact) {
   var r = res[activeMkt];
   if (!r || r.error) return '';
   var h = '';
-  var asinJ = JSON.stringify(asin);
+  var asinJ = "'" + asin + "'";
   var mktJ  = JSON.stringify(activeMkt);
 
   // Nom type produit
@@ -7071,7 +7071,7 @@ function renderSEOScreen() {
       var icon = d==='critical' ? '\U0001f534' : '\U0001f7e1';
       var label = d==='critical' ? 'SEO d\u00e9faillant' : '\u00c0 surveiller';
       var short = (a.title||a.asin).substring(0,60)+((a.title||'').length>60?'\u2026':'');
-      var asinJ = JSON.stringify(a.asin);
+      var asinJ = "'" + a.asin + "'";
       h += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)">';
       h += '<div style="flex-shrink:0;width:22px;height:22px;border-radius:50%;background:'+segC+';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff">'+seg+'</div>';
       h += '<div style="flex:1;min-width:0">';
@@ -7100,7 +7100,7 @@ function renderSEOScreen() {
       var fiche = c.ficheOptimisee && c.ficheOptimisee[a.asin];
       var lastAction = fiche && fiche.actions && fiche.actions.length ? fiche.actions[fiche.actions.length-1] : null;
       var short = (a.title||a.asin).substring(0,55)+((a.title||'').length>55?'\u2026':'');
-      var asinJ = JSON.stringify(a.asin);
+      var asinJ = "'" + a.asin + "'";
       h += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)">';
       h += '<div style="flex:1;min-width:0">';
       h += '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(short) + '</div>';
