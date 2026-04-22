@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23232F3E'/%3E%3Cpath d='M7 17 Q16 22 25 17' stroke='%23FF9900' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='24' cy='15.5' r='1.8' fill='%23FF9900'/%3E%3Cpath d='M15 9 L15 23 L19 20 L23 23 L23 9' fill='%23FF9900' opacity='0.9'/%3E%3C/svg%3E">
-<title>Amazon Pilot v3.1.9 — Pilotage Vendor Central</title>
+<title>Amazon Pilot v3.1.10 — Pilotage Vendor Central</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" onerror="console.warn('[AP] PapaParse CDN failed')"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" onerror="console.warn('[AP] Chart.js CDN failed')"></script>
@@ -379,7 +379,7 @@ a:hover { text-decoration: underline; }
   <div class="sb">
     <div class="sb-logo">
       <div class="sb-logo-ic">AP</div>
-      <div class="sb-logo-text"><b>Amazon Pilot</b><small>v3.1.9 — Vendor Central</small></div>
+      <div class="sb-logo-text"><b>Amazon Pilot</b><small>v3.1.10 — Vendor Central</small></div>
     </div>
     <div class="sb-section">Navigation</div>
     <div class="sb-nav" id="nav-list"></div>
@@ -2284,7 +2284,7 @@ function renderContent() {
 function renderWelcome() {
   return `<div class="welcome-wrap">
     <div class="welcome-icon">🛒</div>
-    <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">Amazon Pilot v3.1.9</h1>
+    <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">Amazon Pilot v3.1.10</h1>
     <p style="color:var(--tx2);margin-bottom:24px;max-width:400px;line-height:1.7">Pilotez vos comptes Vendor Central avec l'IA. Import multi-périodes, diagnostic CA, revue hebdomadaire.</p>
     <button class="btn btn-p" style="padding:11px 22px;font-size:14px" onclick="startOnboarding()">+ Créer un client</button>
   </div>`;
@@ -6503,6 +6503,209 @@ function seoGetPendingVerifications() {
     });
   });
   return pending;
+}
+
+
+// ── Fonctions SEO utilitaires ──────────────────────────────────
+function seoGetStatus(asin, c) {
+  var fiche = c.ficheOptimisee && c.ficheOptimisee[asin];
+  if (!fiche) return 'none';
+  var actions = fiche.actions || [];
+  if (!actions.length) return 'generated';
+  var last = actions[actions.length - 1];
+  if (last.verified === true) return 'verified';
+  if (last.verified === false) return 'failed';
+  if (last.verificationDue && new Date(last.verificationDue) < new Date()) return 'overdue';
+  if (last.submittedAt) return 'submitted';
+  return 'generated';
+}
+
+function seoStatusLabel(status) {
+  var map = {
+    none:      { label: 'Non optimisé',          color: 'var(--tx3)', icon: '' },
+    generated: { label: 'Fiche générée',          color: 'var(--accent)', icon: '✍️' },
+    submitted: { label: 'Soumis VC',              color: '#2196F3', icon: '📤' },
+    overdue:   { label: 'Vérification en attente', color: 'var(--or)', icon: '⏰' },
+    verified:  { label: 'Conforme',               color: 'var(--g)', icon: '✅' },
+    failed:    { label: 'Non conforme',           color: 'var(--r)', icon: '❌' }
+  };
+  return map[status] || map.none;
+}
+
+function seoRecordAction(asin, route, supplierCodes, markets) {
+  var c = cl();
+  if (!c) return;
+  if (!c.ficheOptimisee) c.ficheOptimisee = {};
+  if (!c.ficheOptimisee[asin]) c.ficheOptimisee[asin] = {};
+  if (!c.ficheOptimisee[asin].actions) c.ficheOptimisee[asin].actions = [];
+  var now = new Date();
+  var verDue = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  c.ficheOptimisee[asin].actions.push({
+    route: route,
+    supplierCodes: supplierCodes || [],
+    markets: markets || [],
+    submittedAt: now.toISOString(),
+    verificationDue: verDue.toISOString(),
+    verifiedAt: null,
+    verified: null,
+    diff: null,
+    caseId: null,
+    caseStatus: null
+  });
+  save();
+  showToast('Action enregistrée — vérification prévue dans 24h', 'alr-b');
+  render();
+}
+
+function seoGetScriptModify(asin, supplierCode, market, fiche) {
+  var mkt = fiche[market] || fiche['.fr'] || {};
+  var bullets = mkt.bullets || ['', '', '', '', ''];
+  var lines = [
+    'Tu es l\'agent SEO Amazon Pilot.',
+    'ASIN : ' + asin,
+    'Supplier Code : ' + supplierCode,
+    'Marche : ' + market,
+    '',
+    'Donnees a appliquer :',
+    'Titre : ' + (mkt.titre || ''),
+    'Bullet 1 : ' + (bullets[0] || ''),
+    'Bullet 2 : ' + (bullets[1] || ''),
+    'Bullet 3 : ' + (bullets[2] || ''),
+    'Bullet 4 : ' + (bullets[3] || ''),
+    'Bullet 5 : ' + (bullets[4] || ''),
+    'Description : ' + (mkt.description || ''),
+    'Backend Keywords : ' + (fiche.backendKW || ''),
+    '',
+    'Instructions :',
+    '1. Ouvre Vendor Central > Catalogue > Gerer le catalogue',
+    '2. Recherche l\'ASIN ' + asin + ' sous le supplier code ' + supplierCode,
+    '3. Ouvre la fiche en mode edition',
+    '4. Remplace le titre, les 5 bullets, la description et les backend keywords',
+    '5. Confirme la soumission',
+    '6. Rapporte : succes ou erreur'
+  ];
+  return lines.join('\n');
+}
+function seoGetScriptVerify(asin, market, fiche) {
+  var mkt = fiche[market] || fiche['.fr'] || {};
+  var bullets = mkt.bullets || [];
+  var lines = [
+    'Tu es l\'agent de verification SEO.',
+    'ASIN : ' + asin,
+    'Marche : amazon' + market,
+    '',
+    'Instructions :',
+    '1. Ouvre https://www.amazon' + market + '/dp/' + asin,
+    '2. Lis le titre actuel et les 5 bullets',
+    '3. Compare avec les valeurs attendues ci-dessous',
+    '4. Rapporte : CONFORME ou NON CONFORME avec les differences',
+    '',
+    'Titre attendu : ' + (mkt.titre || ''),
+    'Bullet 1 attendu : ' + (bullets[0] || ''),
+    'Bullet 2 attendu : ' + (bullets[1] || ''),
+    'Bullet 3 attendu : ' + (bullets[2] || ''),
+    'Bullet 4 attendu : ' + (bullets[3] || ''),
+    'Bullet 5 attendu : ' + (bullets[4] || '')
+  ];
+  return lines.join('\n');
+}
+function seoLaunchCreate(asin) {
+  var c = cl();
+  if (!c) return;
+  var fiche = c.ficheOptimisee && c.ficheOptimisee[asin];
+  if (!fiche) { showToast('Générez d\'abord la fiche SEO', 'alr-r'); return; }
+  var mkt = fiche['.fr'] || {};
+  var bullets = mkt.bullets || ['', '', '', '', ''];
+  var lines = [
+    'Tu es l\'agent SEO Amazon Pilot.',
+    'Nouvelle référence à créer dans Vendor Central.',
+    '',
+    'Données produit :',
+    'Titre : ' + (mkt.titre || ''),
+    'Type produit : ' + (mkt.nomType || ''),
+    'Bullet 1 : ' + (bullets[0] || ''),
+    'Bullet 2 : ' + (bullets[1] || ''),
+    'Bullet 3 : ' + (bullets[2] || ''),
+    'Bullet 4 : ' + (bullets[3] || ''),
+    'Bullet 5 : ' + (bullets[4] || ''),
+    'Description : ' + (mkt.description || ''),
+    '',
+    'Instructions :',
+    '1. Ouvre Vendor Central > Catalogue > Ajouter un produit',
+    '2. Sélectionne la catégorie : ' + (mkt.nomType || ''),
+    '3. Remplis tous les champs avec les données ci-dessus',
+    '4. Soumets la création',
+    '5. Rapporte l\'ASIN créé ou l\'erreur'
+  ];
+  var script = lines.join('\n');
+  navigator.clipboard.writeText(script).then(function() {
+    showToast('Script Route A copié — collez dans Claude in Chrome sur Vendor Central', 'alr-g');
+    seoRecordAction(asin, 'create', [], c.markets || [c.mainMarket || '.fr']);
+  });
+}
+function seoLaunchVerify(asin) {
+  var c = cl();
+  if (!c) return;
+  var fiche = c.ficheOptimisee && c.ficheOptimisee[asin];
+  if (!fiche) return;
+  var market = c.mainMarket || '.fr';
+  var script = seoGetScriptVerify(asin, market, fiche);
+  navigator.clipboard.writeText(script).then(function() {
+    showToast('Script vérification copié — collez dans Claude in Chrome sur Amazon', 'alr-g');
+  });
+}
+
+function seoOpenCase(asin) {
+  var c = cl();
+  if (!c) return;
+  var fiche = c.ficheOptimisee && c.ficheOptimisee[asin];
+  if (!fiche) return;
+  var lastAction = fiche.actions && fiche.actions.length ? fiche.actions[fiche.actions.length-1] : null;
+  var lines = [
+    'DEMANDE DE CAS SUPPORT AMAZON',
+    '',
+    'ASIN : ' + asin,
+    'Supplier Codes : ' + (lastAction && lastAction.supplierCodes ? lastAction.supplierCodes.join(', ') : 'N/D'),
+    'Date de soumission : ' + (lastAction && lastAction.submittedAt ? new Date(lastAction.submittedAt).toLocaleDateString('fr-FR') : 'N/D'),
+    '',
+    'PROBLEME :',
+    'Les modifications soumises via Vendor Central n\'ont pas été appliquées après 24h.',
+    '',
+    'MODIFICATIONS SOUMISES :',
+    'Titre : ' + ((fiche['.fr'] && fiche['.fr'].titre) || ''),
+    '',
+    'ACTION DEMANDEE :',
+    'Merci d\'appliquer les modifications ou d\'indiquer la raison du blocage.'
+  ];
+  navigator.clipboard.writeText(lines.join('\n')).then(function() {
+    showToast('Dossier cas support copié', 'alr-g');
+  });
+}
+function copySEOField(asin, mkt, field) {
+  var res = seoResults[asin] || {};
+  var text = '';
+  if (field === 'backendKW') {
+    text = res.backendKW || (res[mkt] && res[mkt].backendKW) || '';
+  } else if (field === 'all') {
+    var r = res[mkt] || {};
+    var parts = [];
+    if (r.titre) parts.push('TITRE:\n' + r.titre);
+    if (r.bullets && r.bullets.length) parts.push('BULLETS:\n' + r.bullets.filter(Boolean).join('\n'));
+    if (r.description) parts.push('DESCRIPTION:\n' + r.description);
+    if (res.backendKW) parts.push('BACKEND KW:\n' + res.backendKW);
+    text = parts.join('\n\n');
+  } else if (res[mkt]) {
+    if (field === 'titre') text = res[mkt].titre || '';
+    else if (field === 'description') text = res[mkt].description || '';
+    else if (field.startsWith('bullet')) {
+      var idx = parseInt(field.replace('bullet', '')) - 1;
+      text = (res[mkt].bullets || [])[idx] || '';
+    }
+  }
+  if (!text) { showToast('Rien à copier', 'alr-r'); return; }
+  navigator.clipboard.writeText(text).then(function() {
+    showToast('Copié !', 'alr-g');
+  });
 }
 
 // ── Score SEO défaillant ────────────────────────────────────────
