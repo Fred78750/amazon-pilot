@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23232F3E'/%3E%3Cpath d='M7 17 Q16 22 25 17' stroke='%23FF9900' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='24' cy='15.5' r='1.8' fill='%23FF9900'/%3E%3Cpath d='M15 9 L15 23 L19 20 L23 23 L23 9' fill='%23FF9900' opacity='0.9'/%3E%3C/svg%3E">
-<title>Amazon Pilot v3.1.4 — Pilotage Vendor Central</title>
+<title>Amazon Pilot v3.1.5 — Pilotage Vendor Central</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" onerror="console.warn('[AP] PapaParse CDN failed')"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" onerror="console.warn('[AP] Chart.js CDN failed')"></script>
@@ -379,7 +379,7 @@ a:hover { text-decoration: underline; }
   <div class="sb">
     <div class="sb-logo">
       <div class="sb-logo-ic">AP</div>
-      <div class="sb-logo-text"><b>Amazon Pilot</b><small>v3.1.4 — Vendor Central</small></div>
+      <div class="sb-logo-text"><b>Amazon Pilot</b><small>v3.1.5 — Vendor Central</small></div>
     </div>
     <div class="sb-section">Navigation</div>
     <div class="sb-nav" id="nav-list"></div>
@@ -457,7 +457,7 @@ const NAV = [
   { id: 'pompier',   icon: '🚨', label: 'Diagnostic CA' },
   { id: 'potentiel', icon: '🚀', label: 'ASINs Potentiel' },
   { id: 'appros',    icon: '🚢', label: 'Appros' },
-  { id: 'seo',       icon: '✍️', label: 'Agent SEO' },
+  { id: 'seo',       icon: '✍️', label: 'Agent SEO', badgeFn: function(c) { return c ? seoGetPendingVerifications().length : 0; } },
   { id: 'fiche',     icon: '📋', label: 'Fiche client' },
   { id: 'config',    icon: '⚙️', label: 'Configuration' },
 ];
@@ -491,7 +491,7 @@ function freshClient() {
     // ── Catalogue ASIN ↔ SKU fournisseur ──
     catalogue: [],       // [{ asin, sku, ean, description, prixAchat, vendorCode }]
     pos: [],             // [{ poId, asin, sku, title, vendorCode, qty, qtyAccepted,
-    ficheOptimisee: {},  // { asin: { '.fr': {titre,bullets,description,generatedAt}, backendKW, generatedAt } } qtyRemaining, cost, warehouse, orderDate, deliveryDeadline, status, importedAt }]
+    ficheOptimisee: {},  // asin => marche => {titre,bullets,description,nomType,backendKW,generatedAt} + actions[]
     // ── Données enrichies ──
     ppmData: {},         // { asin: { ppm: float, ppmDeltaBps: int, importedAt: ISO } }
     forecastData: {}     // { asin: { weeks: [float x48], importedAt: ISO, weekLabels: [str x48] } }
@@ -2185,11 +2185,14 @@ function renderNav() {
   const lastExportISO = localStorage.getItem('ap-last-export');
   const backupDays = lastExportISO ? Math.floor((Date.now() - new Date(lastExportISO)) / 86400000) : 999;
   const needsBackup = backupDays > 7;
+  const _navClient = cl();
   document.getElementById('nav-list').innerHTML = NAV.map(n => {
     const badge = n.badge && alertCount > 0 ? `<span class="badge">${alertCount}</span>` : '';
     const backupBadge = n.id === 'config' && needsBackup ? `<span class="badge" style="background:var(--or)" title="Backup requis">!</span>` : '';
+    const fnBadgeCount = n.badgeFn ? n.badgeFn(_navClient) : 0;
+    const fnBadge = fnBadgeCount > 0 ? `<span class="badge" style="background:var(--or)" title="Vérifications en attente">${fnBadgeCount}</span>` : '';
     return `<button class="sb-it${screen === n.id ? ' on' : ''}" onclick="go('${n.id}')">
-      <span class="sb-it-ic">${n.icon}</span><span>${n.label}</span>${badge}${backupBadge}
+      <span class="sb-it-ic">${n.icon}</span><span>${n.label}</span>${badge}${backupBadge}${fnBadge}
     </button>`;
   }).join('');
 }
@@ -2281,7 +2284,7 @@ function renderContent() {
 function renderWelcome() {
   return `<div class="welcome-wrap">
     <div class="welcome-icon">🛒</div>
-    <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">Amazon Pilot v3.1.4</h1>
+    <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">Amazon Pilot v3.1.5</h1>
     <p style="color:var(--tx2);margin-bottom:24px;max-width:400px;line-height:1.7">Pilotez vos comptes Vendor Central avec l'IA. Import multi-périodes, diagnostic CA, revue hebdomadaire.</p>
     <button class="btn btn-p" style="padding:11px 22px;font-size:14px" onclick="startOnboarding()">+ Créer un client</button>
   </div>`;
@@ -5821,7 +5824,10 @@ function renderConfig() {
     { label: 'Analyse fiche produit', txt: "Analyse cette fiche produit Amazon : prix, avis, contenu, images. Recommandations d'optimisation." },
     { label: 'Analyse concurrentielle', txt: "Identifie les 5 principaux concurrents sur cette page, compare prix, notes et avis. Stratégie gagnante ?" },
     { label: 'Audit Buy Box', txt: "Qui détient la Buy Box ? Y a-t-il des vendeurs 3P ? Analyse le risque de perte de Buy Box." },
-    { label: 'Analyse des avis', txt: "Analyse les avis clients. Points positifs récurrents ? Plaintes principales ? Suggestions d'amélioration produit." }
+    { label: 'Analyse des avis', txt: "Analyse les avis clients. Points positifs récurrents ? Plaintes principales ? Suggestions d'amélioration produit." },
+    { label: 'Agent SEO — Modifier fiche VC (Route B)', txt: "(Script généré depuis Agent SEO > bouton Modifier VC)" },
+    { label: 'Agent SEO — Créer référence VC (Route A)', txt: "(Script généré depuis Agent SEO > bouton Créer VC)" },
+    { label: 'Agent SEO — Vérifier conformité Amazon', txt: "(Script généré depuis Agent SEO > bouton Vérifier)" }
   ];
   PROMPTS.forEach((p, i) => {
     h += `<div style="display:flex;align-items:center;gap:10px;padding:9px;background:var(--s2);border-radius:var(--rd);margin-bottom:6px;border:1px solid var(--bd)">
@@ -6722,88 +6728,120 @@ function renderSEOScreen() {
   const asins = c.asins || [];
   const markets = c.markets && c.markets.length ? c.markets : [c.mainMarket || '.fr'];
   const totalAsins = asins.length;
-  const optimized = asins.filter(a => !!(seoResults[a.asin] || c.ficheOptimisee?.[a.asin])).length;
+  const totalCA = asins.reduce(function(s,x) { return s+(x.revenue||0); }, 0);
 
-  let h = '<div style="padding:20px 24px;max-width:1100px">';
+  const stats = { none:0, generated:0, submitted:0, overdue:0, verified:0, failed:0 };
+  asins.forEach(function(a) { stats[seoGetStatus(a.asin, c)]++; });
+  const optimized = totalAsins - stats.none;
+  const pendingVerif = seoGetPendingVerifications();
 
-  // Header
-  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">';
+  let h = '<div style="padding:20px 24px;max-width:1200px">';
+
+  h += '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px">';
   h += '<div>';
   h += '<h2 style="font-size:20px;font-weight:700;margin:0 0 4px 0">✍️ Agent SEO — ' + esc(c.name) + '</h2>';
-  h += '<div style="font-size:12px;color:var(--tx3)">' + optimized + ' fiche' + (optimized > 1 ? 's' : '') + ' optimisée' + (optimized > 1 ? 's' : '') + ' sur ' + totalAsins + ' ASINs · ' + markets.length + ' marché' + (markets.length > 1 ? 's' : '') + ' : ' + markets.join(', ') + '</div>';
-  h += '</div>';
+  h += '<div style="font-size:12px;color:var(--tx3)">' + markets.join(' · ') + '</div>';
+  h += '</div></div>';
+
+  if (pendingVerif.length > 0) {
+    h += '<div class="alr alr-r" style="margin-bottom:16px">⏰ ' + pendingVerif.length + ' vérification' + (pendingVerif.length > 1 ? 's' : '') + ' en attente — modifications soumises il y a plus de 24h.</div>';
+  }
+
+  h += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">';
+  var statItems = [
+    { key:'none', label:'Non optimisé', color:'var(--tx3)' },
+    { key:'generated', label:'Fiche générée', color:'var(--accent)' },
+    { key:'submitted', label:'Soumis VC', color:'#2196F3' },
+    { key:'overdue', label:'Vérif. en attente', color:'var(--or)' },
+    { key:'verified', label:'Conforme', color:'var(--g)' },
+    { key:'failed', label:'Non conforme', color:'var(--r)' }
+  ];
+  statItems.forEach(function(s) {
+    if (stats[s.key] === 0) return;
+    h += '<div style="background:var(--bg2);border-radius:8px;padding:8px 14px;font-size:12px">';
+    h += '<span style="color:' + s.color + ';font-weight:700;font-size:16px">' + stats[s.key] + '</span>';
+    h += '<span style="color:var(--tx3);margin-left:6px">' + s.label + '</span></div>';
+  });
   h += '</div>';
 
-  // Barre de progression globale
   if (totalAsins > 0) {
     const pct = Math.round(optimized / totalAsins * 100);
     h += '<div style="margin-bottom:20px">';
-    h += '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--tx3);margin-bottom:4px"><span>Progression catalogue</span><span>' + pct + '%</span></div>';
-    h += '<div style="height:6px;background:var(--bd2);border-radius:3px"><div style="height:6px;background:var(--accent);border-radius:3px;width:' + pct + '%"></div></div>';
-    h += '</div>';
+    h += '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--tx3);margin-bottom:4px"><span>Progression catalogue</span><span>' + optimized + ' / ' + totalAsins + ' — ' + pct + '%</span></div>';
+    h += '<div style="height:6px;background:var(--bd2);border-radius:3px"><div style="height:6px;background:var(--g);border-radius:3px;width:' + pct + '%;transition:width .3s"></div></div></div>';
   }
 
-  // Grille ASINs
   if (asins.length === 0) {
-    h += '<div class="alr alr-b">Aucun ASIN disponible. Importez d\'abord vos données.</div>';
-    h += '</div>';
+    h += '<div class="alr alr-b">Aucun ASIN disponible. Importez vos données.</div></div>';
     return h;
   }
 
-  h += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">';
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px">';
 
   asins.slice(0, 100).forEach(function(a) {
     const existing = seoResults[a.asin] || c.ficheOptimisee?.[a.asin];
     const isLoading = seoLoading && seoResults[a.asin] && !existing;
-    const shortTitle = (a.title || a.asin).substring(0, 55) + ((a.title || '').length > 55 ? '…' : '');
-    const segment = calcSegment(a, c.asins.reduce((s,x) => s+(x.revenue||0), 0));
-    const segColors = { A: 'var(--g)', B: 'var(--accent)', C: 'var(--tx3)' };
+    const shortTitle = (a.title || a.asin).substring(0, 55) + ((a.title||'').length > 55 ? '…' : '');
+    const segment = calcSegment(a, totalCA);
+    const segColors = { A:'var(--g)', B:'var(--accent)', C:'var(--tx3)' };
+    const status = seoGetStatus(a.asin, c);
+    const statusInfo = seoStatusLabel(status);
+    const fiche = c.ficheOptimisee?.[a.asin];
+    const lastAction = fiche?.actions?.length ? fiche.actions[fiche.actions.length-1] : null;
+    const supplierCodes = [...new Set(c.asins.filter(function(x) { return x.asin === a.asin && x.vendorCode; }).map(function(x) { return x.vendorCode; }))];
 
-    h += '<div class="cd" style="cursor:pointer;transition:box-shadow .15s" onmouseover="this.style.boxShadow=\'0 4px 16px rgba(0,0,0,.12)\'" onmouseout="this.style.boxShadow=\'\'">';
-    h += '<div style="display:flex;align-items:flex-start;gap:10px">';
-
-    // Badge segment
-    h += '<div style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:' + (segColors[segment]||'var(--tx3)') + ';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;margin-top:2px">' + (segment||'?') + '</div>';
-
+    h += '<div class="cd">';
+    h += '<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px">';
+    h += '<div style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:' + (segColors[segment]||'var(--tx3)') + ';display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff">' + (segment||'?') + '</div>';
     h += '<div style="flex:1;min-width:0">';
     h += '<div style="font-size:12px;font-weight:600;color:var(--tx1);margin-bottom:2px;line-height:1.3">' + esc(shortTitle) + '</div>';
     h += '<div style="font-size:11px;color:var(--tx3);font-family:var(--mono)">' + esc(a.asin) + '</div>';
+    if (supplierCodes.length > 0) {
+      h += '<div style="font-size:10px;color:var(--tx3);margin-top:2px">Codes : ' + supplierCodes.join(', ') + '</div>';
+    }
+    h += '</div>';
+    if (isLoading) {
+      h += '<div style="flex-shrink:0;font-size:11px;color:var(--accent)"><span class="spin">⏳</span></div>';
+    } else {
+      h += '<div style="flex-shrink:0;font-size:11px;color:' + statusInfo.color + ';font-weight:600;text-align:right">' + statusInfo.icon + '<br>' + statusInfo.label + '</div>';
+    }
     h += '</div>';
 
-    // Statut
-    if (existing) {
-      h += '<div style="flex-shrink:0;font-size:11px;color:var(--g);font-weight:600">✅ Optimisé</div>';
-    } else if (isLoading) {
-      h += '<div style="flex-shrink:0;font-size:11px;color:var(--accent)"><span class="spin">⏳</span> En cours</div>';
-    } else {
-      h += '<div style="flex-shrink:0;font-size:11px;color:var(--tx3)">Non optimisé</div>';
+    if (lastAction) {
+      const daysAgo = Math.floor((new Date() - new Date(lastAction.submittedAt)) / 86400000);
+      h += '<div style="font-size:11px;color:var(--tx3);margin-bottom:8px">Soumis il y a ' + daysAgo + 'j · ' + (lastAction.supplierCodes||[]).join(', ') + '</div>';
     }
 
-    h += '</div>';
-
-    // Boutons action
-    h += '<div style="display:flex;gap:8px;margin-top:10px">';
-    if (existing) {
-      h += '<button class="btn btn-xs" onclick="navToAsinSEO(' + JSON.stringify(a.asin) + ')">👁 Voir la fiche</button>';
-      h += '<button class="btn btn-xs" onclick="runSEOFiche(' + JSON.stringify(a.asin) + ')">🔄 Regénérer</button>';
-    } else {
-      h += '<button class="btn btn-xs btn-p" onclick="runSEOFiche(' + JSON.stringify(a.asin) + ')" ' + (seoLoading ? 'disabled' : '') + '>✍️ Générer la fiche</button>';
+    h += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    if (existing && !isLoading) {
+      h += '<button class="btn btn-xs" onclick="navToAsinSEO(' + JSON.stringify(a.asin) + ')">👁 Voir</button>';
+      h += '<button class="btn btn-xs" onclick="runSEOFiche(' + JSON.stringify(a.asin) + ')">🔄</button>';
+      h += '<button class="btn btn-xs" style="background:var(--accent);color:#fff;border-color:var(--accent)" onclick="seoLaunchModify(' + JSON.stringify(a.asin) + ')">📤 Modifier VC</button>';
+      if (status === 'submitted' || status === 'overdue') {
+        h += '<button class="btn btn-xs" style="background:var(--or);color:#fff;border-color:var(--or)" onclick="seoLaunchVerify(' + JSON.stringify(a.asin) + ')">🔍 Vérifier</button>';
+      }
+      if (status === 'failed') {
+        h += '<button class="btn btn-xs" style="background:var(--r);color:#fff;border-color:var(--r)" onclick="seoOpenCase(' + JSON.stringify(a.asin) + ')">🆘 Cas support</button>';
+      }
+    } else if (!isLoading) {
+      h += '<button class="btn btn-xs btn-p" onclick="runSEOFiche(' + JSON.stringify(a.asin) + ')" ' + (seoLoading ? 'disabled' : '') + '>✍️ Générer</button>';
+      if (!a.title || a.title === a.asin) {
+        h += '<button class="btn btn-xs" onclick="seoLaunchCreate(' + JSON.stringify(a.asin) + ')">➕ Créer VC</button>';
+      }
     }
-    h += '<a href="https://www.amazon' + (c.mainMarket || '.fr') + '/dp/' + esc(a.asin) + '" target="_blank" class="btn btn-xs">🔗 Amazon</a>';
+    h += '<a href="https://www.amazon' + esc(c.mainMarket || '.fr') + '/dp/' + esc(a.asin) + '" target="_blank" class="btn btn-xs">🔗</a>';
     h += '</div>';
-
     h += '</div>';
   });
 
   h += '</div>';
-
   if (asins.length > 100) {
     h += '<div style="font-size:12px;color:var(--tx3);margin-top:12px;text-align:center">Affichage limité aux 100 premiers ASINs.</div>';
   }
-
   h += '</div>';
   return h;
 }
+
 
 function navToAsinSEO(asin) {
   const c = cl();
@@ -6813,6 +6851,208 @@ function navToAsinSEO(asin) {
   selectedAsin = asin;
   asinView = 'seo';
   navigate('asins');
+}
+
+// ── Gestion des actions SEO (Route A/B) ─────────────────────────
+function seoGetStatus(asin, c) {
+  const fiche = c.ficheOptimisee?.[asin];
+  if (!fiche) return 'none';
+  const actions = fiche.actions || [];
+  if (!actions.length) return 'generated';
+  const last = actions[actions.length - 1];
+  if (last.verified === true) return 'verified';
+  if (last.verified === false) return 'failed';
+  if (last.verificationDue && new Date(last.verificationDue) < new Date()) return 'overdue';
+  if (last.submittedAt) return 'submitted';
+  return 'generated';
+}
+
+function seoStatusLabel(status) {
+  const map = {
+    none: { label: 'Non optimisé', color: 'var(--tx3)', icon: '' },
+    generated: { label: 'Fiche générée', color: 'var(--accent)', icon: '✍️' },
+    submitted: { label: 'Soumis VC', color: '#2196F3', icon: '📤' },
+    overdue: { label: 'Vérification en attente', color: 'var(--or)', icon: '⏰' },
+    verified: { label: 'Conforme', color: 'var(--g)', icon: '✅' },
+    failed: { label: 'Non conforme', color: 'var(--r)', icon: '❌' }
+  };
+  return map[status] || map.none;
+}
+
+function seoRecordAction(asin, route, supplierCodes, markets) {
+  const c = cl();
+  if (!c) return;
+  if (!c.ficheOptimisee) c.ficheOptimisee = {};
+  if (!c.ficheOptimisee[asin]) c.ficheOptimisee[asin] = {};
+  if (!c.ficheOptimisee[asin].actions) c.ficheOptimisee[asin].actions = [];
+  const now = new Date();
+  const verDue = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  c.ficheOptimisee[asin].actions.push({
+    route: route,
+    supplierCodes: supplierCodes || [],
+    markets: markets || [],
+    submittedAt: now.toISOString(),
+    verificationDue: verDue.toISOString(),
+    verifiedAt: null,
+    verified: null,
+    diff: null,
+    caseId: null,
+    caseStatus: null
+  });
+  save();
+  showToast('Action enregistrée — vérification prévue dans 24h', 'alr-b');
+  render();
+}
+
+function seoGetPendingVerifications() {
+  const c = cl();
+  if (!c || !c.ficheOptimisee) return [];
+  const now = new Date();
+  const pending = [];
+  Object.entries(c.ficheOptimisee).forEach(function([asin, fiche]) {
+    const actions = fiche.actions || [];
+    actions.forEach(function(action) {
+      if (action.verified === null && action.verificationDue && new Date(action.verificationDue) < now) {
+        pending.push({ asin, action });
+      }
+    });
+  });
+  return pending;
+}
+
+function seoGetScriptModify(asin, supplierCode, market, fiche) {
+  const mkt = fiche[market] || fiche['.fr'] || {};
+  const bullets = mkt.bullets || ['', '', '', '', ''];
+  return 'Tu es l\'agent SEO Amazon Pilot.\n'
+    + 'ASIN : ' + asin + '\n'
+    + 'Supplier Code : ' + supplierCode + '\n'
+    + 'Marche : ' + market + '\n\n'
+    + 'Donnees a appliquer :\n'
+    + 'Titre : ' + (mkt.titre || '') + '\n'
+    + 'Bullet 1 : ' + (bullets[0] || '') + '\n'
+    + 'Bullet 2 : ' + (bullets[1] || '') + '\n'
+    + 'Bullet 3 : ' + (bullets[2] || '') + '\n'
+    + 'Bullet 4 : ' + (bullets[3] || '') + '\n'
+    + 'Bullet 5 : ' + (bullets[4] || '') + '\n'
+    + 'Description : ' + (mkt.description || '') + '\n'
+    + 'Backend Keywords : ' + (fiche.backendKW || '') + '\n\n'
+    + 'Instructions :\n'
+    + '1. Ouvre Vendor Central > Catalogue > Gerer le catalogue\n'
+    + '2. Recherche l\'ASIN ' + asin + ' sous le supplier code ' + supplierCode + '\n'
+    + '3. Ouvre la fiche en mode edition\n'
+    + '4. Remplace le titre, les 5 bullets, la description et les backend keywords\n'
+    + '5. Confirme la soumission\n'
+    + '6. Rapporte : succes ou erreur';
+}
+
+function seoGetScriptCreate(fiche) {
+  const mkt = fiche['.fr'] || {};
+  const bullets = mkt.bullets || ['', '', '', '', ''];
+  return 'Tu es l\'agent SEO Amazon Pilot.\n'
+    + 'Nouvelle reference a creer dans Vendor Central.\n\n'
+    + 'Donnees produit :\n'
+    + 'Titre : ' + (mkt.titre || '') + '\n'
+    + 'Type produit : ' + (mkt.nomType || '') + '\n'
+    + 'Bullet 1 : ' + (bullets[0] || '') + '\n'
+    + 'Bullet 2 : ' + (bullets[1] || '') + '\n'
+    + 'Bullet 3 : ' + (bullets[2] || '') + '\n'
+    + 'Bullet 4 : ' + (bullets[3] || '') + '\n'
+    + 'Bullet 5 : ' + (bullets[4] || '') + '\n'
+    + 'Description : ' + (mkt.description || '') + '\n\n'
+    + 'Instructions :\n'
+    + '1. Ouvre Vendor Central > Catalogue > Ajouter un produit\n'
+    + '2. Selectionne la categorie correspondant au type : ' + (mkt.nomType || '') + '\n'
+    + '3. Remplis tous les champs avec les donnees ci-dessus\n'
+    + '4. Soumets la creation\n'
+    + '5. Rapporte l\'ASIN cree ou l\'erreur';
+}
+
+function seoGetScriptVerify(asin, market, fiche) {
+  const mkt = fiche[market] || fiche['.fr'] || {};
+  return 'Tu es l\'agent de verification SEO.\n'
+    + 'ASIN : ' + asin + '\n'
+    + 'Marche : amazon' + market + '\n\n'
+    + 'Instructions :\n'
+    + '1. Ouvre https://www.amazon' + market + '/dp/' + asin + '\n'
+    + '2. Lis le titre actuel et les 5 bullets\n'
+    + '3. Compare avec les valeurs attendues ci-dessous\n'
+    + '4. Rapporte : CONFORME ou NON CONFORME avec les differences\n\n'
+    + 'Titre attendu : ' + (mkt.titre || '') + '\n'
+    + 'Bullet 1 attendu : ' + ((mkt.bullets || [])[0] || '') + '\n'
+    + 'Bullet 2 attendu : ' + ((mkt.bullets || [])[1] || '') + '\n'
+    + 'Bullet 3 attendu : ' + ((mkt.bullets || [])[2] || '') + '\n'
+    + 'Bullet 4 attendu : ' + ((mkt.bullets || [])[3] || '') + '\n'
+    + 'Bullet 5 attendu : ' + ((mkt.bullets || [])[4] || '') + '';
+}
+
+function seoLaunchModify(asin) {
+  const c = cl();
+  if (!c) return;
+  const fiche = c.ficheOptimisee?.[asin];
+  if (!fiche) { showToast('Generez d abord la fiche SEO', 'alr-r'); return; }
+  const markets = c.markets && c.markets.length ? c.markets : [c.mainMarket || '.fr'];
+  const supplierCodes = [...new Set(c.asins.filter(function(x) { return x.asin === asin && x.vendorCode; }).map(function(x) { return x.vendorCode; }))];
+  if (!supplierCodes.length) supplierCodes.push('(supplier code non detecte)');
+  const script = seoGetScriptModify(asin, supplierCodes.join(' + '), markets[0], fiche);
+  navigator.clipboard.writeText(script).then(function() {
+    showToast('Script Route B copie - collez dans Claude in Chrome sur Vendor Central', 'alr-g');
+    seoRecordAction(asin, 'update', supplierCodes, markets);
+  });
+}
+
+function seoLaunchCreate(asin) {
+  const c = cl();
+  if (!c) return;
+  const fiche = c.ficheOptimisee?.[asin];
+  if (!fiche) { showToast('Generez d abord la fiche SEO', 'alr-r'); return; }
+  const script = seoGetScriptCreate(fiche);
+  navigator.clipboard.writeText(script).then(function() {
+    showToast('Script Route A copie - collez dans Claude in Chrome sur Vendor Central', 'alr-g');
+    seoRecordAction(asin, 'create', [], c.markets || [c.mainMarket || '.fr']);
+  });
+}
+
+function seoLaunchVerify(asin) {
+  const c = cl();
+  if (!c) return;
+  const fiche = c.ficheOptimisee?.[asin];
+  if (!fiche) return;
+  const market = (c.mainMarket || '.fr');
+  const script = seoGetScriptVerify(asin, market, fiche);
+  navigator.clipboard.writeText(script).then(function() {
+    showToast('Script verification copie - collez dans Claude in Chrome sur Amazon', 'alr-g');
+  });
+}
+
+function seoOpenCase(asin) {
+  const c = cl();
+  if (!c) return;
+  const fiche = c.ficheOptimisee?.[asin];
+  if (!fiche) return;
+  const lastAction = fiche.actions && fiche.actions.length ? fiche.actions[fiche.actions.length-1] : null;
+  const dossier = 'DEMANDE DE CAS SUPPORT AMAZON\n\n'
+    + 'ASIN : ' + asin + '\n'
+    + 'Supplier Codes : ' + (lastAction && lastAction.supplierCodes ? lastAction.supplierCodes.join(', ') : 'N/D') + '\n'
+    + 'Date de soumission : ' + (lastAction && lastAction.submittedAt ? new Date(lastAction.submittedAt).toLocaleDateString('fr-FR') : 'N/D') + '\n\n'
+    + 'PROBLEME :\nLes modifications soumises via Vendor Central n\'ont pas ete appliquees apres 24h.\n\n'
+    + 'MODIFICATIONS SOUMISES :\n'
+    + 'Titre : ' + ((fiche['.fr'] && fiche['.fr'].titre) || '') + '\n\n'
+    + 'ACTION DEMANDEE :\nMerci d\'appliquer les modifications ou d\'indiquer la raison du blocage.';
+  navigator.clipboard.writeText(dossier).then(function() {
+    showToast('Dossier cas support copie', 'alr-g');
+  });
+}
+
+function seoMarkVerified(asin, actionIndex, isVerified) {
+  const c = cl();
+  if (!c || !c.ficheOptimisee?.[asin]) return;
+  const actions = c.ficheOptimisee[asin].actions;
+  if (!actions || actions[actionIndex] === undefined) return;
+  actions[actionIndex].verified = isVerified;
+  actions[actionIndex].verifiedAt = new Date().toISOString();
+  save();
+  showToast(isVerified ? '✅ Marqué conforme' : '❌ Marqué non conforme', isVerified ? 'alr-g' : 'alr-r');
+  render();
 }
 
 function renderSEOSection(a, c) {
@@ -6827,17 +7067,17 @@ function renderSEOSection(a, c) {
     return true;
   });
 
-  const existing = seoResults[asin] || c.ficheOptimisee?.[asin];
-  if (existing && !seoResults[asin]) seoResults[asin] = existing;
+  const existing = seoResults[a.asin] || c.ficheOptimisee?.[a.asin];
+  if (existing && !seoResults[a.asin]) seoResults[a.asin] = existing;
 
   let h = '<div class="cd"><div class="cd-t space"><span>✍️ Optimisation fiche produit</span>';
   if (existing && !seoLoading) {
-    h += '<button class="btn btn-xs" onclick="runSEOFiche(' + JSON.stringify(asin) + ')">🔄 Regénérer</button>';
+    h += '<button class="btn btn-xs" onclick="runSEOFiche(' + JSON.stringify(a.asin) + ')">🔄 Regénérer</button>';
   }
   h += '</div>';
 
-  if (seoLoading && seoResults[asin]) {
-    const done = marketsToProcess.filter(function(m) { return !!seoResults[asin][m]; }).length;
+  if (seoLoading && seoResults[a.asin]) {
+    const done = marketsToProcess.filter(function(m) { return !!seoResults[a.asin][m]; }).length;
     h += '<div style="margin-bottom:12px;font-size:12px;color:var(--tx3)"><span class="spin">⏳</span> Génération en cours... ' + done + '/' + marketsToProcess.length + ' langues</div>';
   }
 
@@ -6845,12 +7085,12 @@ function renderSEOSection(a, c) {
     h += '<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Génère la fiche optimisée pour les ' + marketsToProcess.length + ' marché(s) : ';
     h += marketsToProcess.map(function(m) { return (MARKET_LANG[m]?.flag || '') + ' ' + (MARKET_LANG[m]?.label || m); }).join(', ');
     h += '.</p>';
-    h += '<button class="btn btn-p" onclick="runSEOFiche(' + JSON.stringify(asin) + ')" ' + (seoLoading ? 'disabled' : '') + '>✍️ Générer la fiche (' + marketsToProcess.length + ' langue' + (marketsToProcess.length > 1 ? 's' : '') + ')</button>';
+    h += '<button class="btn btn-p" onclick="runSEOFiche(' + JSON.stringify(a.asin) + ')" ' + (seoLoading ? 'disabled' : '') + '>✍️ Générer la fiche (' + marketsToProcess.length + ' langue' + (marketsToProcess.length > 1 ? 's' : '') + ')</button>';
     h += '</div>';
     return h;
   }
 
-  const res = seoResults[asin] || {};
+  const res = seoResults[a.asin] || {};
 
   // Onglets par marché
   if (marketsToProcess.length > 1) {
@@ -6882,7 +7122,7 @@ function renderSEOSection(a, c) {
     return h;
   }
 
-  const asinJson = JSON.stringify(asin);
+  const asinJson = JSON.stringify(a.asin);
   const mktJson  = JSON.stringify(activeMkt);
 
   // Nom type produit
@@ -6943,8 +7183,55 @@ function renderSEOSection(a, c) {
     h += '</div>';
   }
 
+  // ── Historique des actions ──────────────────────────────────
+  var ficheActions = (c.ficheOptimisee && c.ficheOptimisee[a.asin] && c.ficheOptimisee[a.asin].actions) ? c.ficheOptimisee[a.asin].actions : [];
+  if (ficheActions.length > 0) {
+    h += '<div style="margin-top:16px;margin-bottom:12px">';
+    h += '<div style="font-weight:600;font-size:12px;color:var(--tx3);margin-bottom:8px">HISTORIQUE DES ACTIONS</div>';
+    ficheActions.slice().reverse().forEach(function(action, revIdx) {
+      var idx = ficheActions.length - 1 - revIdx;
+      var isVerified = action.verified === true;
+      var isFailed = action.verified === false;
+      var isOverdue = action.verified === null && action.verificationDue && new Date(action.verificationDue) < new Date();
+      var statusColor = isVerified ? 'var(--g)' : isFailed ? 'var(--r)' : isOverdue ? 'var(--or)' : '#2196F3';
+      var statusIcon = isVerified ? '\u2705' : isFailed ? '\u274c' : isOverdue ? '\u23f0' : '\U0001f4e4';
+      var statusLabel = isVerified ? 'Conforme' : isFailed ? 'Non conforme' : isOverdue ? 'V\u00e9rif. en attente' : 'Soumis VC';
+      var routeLabel = action.route === 'create' ? 'Route A \u2014 Cr\u00e9ation' : 'Route B \u2014 Modification';
+      var submittedDate = action.submittedAt ? new Date(action.submittedAt).toLocaleString('fr-FR', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+      var verifiedDate = action.verifiedAt ? new Date(action.verifiedAt).toLocaleString('fr-FR', {day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+      var dueDateStr = action.verificationDue ? new Date(action.verificationDue).toLocaleString('fr-FR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+      h += '<div style="padding:10px 12px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd);margin-bottom:8px">';
+      h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">';
+      h += '<span style="font-size:11px;font-weight:700;color:var(--tx2)">' + routeLabel + '</span>';
+      h += '<span style="font-size:11px;font-weight:700;color:' + statusColor + '">' + statusIcon + ' ' + statusLabel + '</span>';
+      h += '</div>';
+      h += '<div style="font-size:10px;color:var(--tx3);margin-bottom:4px">Soumis : ' + submittedDate + (action.supplierCodes && action.supplierCodes.length ? ' \u00b7 ' + action.supplierCodes.join(', ') : '') + (action.markets && action.markets.length ? ' \u00b7 ' + action.markets.join(' ') : '') + '</div>';
+      if (verifiedDate) {
+        h += '<div style="font-size:10px;color:var(--tx3);margin-bottom:4px">V\u00e9rifi\u00e9 : ' + verifiedDate + '</div>';
+      } else if (dueDateStr) {
+        h += '<div style="font-size:10px;color:' + (isOverdue ? 'var(--or)' : 'var(--tx3)') + ';margin-bottom:4px">V\u00e9rification pr\u00e9vue : ' + dueDateStr + (isOverdue ? ' \u26a0' : '') + '</div>';
+      }
+      if (action.diff) {
+        h += '<div style="font-size:10px;color:var(--r);margin-bottom:6px;padding:4px 8px;background:#fff5f5;border-radius:4px">Diff : ' + esc(action.diff) + '</div>';
+      }
+      if (action.caseId) {
+        h += '<div style="font-size:10px;color:var(--tx3);margin-bottom:6px">Cas support : ' + esc(action.caseId) + (action.caseStatus ? ' \u2014 ' + esc(action.caseStatus) : '') + '</div>';
+      }
+      if (action.verified === null) {
+        var asinJsonH = JSON.stringify(a.asin);
+        h += '<div style="display:flex;gap:6px;margin-top:6px">';
+        h += '<button class="btn btn-xs" style="background:var(--g);color:#fff;border-color:var(--g)" onclick="seoMarkVerified(' + asinJsonH + ',' + idx + ',true)">\u2705 Conforme</button>';
+        h += '<button class="btn btn-xs" style="background:var(--r);color:#fff;border-color:var(--r)" onclick="seoMarkVerified(' + asinJsonH + ',' + idx + ',false)">\u274c Non conforme</button>';
+        h += '<button class="btn btn-xs" onclick="seoLaunchVerify(' + asinJsonH + ')">\U0001f50d Script v\u00e9rif.</button>';
+        h += '</div>';
+      }
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+
   // Tout copier
-  h += '<button class="btn btn-sm btn-p" onclick="copySEOField(' + asinJson + ',' + mktJson + ',\'all\')">📋 Tout copier (' + (MARKET_LANG[activeMkt]?.label || activeMkt) + ')</button>';
+  h += '<button class="btn btn-sm btn-p" onclick="copySEOField(' + asinJson + ',' + mktJson + ',\'all\')">\U0001f4cb Tout copier (' + (MARKET_LANG[activeMkt]?.label || activeMkt) + ')</button>';
   h += '</div>';
   return h;
 }
