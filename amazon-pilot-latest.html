@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23232F3E'/%3E%3Cpath d='M7 17 Q16 22 25 17' stroke='%23FF9900' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='24' cy='15.5' r='1.8' fill='%23FF9900'/%3E%3Cpath d='M15 9 L15 23 L19 20 L23 23 L23 9' fill='%23FF9900' opacity='0.9'/%3E%3C/svg%3E">
-<title>Amazon Pilot v3.1.10 — Pilotage Vendor Central</title>
+<title>Amazon Pilot v3.1.11 — Pilotage Vendor Central</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" onerror="console.warn('[AP] PapaParse CDN failed')"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" onerror="console.warn('[AP] Chart.js CDN failed')"></script>
@@ -379,7 +379,7 @@ a:hover { text-decoration: underline; }
   <div class="sb">
     <div class="sb-logo">
       <div class="sb-logo-ic">AP</div>
-      <div class="sb-logo-text"><b>Amazon Pilot</b><small>v3.1.10 — Vendor Central</small></div>
+      <div class="sb-logo-text"><b>Amazon Pilot</b><small>v3.1.11 — Vendor Central</small></div>
     </div>
     <div class="sb-section">Navigation</div>
     <div class="sb-nav" id="nav-list"></div>
@@ -406,7 +406,7 @@ a:hover { text-decoration: underline; }
 
 <script>
 window.onerror = function(msg, src, line, col) {
-  if (line === 1 && col <= 14) return true;
+  if (line === 1 && col <= 20) return true;
   if (!src || src === '') return true;
   console.error('[AP] Erreur:', msg, src + ':' + line + ':' + col);
   return false;
@@ -2284,7 +2284,7 @@ function renderContent() {
 function renderWelcome() {
   return `<div class="welcome-wrap">
     <div class="welcome-icon">🛒</div>
-    <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">Amazon Pilot v3.1.10</h1>
+    <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">Amazon Pilot v3.1.11</h1>
     <p style="color:var(--tx2);margin-bottom:24px;max-width:400px;line-height:1.7">Pilotez vos comptes Vendor Central avec l'IA. Import multi-périodes, diagnostic CA, revue hebdomadaire.</p>
     <button class="btn btn-p" style="padding:11px 22px;font-size:14px" onclick="startOnboarding()">+ Créer un client</button>
   </div>`;
@@ -6609,6 +6609,22 @@ function seoGetScriptVerify(asin, market, fiche) {
   ];
   return lines.join('\n');
 }
+function seoLaunchModify(asin) {
+  var c = cl();
+  if (!c) return;
+  var fiche = c.ficheOptimisee && c.ficheOptimisee[asin];
+  if (!fiche) { showToast('Générez d\'abord la fiche SEO', 'alr-r'); return; }
+  var markets = c.markets && c.markets.length ? c.markets : [c.mainMarket || '.fr'];
+  var supplierCodes = [...new Set(c.asins.filter(function(x) { return x.asin === asin && x.vendorCode; }).map(function(x) { return x.vendorCode; }))];
+  if (!supplierCodes.length) supplierCodes.push('(supplier code non détecté)');
+  var script = seoGetScriptModify(asin, supplierCodes.join(' + '), markets[0], fiche);
+  navigator.clipboard.writeText(script).then(function() {
+    showToast('Script Route B copié — collez dans Claude in Chrome sur Vendor Central', 'alr-g');
+    seoRecordAction(asin, 'update', supplierCodes, markets);
+  });
+}
+
+
 function seoLaunchCreate(asin) {
   var c = cl();
   if (!c) return;
