@@ -3,8 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Amazon Pilot">
+<meta name="application-name" content="Amazon Pilot">
+<meta name="theme-color" content="#232F3E">
+<link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;Amazon Pilot&quot;,&quot;short_name&quot;:&quot;AP Pilot&quot;,&quot;start_url&quot;:&quot;/&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%23232F3E&quot;,&quot;theme_color&quot;:&quot;%23FF9900&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='32' fill='%23232F3E'/%3E%3Cpath d='M40 105 Q96 135 152 105' stroke='%23FF9900' stroke-width='13' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='148' cy='93' r='11' fill='%23FF9900'/%3E%3Cpath d='M88 50 L88 140 L112 124 L136 140 L136 50' fill='%23FF9900' opacity='0.9'/%3E%3C/svg%3E&quot;,&quot;sizes&quot;:&quot;192x192&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;}]}">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23232F3E'/%3E%3Cpath d='M7 17 Q16 22 25 17' stroke='%23FF9900' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='24' cy='15.5' r='1.8' fill='%23FF9900'/%3E%3Cpath d='M15 9 L15 23 L19 20 L23 23 L23 9' fill='%23FF9900' opacity='0.9'/%3E%3C/svg%3E">
-<title>Amazon Pilot v3.1.14 — Pilotage Vendor Central</title>
+<title>Amazon Pilot v3.1.16 — Pilotage Vendor Central</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" onerror="console.warn('[AP] PapaParse CDN failed')"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" onerror="console.warn('[AP] Chart.js CDN failed')"></script>
@@ -379,7 +385,7 @@ a:hover { text-decoration: underline; }
   <div class="sb">
     <div class="sb-logo">
       <div class="sb-logo-ic">AP</div>
-      <div class="sb-logo-text"><b>Amazon Pilot</b><small>v3.1.14 — Vendor Central</small></div>
+      <div class="sb-logo-text"><b>Amazon Pilot</b><small>v3.1.16 — Vendor Central</small></div>
     </div>
     <div class="sb-section">Navigation</div>
     <div class="sb-nav" id="nav-list"></div>
@@ -430,6 +436,7 @@ let historyChartInst = null;
 let debugLog = [];
 let historyView = 'weekly';
 let asinSort   = 'ca_desc';
+let asinSortDir = 'desc'; // direction tri colonne
 let asinLimit  = 50;
 let asinView   = 'all';    // 'all' | 'lowstock' | 'declining' | 'growing' | 'seg-a' | 'seg-b' | 'seg-c'
 let asinViewAsins = null;  // liste des ASINs filtrés par la vue active (null = pas de filtre)
@@ -656,8 +663,8 @@ function updateThemeIcon(theme) {
 function norm(s) {
   return (s || '').toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[\u2018\u2019\u0027\u0060\u00B4]/g, "'")
-    .replace(/[\u2013\u2014\u2212]/g, '-')
+    .replace(/[''\u0027\u0060\u00B4]/g, "'")
+    .replace(/[\u2013—\u2212]/g, '-')
     .replace(/[\u00a0\u202f\u2009]/g, ' ')
     .trim();
 }
@@ -2284,7 +2291,7 @@ function renderContent() {
 function renderWelcome() {
   return `<div class="welcome-wrap">
     <div class="welcome-icon">🛒</div>
-    <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">Amazon Pilot v3.1.14</h1>
+    <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">Amazon Pilot v3.1.16</h1>
     <p style="color:var(--tx2);margin-bottom:24px;max-width:400px;line-height:1.7">Pilotez vos comptes Vendor Central avec l'IA. Import multi-périodes, diagnostic CA, revue hebdomadaire.</p>
     <button class="btn btn-p" style="padding:11px 22px;font-size:14px" onclick="startOnboarding()">+ Créer un client</button>
   </div>`;
@@ -3634,32 +3641,51 @@ function renderAsins() {
 
     // ── Tri ──────────────────────────────────────────────────────
     let sorted = [...withRevenue];
-    if (asinSort === 'ca_desc')    sorted.sort((a,b) => (b.revenue||0)-(a.revenue||0));
+    if (asinSort === 'ca_desc')         sorted.sort((a,b) => (b.revenue||0)-(a.revenue||0));
     else if (asinSort === 'ca_asc')     sorted.sort((a,b) => (a.revenue||0)-(b.revenue||0));
     else if (asinSort === 'hausse')     sorted.sort((a,b) => parseNum(b.revenueDelta)-parseNum(a.revenueDelta));
+    else if (asinSort === 'hausse_baisse_desc') sorted.sort((a,b) => parseNum(b.revenueDelta)-parseNum(a.revenueDelta));
+    else if (asinSort === 'hausse_baisse_asc')  sorted.sort((a,b) => parseNum(a.revenueDelta)-parseNum(b.revenueDelta));
     else if (asinSort === 'baisse')     sorted.sort((a,b) => parseNum(a.revenueDelta)-parseNum(b.revenueDelta));
     else if (asinSort === 'stock_asc')  sorted.sort((a,b) => (a.sellableUnits||9999)-(b.sellableUnits||9999));
+    else if (asinSort === 'stock_desc') sorted.sort((a,b) => (b.sellableUnits||9999)-(a.sellableUnits||9999));
     else if (asinSort === 'health_asc') sorted.sort((a,b) => calcHealth(a)-calcHealth(b));
+    else if (asinSort === 'health_desc')sorted.sort((a,b) => calcHealth(b)-calcHealth(a));
     else if (asinSort === 'gv_desc')    sorted.sort((a,b) => (b.glanceViews||0)-(a.glanceViews||0));
+    else if (asinSort === 'gv_asc')     sorted.sort((a,b) => (a.glanceViews||0)-(b.glanceViews||0));
+    else if (asinSort === 'potential_desc') sorted.sort((a,b) => calcPotential(b,c).score-calcPotential(a,c).score);
+    else if (asinSort === 'potential_asc')  sorted.sort((a,b) => calcPotential(a,c).score-calcPotential(b,c).score);
+    else if (asinSort === 'ppm_desc')   sorted.sort((a,b) => ((c.ppmData||{})[b.asin]?.ppm||0)-((c.ppmData||{})[a.asin]?.ppm||0));
+    else if (asinSort === 'ppm_asc')    sorted.sort((a,b) => ((c.ppmData||{})[a.asin]?.ppm||0)-((c.ppmData||{})[b.asin]?.ppm||0));
     else if (asinSort === 'trend_asc')  sorted.sort((a,b) => (calcTrend(a)?.slope||0)-(calcTrend(b)?.slope||0));
     else if (asinSort === 'trend_desc') sorted.sort((a,b) => (calcTrend(b)?.slope||0)-(calcTrend(a)?.slope||0));
 
     const visible = sorted.slice(0, asinLimit);
 
     // ── Tableau ──────────────────────────────────────────────────
+    // Fonction helper pour en-tête triable
+    const thSort = (label, sortKey, align='r') => {
+      const isActive = asinSort === sortKey + '_desc' || asinSort === sortKey + '_asc';
+      const isDesc = asinSort === sortKey + '_desc';
+      const arrow = isActive ? (isDesc ? ' ▼' : ' ▲') : ' ⇅';
+      const newSort = isActive && isDesc ? sortKey + '_asc' : sortKey + '_desc';
+      return '<th class="' + align + '" style="cursor:pointer;user-select:none;white-space:nowrap;' + (isActive ? 'color:var(--accent)' : '') + '" onclick="asinSort=\'' + newSort + '\';render()">' + label + '<span style="font-size:9px;opacity:.6">' + arrow + '</span></th>';
+    };
+
     h += `<div class="tbl-wrap"><table class="tbl"><thead><tr>
+      <th style="width:28px;text-align:center">#</th>
       <th style="width:36px">Score</th>
       <th>Produit / ASIN</th>
       <th style="width:44px">Seg.</th>
-      <th class="r">CA</th>
-      <th class="r">Δ CA</th>
+      ${thSort('CA', 'ca')}
+      ${thSort('Δ CA', 'hausse_baisse')}
       <th>Tendance</th>
-      <th class="r">GV</th>
+      ${thSort('GV', 'gv')}
       <th class="r">Δ GV</th>
-      <th class="r">Stock</th>
+      ${thSort('Stock', 'stock')}
       <th class="r">Retail%</th>
-      <th class="r">🚀</th>
-      <th class="r">PPM</th>
+      ${thSort('🚀', 'potential')}
+      ${thSort('PPM', 'ppm')}
       <th></th>
     </tr></thead><tbody>`;
 
@@ -3670,7 +3696,9 @@ function renderAsins() {
       const isLow = a.sellableUnits >= 0 && a.sellableUnits < 30 && (a.revenue||0) > 50;
       const isDec = delta < -10;
       const rc = isDec ? 'al-row' : isLow ? 'warn-row' : '';
+      const rank = visible.indexOf(a) + 1;
       h += `<tr class="${rc}" style="cursor:pointer" onclick="selectAsin('${esc(a.asin)}')">
+        <td style="text-align:center;font-size:11px;font-weight:700;color:var(--tx3)">${rank}</td>
         <td><div class="hs hs-sm ${healthClass(health)}">${health}</div></td>
         <td>
           <div style="font-weight:500;font-size:12px;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(a.title)}">${esc(shortName(a))}</div>
@@ -3987,26 +4015,56 @@ function renderPompier() {
     <div class="kpi"><div class="kpi-lb">Impact / CA</div><div class="kpi-v">${totalCA>0?Math.round(totalLost/totalCA*100):0}%</div></div>
   </div>`;
 
+  // ── Tri Diagnostic CA ──
+  let pompierSort = typeof window._pompierSort !== 'undefined' ? window._pompierSort : 'delta_asc';
+  const thP = (label, key, align='r') => {
+    const isA = pompierSort === key + '_desc' || pompierSort === key + '_asc';
+    const isD = pompierSort === key + '_desc';
+    const arr = isA ? (isD ? ' ▼' : ' ▲') : ' ⇅';
+    const ns = isA && isD ? key + '_asc' : key + '_desc';
+    return '<th class="' + align + '" style="cursor:pointer;user-select:none;white-space:nowrap;' + (isA?'color:var(--accent)':'') + '" onclick="window._pompierSort=\'' + ns + '\';render()">' + label + '<span style="font-size:9px;opacity:.6">' + arr + '</span></th>';
+  };
+
+  let decliningSorted = [...declining];
+  if (pompierSort === 'delta_asc')     decliningSorted.sort((a,b) => parseNum(a.revenueDelta)-parseNum(b.revenueDelta));
+  else if (pompierSort === 'delta_desc')    decliningSorted.sort((a,b) => parseNum(b.revenueDelta)-parseNum(a.revenueDelta));
+  else if (pompierSort === 'ca_desc')       decliningSorted.sort((a,b) => (b.revenue||0)-(a.revenue||0));
+  else if (pompierSort === 'ca_asc')        decliningSorted.sort((a,b) => (a.revenue||0)-(b.revenue||0));
+  else if (pompierSort === 'lost_desc')     decliningSorted.sort((a,b) => Math.abs(parseNum(b.revenueDelta)/100*(b.revenue||0))-Math.abs(parseNum(a.revenueDelta)/100*(a.revenue||0)));
+  else if (pompierSort === 'lost_asc')      decliningSorted.sort((a,b) => Math.abs(parseNum(a.revenueDelta)/100*(a.revenue||0))-Math.abs(parseNum(b.revenueDelta)/100*(b.revenue||0)));
+  else if (pompierSort === 'stock_asc')     decliningSorted.sort((a,b) => (a.sellableUnits||9999)-(b.sellableUnits||9999));
+  else if (pompierSort === 'stock_desc')    decliningSorted.sort((a,b) => (b.sellableUnits||9999)-(a.sellableUnits||9999));
+
+  // ── Note explicative tendance ──
+  h += '<div style="font-size:11px;color:var(--tx3);margin-bottom:10px;padding:8px 12px;background:var(--s2);border-radius:var(--rd);border-left:3px solid var(--bd2)">';
+  h += '<b>💡 Tendance vs Δ CA :</b> La colonne <b>Δ CA</b> mesure la variation semaine en cours vs semaine précédente. ';
+  h += 'La <b>Tendance</b> (sparkline) reflète la trajectoire structurelle sur les dernières semaines. ';
+  h += 'Un ASIN peut afficher "Croissance" structurelle et -100% hebdo si cette semaine est une semaine sans commande (Amazon ne commande pas chaque semaine).';
+  h += '</div>';
+
   // ── Tableau ──
   h += `<div class="tbl-wrap"><table class="tbl"><thead><tr>
     <th style="width:36px">Score</th>
     <th>Produit / ASIN</th>
     <th style="width:44px">Seg.</th>
-    <th class="r">CA actuel</th>
-    <th class="r">Δ CA</th>
-    <th>Tendance</th>
-    <th class="r">CA perdu</th>
-    <th class="r">Stock</th>
+    ${thP('CA actuel', 'ca')}
+    ${thP('Δ CA', 'delta')}
+    <th>Tendance <span style="font-size:9px;font-weight:400;color:var(--tx3)">(structurelle)</span></th>
+    ${thP('CA perdu', 'lost')}
+    ${thP('Stock', 'stock')}
     <th class="r">Retail%</th>
     <th></th>
   </tr></thead><tbody>`;
 
-  declining.forEach(a => {
+  decliningSorted.forEach(a => {
     const health = calcHealth(a);
     const seg = calcSegment(a, totalCA);
     const delta = parseNum(a.revenueDelta);
     const lost = Math.abs(delta / 100 * (a.revenue || 0));
     const isNoStock = (a.sellableUnits || 0) === 0;
+    const trend = calcTrend(a);
+    // Indiquer explicitement si croissance structurelle malgré baisse hebdo
+    const isTrendContradiction = trend && trend.cls === 'trend-up' && delta <= -50;
     h += `<tr class="al-row" style="cursor:pointer" onclick="analyzeAsin('${esc(a.asin)}')">
       <td><div class="hs hs-sm ${healthClass(health)}">${health}</div></td>
       <td>
@@ -4018,7 +4076,8 @@ function renderPompier() {
       <td class="r"><span style="font-weight:700;color:var(--r)">▼ ${a.revenueDelta||'?'}</span></td>
       <td>
         <div style="display:flex;align-items:center;gap:6px">
-          ${(() => { const t = calcTrend(a); return sparkline(t?.series, t?.cls) + trendBadge(t); })()}
+          ${sparkline(trend?.series, trend?.cls) + trendBadge(trend)}
+          ${isTrendContradiction ? '<span title="Baisse hebdomadaire isolée sur tendance structurelle haussière" style="font-size:9px;color:var(--or);cursor:help">⚡ ponctuel</span>' : ''}
         </div>
       </td>
       <td class="r" style="color:var(--r);font-weight:600">-${fmtEur(lost)}</td>
@@ -6068,7 +6127,7 @@ function exportPompierCsv() {
       a.glanceViews||'', a.gvDelta||'', a.sellableUnits!=null?a.sellableUnits:'', a.retailPct||''];
   });
   const csv = [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
-  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const blob = new Blob([''+csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = `${(c.name||'export').replace(/\s+/g,'_')}_Diagnostic_${new Date().toISOString().slice(0,10)}.csv`;
@@ -6358,7 +6417,7 @@ function exportAsinsCsv() {
     ];
   });
   const csv = [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }); // BOM pour Excel
+  const blob = new Blob(['' + csv], { type: 'text/csv;charset=utf-8;' }); // BOM pour Excel
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -6827,19 +6886,19 @@ function refreshSEODrawer() {
   var activeMkt = seoActiveTab || mtp[0];
   var r = res[activeMkt];
   var status = seoGetStatus(asin, c);
-  var shortTitle = (a.title || asin).substring(0, 50) + ((a.title||'').length > 50 ? '\u2026' : '');
+  var shortTitle = (a.title || asin).substring(0, 50) + ((a.title||'').length > 50 ? '…' : '');
   var asinJ = "'" + asin + "'";
 
   var h = '';
 
   // ── Header ──
   h += '<div style="padding:14px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px;flex-shrink:0">';
-  h += '<button onclick="closeSEODrawer()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--tx3);padding:0;line-height:1">\u2715</button>';
+  h += '<button onclick="closeSEODrawer()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--tx3);padding:0;line-height:1">✕</button>';
   h += '<div style="flex:1;min-width:0">';
   h += '<div style="font-size:13px;font-weight:700;color:var(--tx1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(shortTitle) + '</div>';
   h += '<div style="font-size:10px;color:var(--tx3);font-family:var(--mono)">' + esc(asin) + '</div>';
   h += '</div>';
-  h += '<a href="https://www.amazon' + esc(c.mainMarket||'.fr') + '/dp/' + esc(asin) + '" target="_blank" class="btn btn-xs">\U0001f517</a>';
+  h += '<a href="https://www.amazon' + esc(c.mainMarket||'.fr') + '/dp/' + esc(asin) + '" target="_blank" class="btn btn-xs">🔗</a>';
   h += '</div>';
 
   // ── Body scrollable ──
@@ -6852,15 +6911,15 @@ function refreshSEODrawer() {
       mtp.forEach(function(mkt) {
         var ml = MARKET_LANG[mkt];
         var done = !!(res[mkt] && !res[mkt].error);
-        h += '<div style="padding:4px 10px;border-radius:20px;font-size:11px;background:' + (done?'var(--g)':'var(--bd2)') + ';color:' + (done?'#fff':'var(--tx3)') + '">' + (ml?ml.flag+' '+ml.label:mkt) + (done?' \u2713':' \u23f3') + '</div>';
+        h += '<div style="padding:4px 10px;border-radius:20px;font-size:11px;background:' + (done?'var(--g)':'var(--bd2)') + ';color:' + (done?'#fff':'var(--tx3)') + '">' + (ml?ml.flag+' '+ml.label:mkt) + (done?' ✓':' ⏳') + '</div>';
       });
       h += '</div>';
     }
     var doneCnt = mtp.filter(function(m){ return !!(res[m]&&!res[m].error); }).length;
     h += '<div style="text-align:center;padding:48px 20px">';
-    h += '<div style="font-size:40px;margin-bottom:14px"><span class="spin">\u23f3</span></div>';
-    h += '<div style="font-size:14px;font-weight:600;margin-bottom:6px">G\u00e9n\u00e9ration en cours...</div>';
-    h += '<div style="font-size:12px;color:var(--tx3)">' + doneCnt + ' / ' + mtp.length + ' march\u00e9(s) termin\u00e9(s)</div>';
+    h += '<div style="font-size:40px;margin-bottom:14px"><span class="spin">⏳</span></div>';
+    h += '<div style="font-size:14px;font-weight:600;margin-bottom:6px">Génération en cours...</div>';
+    h += '<div style="font-size:12px;color:var(--tx3)">' + doneCnt + ' / ' + mtp.length + ' marché(s) terminé(s)</div>';
     if (doneCnt > 0 && r && !r.error) {
       h += '</div>';
       h += drawSEOContent(asin, activeMkt, res, mtp, true);
@@ -6868,7 +6927,7 @@ function refreshSEODrawer() {
       h += '</div>';
     }
   } else if (!r) {
-    h += '<div class="alr alr-b">Aucune fiche g\u00e9n\u00e9r\u00e9e. Cliquez sur G\u00e9n\u00e9rer.</div>';
+    h += '<div class="alr alr-b">Aucune fiche générée. Cliquez sur Générer.</div>';
   } else if (r.error) {
     h += '<div class="alr alr-r">Erreur : ' + esc(String(r.error)) + '</div>';
   } else {
@@ -6879,7 +6938,7 @@ function refreshSEODrawer() {
         var ml = MARKET_LANG[mkt];
         var done = !!(res[mkt] && !res[mkt].error);
         var isAct = activeMkt === mkt;
-        h += '<button class="btn btn-sm' + (isAct?' btn-p':'') + '" onclick="seoActiveTab=' + JSON.stringify(mkt) + ';refreshSEODrawer()">' + (ml?ml.flag+' '+ml.label:mkt) + (done?' \u2713':'') + '</button>';
+        h += '<button class="btn btn-sm' + (isAct?' btn-p':'') + '" onclick="seoActiveTab=' + JSON.stringify(mkt) + ';refreshSEODrawer()">' + (ml?ml.flag+' '+ml.label:mkt) + (done?' ✓':'') + '</button>';
       });
       h += '</div>';
     }
@@ -6895,16 +6954,16 @@ function refreshSEODrawer() {
       var iv = action.verified===true; var iF = action.verified===false;
       var iO = action.verified===null && action.verificationDue && new Date(action.verificationDue)<new Date();
       var sc = iv?'var(--g)':iF?'var(--r)':iO?'var(--or)':'#2196F3';
-      var si = iv?'\u2705':iF?'\u274c':iO?'\u23f0':'\U0001f4e4';
-      var sl = iv?'Conforme':iF?'Non conforme':iO?'V\u00e9rif. en attente':'Soumis VC';
+      var si = iv?'✅':iF?'❌':iO?'⏰':'📤';
+      var sl = iv?'Conforme':iF?'Non conforme':iO?'Vérif. en attente':'Soumis VC';
       var sd = action.submittedAt ? new Date(action.submittedAt).toLocaleDateString('fr-FR') : '';
       h += '<div style="padding:8px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd);margin-bottom:6px">';
       h += '<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:11px;font-weight:600">' + (action.route==='create'?'Route A':'Route B') + '</span><span style="font-size:11px;color:'+sc+';font-weight:600">'+si+' '+sl+'</span></div>';
-      h += '<div style="font-size:10px;color:var(--tx3)">' + sd + (action.supplierCodes&&action.supplierCodes.length?' \u00b7 '+action.supplierCodes.join(', '):'') + '</div>';
+      h += '<div style="font-size:10px;color:var(--tx3)">' + sd + (action.supplierCodes&&action.supplierCodes.length?' · '+action.supplierCodes.join(', '):'') + '</div>';
       if (action.verified === null) {
         h += '<div style="display:flex;gap:4px;margin-top:6px">';
-        h += '<button class="btn btn-xs" style="background:var(--g);color:#fff;border-color:var(--g)" onclick="seoMarkVerified('+asinJ+','+idx+',true)">\u2705 Conforme</button>';
-        h += '<button class="btn btn-xs" style="background:var(--r);color:#fff;border-color:var(--r)" onclick="seoMarkVerified('+asinJ+','+idx+',false)">\u274c Non conforme</button>';
+        h += '<button class="btn btn-xs" style="background:var(--g);color:#fff;border-color:var(--g)" onclick="seoMarkVerified('+asinJ+','+idx+',true)">✅ Conforme</button>';
+        h += '<button class="btn btn-xs" style="background:var(--r);color:#fff;border-color:var(--r)" onclick="seoMarkVerified('+asinJ+','+idx+',false)">❌ Non conforme</button>';
         h += '</div>';
       }
       h += '</div>';
@@ -6917,19 +6976,19 @@ function refreshSEODrawer() {
   // ── Footer actions ──
   if (!seoLoading && r && !r.error) {
     h += '<div style="padding:12px 16px;border-top:1px solid var(--bd);display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">';
-    h += '<button class="btn btn-sm btn-p" onclick="copySEOTitreMkt('+asinJ+','+JSON.stringify(activeMkt)+')">\U0001f4cb Tout copier</button>';
-    h += '<button class="btn btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)" onclick="seoLaunchModify('+asinJ+')">\U0001f4e4 Modifier VC</button>';
+    h += '<button class="btn btn-sm btn-p" onclick="copySEOTitreMkt('+asinJ+','+JSON.stringify(activeMkt)+')">📋 Tout copier</button>';
+    h += '<button class="btn btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)" onclick="seoLaunchModify('+asinJ+')">📤 Modifier VC</button>';
     if (status==='submitted'||status==='overdue') {
-      h += '<button class="btn btn-sm" style="background:var(--or);color:#fff;border-color:var(--or)" onclick="seoLaunchVerify('+asinJ+')">\U0001f50d V\u00e9rifier</button>';
+      h += '<button class="btn btn-sm" style="background:var(--or);color:#fff;border-color:var(--or)" onclick="seoLaunchVerify('+asinJ+')">🔍 Vérifier</button>';
     }
     if (status==='failed') {
-      h += '<button class="btn btn-sm" style="background:var(--r);color:#fff;border-color:var(--r)" onclick="seoOpenCase('+asinJ+')">\U0001f198 Cas support</button>';
+      h += '<button class="btn btn-sm" style="background:var(--r);color:#fff;border-color:var(--r)" onclick="seoOpenCase('+asinJ+')">🆘 Cas support</button>';
     }
-    h += '<button class="btn btn-sm" onclick="runSEOFiche('+asinJ+')">\U0001f504 Reg\u00e9n\u00e9rer</button>';
+    h += '<button class="btn btn-sm" onclick="runSEOFiche('+asinJ+')">🔄 Regénérer</button>';
     h += '</div>';
   } else if (!seoLoading) {
     h += '<div style="padding:12px 16px;border-top:1px solid var(--bd)">';
-    h += '<button class="btn btn-p" onclick="runSEOFiche('+asinJ+')" style="width:100%">\u270d\ufe0f G\u00e9n\u00e9rer la fiche</button>';
+    h += '<button class="btn btn-p" onclick="runSEOFiche('+asinJ+')" style="width:100%">✍️ Générer la fiche</button>';
     h += '</div>';
   }
 
@@ -6955,9 +7014,9 @@ function drawSEOContent(asin, activeMkt, res, mtp, compact) {
   var tl = r.titre ? r.titre.length : 0;
   var tc = tl > 200 ? 'var(--r)' : tl >= 80 ? 'var(--g)' : 'var(--or)';
   h += '<div style="margin-bottom:10px">';
-  h += '<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:4px"><span>TITRE</span><span style="color:'+tc+'">'+tl+' car. '+(tl>200?'\u26a0':'\u2713')+'</span></div>';
+  h += '<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:4px"><span>TITRE</span><span style="color:'+tc+'">'+tl+' car. '+(tl>200?'⚠':'✓')+'</span></div>';
   h += '<div style="padding:8px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd);font-size:12px;line-height:1.5">' + esc(r.titre||'') + '</div>';
-  h += '<button class="btn btn-xs" style="margin-top:3px" onclick="copySEOTitreMkt('+asinJ+','+mktJ+')">\U0001f4cb Copier titre</button>';
+  h += '<button class="btn btn-xs" style="margin-top:3px" onclick="copySEOTitreMkt('+asinJ+','+mktJ+')">📋 Copier titre</button>';
   h += '</div>';
 
   if (!compact) {
@@ -6967,9 +7026,9 @@ function drawSEOContent(asin, activeMkt, res, mtp, compact) {
       if (!b) return;
       var bf = JSON.stringify('bullet'+(i+1));
       h += '<div style="margin-bottom:5px;padding:7px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd)">';
-      h += '<div style="font-size:9px;font-weight:700;color:var(--or);margin-bottom:2px">\u2022 '+(i+1)+'</div>';
+      h += '<div style="font-size:9px;font-weight:700;color:var(--or);margin-bottom:2px">• '+(i+1)+'</div>';
       h += '<div style="font-size:11px;line-height:1.5">' + esc(b) + '</div>';
-      h += '<button class="btn btn-xs" style="margin-top:3px" onclick="copySEOField('+asinJ+','+mktJ+','+bf+')">\U0001f4cb</button>';
+      h += '<button class="btn btn-xs" style="margin-top:3px" onclick="copySEOField('+asinJ+','+mktJ+','+bf+')">📋</button>';
       h += '</div>';
     });
     h += '</div>';
@@ -6977,24 +7036,24 @@ function drawSEOContent(asin, activeMkt, res, mtp, compact) {
     if (r.description) {
       h += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:4px">DESCRIPTION HTML</div>';
       h += '<div style="padding:8px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd);font-size:10px;font-family:var(--fm);line-height:1.5;max-height:100px;overflow-y:auto">' + esc(r.description) + '</div>';
-      h += '<button class="btn btn-xs" style="margin-top:3px" onclick="copySEODescMkt('+asinJ+','+mktJ+')">\U0001f4cb Copier</button>';
+      h += '<button class="btn btn-xs" style="margin-top:3px" onclick="copySEODescMkt('+asinJ+','+mktJ+')">📋 Copier</button>';
       h += '</div>';
     }
 
     if (res.backendKW) {
       h += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:4px">BACKEND KEYWORDS</div>';
       h += '<div style="padding:7px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd);font-size:10px;color:var(--tx2);line-height:1.5">' + esc(res.backendKW) + '</div>';
-      h += '<button class="btn btn-xs" style="margin-top:3px" onclick="copySEOBkwMkt('+asinJ+')">\U0001f4cb Copier</button>';
+      h += '<button class="btn btn-xs" style="margin-top:3px" onclick="copySEOBkwMkt('+asinJ+')">📋 Copier</button>';
       h += '</div>';
     }
 
     if (r.positionnement||r.leviers||r.erreurs||r.opportunite) {
       h += '<div style="margin-bottom:10px;padding:8px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd)">';
-      h += '<div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:6px">SYNTH\u00c8SE STRAT\u00c9GIQUE</div>';
+      h += '<div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:6px">SYNTHÈSE STRATÉGIQUE</div>';
       if (r.positionnement) h += '<div style="margin-bottom:4px"><span style="font-size:9px;font-weight:700;color:var(--tx3)">POSITIONNEMENT</span><div style="font-size:11px">' + esc(r.positionnement) + '</div></div>';
       if (r.leviers)        h += '<div style="margin-bottom:4px"><span style="font-size:9px;font-weight:700;color:var(--g)">LEVIERS</span><div style="font-size:11px">' + esc(r.leviers) + '</div></div>';
       if (r.erreurs)        h += '<div style="margin-bottom:4px"><span style="font-size:9px;font-weight:700;color:var(--r)">ERREURS</span><div style="font-size:11px">' + esc(r.erreurs) + '</div></div>';
-      if (r.opportunite)    h += '<div><span style="font-size:9px;font-weight:700;color:var(--b)">OPPORTUNIT\u00c9</span><div style="font-size:11px">' + esc(r.opportunite) + '</div></div>';
+      if (r.opportunite)    h += '<div><span style="font-size:9px;font-weight:700;color:var(--b)">OPPORTUNITÉ</span><div style="font-size:11px">' + esc(r.opportunite) + '</div></div>';
       h += '</div>';
     }
   }
@@ -7013,14 +7072,14 @@ function seoMarkVerified(asin, actionIndex, isVerified) {
   actions[actionIndex].verified = isVerified;
   actions[actionIndex].verifiedAt = new Date().toISOString();
   save();
-  showToast(isVerified ? '\u2705 Marqu\u00e9 conforme' : '\u274c Marqu\u00e9 non conforme', isVerified ? 'alr-g' : 'alr-r');
+  showToast(isVerified ? '✅ Marqué conforme' : '❌ Marqué non conforme', isVerified ? 'alr-g' : 'alr-r');
   refreshSEODrawer();
 }
 
 // ── renderSEOScreen — nouvelle UX ──────────────────────────────
 function renderSEOScreen() {
   var c = cl();
-  if (!c) return '<div class="alr alr-r">Aucun client s\u00e9lectionn\u00e9.</div>';
+  if (!c) return '<div class="alr alr-r">Aucun client sélectionné.</div>';
 
   var asins = c.asins || [];
   var totalCA = asins.reduce(function(s,x){ return s+(x.revenue||0); }, 0);
@@ -7031,23 +7090,23 @@ function renderSEOScreen() {
 
   // ── Titre ──
   h += '<div style="margin-bottom:20px">';
-  h += '<h2 style="font-size:20px;font-weight:700;margin:0 0 4px 0">\u270d\ufe0f Agent SEO \u2014 ' + esc(c.name) + '</h2>';
-  h += '<div style="font-size:12px;color:var(--tx3)">' + markets.join(' \u00b7 ') + '</div>';
+  h += '<h2 style="font-size:20px;font-weight:700;margin:0 0 4px 0">✍️ Agent SEO — ' + esc(c.name) + '</h2>';
+  h += '<div style="font-size:12px;color:var(--tx3)">' + markets.join(' · ') + '</div>';
   h += '</div>';
 
   if (pendingVerif.length > 0) {
-    h += '<div class="alr alr-r" style="margin-bottom:16px">\u23f0 ' + pendingVerif.length + ' v\u00e9rification' + (pendingVerif.length > 1 ? 's' : '') + ' en attente \u2014 modifications soumises il y a plus de 24h.</div>';
+    h += '<div class="alr alr-r" style="margin-bottom:16px">⏰ ' + pendingVerif.length + ' vérification' + (pendingVerif.length > 1 ? 's' : '') + ' en attente — modifications soumises il y a plus de 24h.</div>';
   }
 
   // ── Zone 1 : Saisie ASIN ou création ──
   h += '<div class="cd" style="margin-bottom:16px">';
   h += '<div style="font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Travailler sur un ASIN</div>';
   h += '<div style="display:flex;gap:8px;margin-bottom:8px">';
-  h += '<input id="seo-asin-input" type="text" placeholder="ASIN, r\u00e9f\u00e9rence interne ou titre..." style="flex:1;padding:9px 12px;border:1px solid var(--bd2);border-radius:var(--rd);background:var(--s2);color:var(--tx);font-size:13px;font-family:var(--fn)" oninput="seoSearchInput()" onkeydown="if(event.key===\'Enter\')seoSearchGo()">';
-  h += '<button class="btn btn-p" onclick="seoSearchGo()">\u270d\ufe0f G\u00e9n\u00e9rer</button>';
+  h += '<input id="seo-asin-input" type="text" placeholder="ASIN, référence interne ou titre..." style="flex:1;padding:9px 12px;border:1px solid var(--bd2);border-radius:var(--rd);background:var(--s2);color:var(--tx);font-size:13px;font-family:var(--fn)" oninput="seoSearchInput()" onkeydown="if(event.key===\'Enter\')seoSearchGo()">';
+  h += '<button class="btn btn-p" onclick="seoSearchGo()">✍️ Générer</button>';
   h += '</div>';
   h += '<div id="seo-search-results" style="margin-bottom:4px"></div>';
-  h += '<button class="btn btn-sm" style="border-style:dashed" onclick="seoLaunchNewRef()">\u2795 Cr\u00e9er une nouvelle r\u00e9f\u00e9rence dans VC</button>';
+  h += '<button class="btn btn-sm" style="border-style:dashed" onclick="seoLaunchNewRef()">➕ Créer une nouvelle référence dans VC</button>';
   h += '</div>';
 
   // ── Zone 2 : ASINs suggérés ──
@@ -7063,23 +7122,23 @@ function renderSEOScreen() {
 
   if (defaillants.length > 0) {
     h += '<div class="cd" style="margin-bottom:16px">';
-    h += '<div style="font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">\U0001f4a1 ASINs sugg\u00e9r\u00e9s pour optimisation SEO</div>';
+    h += '<div style="font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">💡 ASINs suggérés pour optimisation SEO</div>';
     defaillants.forEach(function(a) {
       var d = calcSEODefaillance(a, c);
       var seg = calcSegment(a, totalCA);
       var segC = {A:'var(--g)',B:'var(--accent)',C:'var(--tx3)'}[seg]||'var(--tx3)';
-      var icon = d==='critical' ? '\U0001f534' : '\U0001f7e1';
-      var label = d==='critical' ? 'SEO d\u00e9faillant' : '\u00c0 surveiller';
-      var short = (a.title||a.asin).substring(0,60)+((a.title||'').length>60?'\u2026':'');
+      var icon = d==='critical' ? '🔴' : '🟡';
+      var label = d==='critical' ? 'SEO défaillant' : 'À surveiller';
+      var short = (a.title||a.asin).substring(0,60)+((a.title||'').length>60?'…':'');
       var asinJ = "'" + a.asin + "'";
       h += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)">';
       h += '<div style="flex-shrink:0;width:22px;height:22px;border-radius:50%;background:'+segC+';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff">'+seg+'</div>';
       h += '<div style="flex:1;min-width:0">';
       h += '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(short) + '</div>';
-      h += '<div style="font-size:10px;color:var(--tx3);font-family:var(--mono)">' + esc(a.asin) + ' \u00b7 ' + fmtEur(a.revenue||0) + '</div>';
+      h += '<div style="font-size:10px;color:var(--tx3);font-family:var(--mono)">' + esc(a.asin) + ' · ' + fmtEur(a.revenue||0) + '</div>';
       h += '</div>';
       h += '<div style="flex-shrink:0;font-size:10px;color:var(--tx3)">' + icon + ' ' + label + '</div>';
-      h += '<button class="btn btn-xs btn-p" onclick="openSEODrawer('+asinJ+')">\u270d\ufe0f G\u00e9n\u00e9rer</button>';
+      h += '<button class="btn btn-xs btn-p" onclick="openSEODrawer('+asinJ+')">✍️ Générer</button>';
       h += '</div>';
     });
     h += '</div>';
@@ -7093,32 +7152,32 @@ function renderSEOScreen() {
 
   if (inProgress.length > 0) {
     h += '<div class="cd">';
-    h += '<div style="font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">\U0001f4cb Fiches en cours (' + inProgress.length + ')</div>';
+    h += '<div style="font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">📋 Fiches en cours (' + inProgress.length + ')</div>';
     inProgress.forEach(function(a) {
       var status = seoGetStatus(a.asin, c);
       var si = seoStatusLabel(status);
       var fiche = c.ficheOptimisee && c.ficheOptimisee[a.asin];
       var lastAction = fiche && fiche.actions && fiche.actions.length ? fiche.actions[fiche.actions.length-1] : null;
-      var short = (a.title||a.asin).substring(0,55)+((a.title||'').length>55?'\u2026':'');
+      var short = (a.title||a.asin).substring(0,55)+((a.title||'').length>55?'…':'');
       var asinJ = "'" + a.asin + "'";
       h += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)">';
       h += '<div style="flex:1;min-width:0">';
       h += '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(short) + '</div>';
-      h += '<div style="font-size:10px;color:var(--tx3);font-family:var(--mono)">' + esc(a.asin) + (lastAction ? ' \u00b7 ' + new Date(lastAction.submittedAt).toLocaleDateString('fr-FR') : '') + '</div>';
+      h += '<div style="font-size:10px;color:var(--tx3);font-family:var(--mono)">' + esc(a.asin) + (lastAction ? ' · ' + new Date(lastAction.submittedAt).toLocaleDateString('fr-FR') : '') + '</div>';
       h += '</div>';
       h += '<div style="flex-shrink:0;font-size:11px;font-weight:600;color:'+si.color+'">' + si.icon + ' ' + si.label + '</div>';
-      h += '<button class="btn btn-xs" onclick="openSEODrawer('+asinJ+')">\U0001f441 Voir</button>';
+      h += '<button class="btn btn-xs" onclick="openSEODrawer('+asinJ+')">👁 Voir</button>';
       if (status==='submitted'||status==='overdue') {
-        h += '<button class="btn btn-xs" style="background:var(--or);color:#fff;border-color:var(--or)" onclick="seoLaunchVerify('+asinJ+')">\U0001f50d V\u00e9rif.</button>';
+        h += '<button class="btn btn-xs" style="background:var(--or);color:#fff;border-color:var(--or)" onclick="seoLaunchVerify('+asinJ+')">🔍 Vérif.</button>';
       }
       if (status==='failed') {
-        h += '<button class="btn btn-xs" style="background:var(--r);color:#fff;border-color:var(--r)" onclick="seoOpenCase('+asinJ+')">\U0001f198</button>';
+        h += '<button class="btn btn-xs" style="background:var(--r);color:#fff;border-color:var(--r)" onclick="seoOpenCase('+asinJ+')">🆘</button>';
       }
       h += '</div>';
     });
     h += '</div>';
   } else {
-    h += '<div class="alr alr-g">\u2705 Aucune fiche en attente \u2014 tout est conforme ou non encore g\u00e9n\u00e9r\u00e9.</div>';
+    h += '<div class="alr alr-g">✅ Aucune fiche en attente — tout est conforme ou non encore généré.</div>';
   }
 
   h += '</div>';
@@ -7139,7 +7198,7 @@ function seoSearchInput() {
            (a.title||'').toUpperCase().includes(q) ||
            (c.asins.some(function(x){ return x.asin===a.asin && x.vendorCode && x.vendorCode.toUpperCase().includes(q); }));
   }).slice(0, 5);
-  if (!matches.length) { results.innerHTML = '<div style="font-size:11px;color:var(--tx3);padding:4px 0">Aucun r\u00e9sultat</div>'; return; }
+  if (!matches.length) { results.innerHTML = '<div style="font-size:11px;color:var(--tx3);padding:4px 0">Aucun résultat</div>'; return; }
   var h = '';
   matches.forEach(function(a) {
     var short = (a.title||a.asin).substring(0,60);
@@ -7163,12 +7222,12 @@ function seoSearchGo() {
     // Cherche par titre ou ref
     a = c.asins.find(function(x){ return (x.title||'').toUpperCase().includes(q); });
   }
-  if (!a) { showToast('ASIN non trouv\u00e9 dans le catalogue', 'alr-r'); return; }
+  if (!a) { showToast('ASIN non trouvé dans le catalogue', 'alr-r'); return; }
   openSEODrawer(a.asin);
 }
 
 function seoLaunchNewRef() {
-  showToast('Route A \u2014 Cr\u00e9ation nouvelle r\u00e9f\u00e9rence : fonctionnalit\u00e9 en pr\u00e9paration', 'alr-b');
+  showToast('Route A — Création nouvelle référence : fonctionnalité en préparation', 'alr-b');
 }
 
 function buildSEOPrompt(a, c, lang, isBackendKW) {
@@ -7300,8 +7359,8 @@ function parseSEOResponse(text, lang) {
       return '';
     }
 
-    result.nomType      = extractField(text, 'NOM_TYPE_PRODUIT');
-    result.titre        = extractField(text, 'TITRE');
+    result.nomType      = extractField(text, 'NOM_TYPE_PRODUIT').replace(/\*\*/g, '').trim();
+    result.titre        = extractField(text, 'TITRE').replace(/\*\*/g, '').trim();
     result.backendKW    = extractField(text, 'BACKEND_KEYWORDS');
     result.positionnement = extractField(text, 'POSITIONNEMENT_AMAZON');
     result.leviers      = extractField(text, 'LEVIERS_RANKING');
@@ -7309,7 +7368,7 @@ function parseSEOResponse(text, lang) {
     result.opportunite  = extractField(text, 'OPPORTUNITE_SEO');
 
     for (let i = 1; i <= 5; i++) {
-      result.bullets[i-1] = extractField(text, 'BULLET_' + i);
+      result.bullets[i-1] = extractField(text, 'BULLET_' + i).replace(/\*\*/g, '').trim();
     }
     const descMatch = text.match(/DESCRIPTION:\s*([\s\S]+?)$/);
     if (descMatch) result.description = descMatch[1].trim();
