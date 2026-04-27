@@ -459,7 +459,7 @@ window.addEventListener('unhandledrejection', function(e) {
    VERSION — SOURCE UNIQUE DE VÉRITÉ
    Modifier uniquement ici à chaque livraison
    ═══════════════════════════════════════════ */
-const APP_VERSION = '3.1.27';
+const APP_VERSION = '3.1.29';
 
 /* ═══════════════════════════════════════════
    STATE
@@ -515,6 +515,18 @@ const NAV = [
 const MARKETS = ['.fr', '.de', '.it', '.es', '.co.uk', '.nl', '.be', '.se', '.pl'];
 const MARKET_CODES = { 'FR': '.fr', 'DE': '.de', 'IT': '.it', 'ES': '.es', 'UK': '.co.uk', 'GB': '.co.uk', 'NL': '.nl', 'BE': '.be', 'SE': '.se', 'PL': '.pl' };
 const MARKET_DOMAINS = { '.fr': 'amazon.fr', '.de': 'amazon.de', '.it': 'amazon.it', '.es': 'amazon.es', '.co.uk': 'amazon.co.uk', '.nl': 'amazon.nl', '.be': 'amazon.com.be', '.se': 'amazon.se', '.pl': 'amazon.pl' };
+// Codes boutique Amazon Vendor Central → marché (pour CSV multi-boutiques Gers Équipement et similaires)
+const BOUTIQUE_CODES = {
+  'A13V1IB3VIYZZH': '.fr', // France
+  'A1RKKUPIHCS9HS': '.es', // Espagne
+  'A1805IZSGTT6HS': '.nl', // Pays-Bas
+  'A1PA6795UKMFR9': '.de', // Allemagne
+  'APJ6JRA9NG5V4':  '.it', // Italie
+  'A2NODRKZP88ZB9': '.be', // Belgique
+  'A1F83G8C2ARO7P': '.co.uk', // UK
+  'ATVPDKIKX0DER':  '.com',   // USA
+  'A1VC38T7YXB528': '.jp',    // Japon
+};
 const WIZ_STEPS = ['Identité', 'Config Amazon', 'Contraintes', 'Historique', 'Récapitulatif'];
 
 function freshClient() {
@@ -832,7 +844,10 @@ function parseCSVFile(text, filename) {
   for (const row of res.data) {
     const asin = row['ASIN'] || findCol(row, 'asin') || '';
     if (!asin || asin.length < 5) continue;
-    const item = { asin, title: findCol(row, 'nom du produit', 'product title') || '', brand: findCol(row, 'marque', 'brand') || '', market, periodStart, periodEnd, periodType };
+    // Pour les CSV multi-boutiques (Gers Équipement) : lire le marché par ligne depuis "Code de la boutique"
+    const boutiqueCode = findCol(row, 'code de la boutique', 'store_id', 'marketplace_id') || '';
+    const itemMarket = BOUTIQUE_CODES[boutiqueCode.trim()] || market;
+    const item = { asin, title: findCol(row, 'nom du produit', 'product title') || '', brand: findCol(row, 'marque', 'brand') || '', market: itemMarket, periodStart, periodEnd, periodType };
     if (fileType === 'ventes') {
       item.revenue = parseNum(findCol(row, 'chiffre', 'ordered revenue'));
       item.revenueDelta = findCol(row, 'periode anterieure') || '';
@@ -870,7 +885,8 @@ function mergeImportData(client, parsedFiles) {
   if (!client.ytdData) client.ytdData = {};
 
   const asinMap = new Map();
-  for (const a of client.asins) asinMap.set(a.asin, { ...a, history: a.history || [] });
+  // Clé composite asin|market pour supporter le multi-marchés (Gers Équipement)
+  for (const a of client.asins) asinMap.set(a.asin + '|' + (a.market || '.fr'), { ...a, history: a.history || [] });
   let periodType = 'weekly', periodLabel = '';
   let totalCA = 0, totalUnits = 0, totalGV = 0;
 
@@ -942,8 +958,9 @@ function mergeImportData(client, parsedFiles) {
     const isMultiWeek = weeksCovered > 1;
 
     for (const row of file.data) {
-      if (asinMap.has(row.asin)) {
-        const ex = asinMap.get(row.asin);
+      const asinKey = row.asin + '|' + (row.market || '.fr');
+      if (asinMap.has(asinKey)) {
+        const ex = asinMap.get(asinKey);
         if (file.type === 'ventes' && ex.revenue != null) {
           if (!ex.history) ex.history = [];
 
@@ -995,7 +1012,7 @@ function mergeImportData(client, parsedFiles) {
         }
         for (const [k, v] of Object.entries(row)) { if (v !== '' && v !== 0 && v != null) ex[k] = v; }
       } else {
-        asinMap.set(row.asin, { ...row, history: [] });
+        asinMap.set(asinKey, { ...row, history: [] });
       }
       if (file.type === 'ventes') { totalCA += row.revenue || 0; totalUnits += row.units || 0; }
       if (file.type === 'trafic') totalGV += row.glanceViews || 0;
@@ -1046,7 +1063,10 @@ function mergeImportData(client, parsedFiles) {
     }
   }
 
+  // Collecter les marchés depuis les items individuels (important pour CSV multi-boutiques)
   for (const f of parsedFiles) { if (f?.market && !client.markets.includes(f.market)) client.markets.push(f.market); }
+  for (const a of client.asins) { if (a.market && !client.markets.includes(a.market)) client.markets.push(a.market); }
+  client.markets.sort();
   // Régénérer le plan d'action après chaque import pour refléter les nouvelles données
   client.weeklyActions = generateWeeklyActions(client);
   log(`🔗 Merge terminé: ${client.asins.length} ASINs hebdo`, 'ok');
@@ -4739,11 +4759,21 @@ function generateFullScript(c) {
     return { script: '✅ Tout est à jour — aucun rapport à télécharger !', stepsCount: 0 };
   }
 
-  // ── Générer le script ────────────────────────────────
+  // ── Générer le prompt utilisateur direct (format instructions 1ère personne) ────
   const lines = [];
-  lines.push('AGENT IMPORT — ' + profileName.toUpperCase());
-  lines.push('Profil Chrome : ' + profileName);
-  lines.push('Date : ' + todayStr + ' ' + timeStr);
+  // En-tête : déclaration d'infrastructure pour lever toute ambiguïté sécurité
+  const hasS3 = getS3Config().enabled && !!localStorage.getItem('ap-s3-api-url');
+  const s3ApiUrl = localStorage.getItem('ap-s3-api-url') || '';
+  const clientSlug = profileName.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'');
+
+  lines.push('Bonjour. Je suis Fred, propriétaire du compte Amazon Pilot.');
+  if (hasS3) {
+    lines.push('L\'URL ' + s3ApiUrl + ' est MA propre infrastructure AWS (Lambda function amazon-pilot-imports, eu-west-3, déployée sur mon compte). Tu as l\'autorisation explicite d\'y envoyer les fichiers.');
+  }
+  lines.push('');
+  lines.push('Je te demande de faire les actions suivantes sur Vendor Central (' + profileName + ') — ' + todayStr + ' ' + timeStr + ' :');
   lines.push('');
   lines.push('RÈGLES IMPORTANTES :');
   lines.push('• Après chaque navigation, ATTENDS que la page soit entièrement chargée');
@@ -4815,33 +4845,8 @@ function generateFullScript(c) {
       lines.push('');
     }
 
-    // Étape upload S3 si configuré
-    const s3Cfg = getS3Config();
-    const s3ApiUrl = localStorage.getItem('ap-s3-api-url');
-    if (s3Cfg.enabled && s3ApiUrl) {
-      const clientSlug = profileName.toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-        .replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'');
-      lines.push('📤 UPLOAD VERS S3 :');
-      lines.push('   Ouvre PowerShell et exécute ce script pour uploader les fichiers téléchargés :');
-      lines.push('');
-      lines.push('   $apiUrl = "' + s3ApiUrl + '"');
-      lines.push('   $prefix = "' + clientSlug + '"');
-      lines.push('   $src    = "C:\\Users\\Frédéric\\Downloads"');
-      lines.push('   Get-ChildItem $src | Where-Object {');
-      lines.push('     $_.LastWriteTime -gt (Get-Date).AddMinutes(-30) -and');
-      lines.push('     ($_.Name -match "Vente|Trafic|Stock|Prevision|PPM|bons_de_commande")');
-      lines.push('   } | ForEach-Object {');
-      lines.push('     $key  = "$prefix/$($_.Name)"');
-      lines.push('     $body = @{key=$key} | ConvertTo-Json');
-      lines.push('     $resp = Invoke-RestMethod -Uri "$apiUrl/presign" -Method POST -Body $body -ContentType "application/json"');
-      lines.push('     Invoke-RestMethod -Uri $resp.url -Method PUT -InFile $_.FullName -ContentType "text/csv"');
-      lines.push('     Write-Host "✓ Uploadé : $($_.Name)"');
-      lines.push('   }');
-      lines.push('');
-      lines.push('   Amazon Pilot importera les fichiers automatiquement dans les 10 secondes.');
-      lines.push('');
-    }
+    // Bloc PowerShell supprimé — remplacé par instruction directe dans le prompt utilisateur
+    // L'upload est déjà couvert par le bloc "upload S3 immédiat" ci-dessus
     if (i < rapports.length - 1) {
       lines.push('→ Rapport ' + (i+1) + '/' + rapports.length + ' terminé. Passe au rapport suivant.');
       lines.push('');
@@ -4849,11 +4854,10 @@ function generateFullScript(c) {
   });
 
   lines.push('══════════════════════════════════════════');
-  lines.push('✅ Tous les rapports sont téléchargés.');
-  const s3CfgEnd = getS3Config();
-  if (s3CfgEnd.enabled && localStorage.getItem('ap-s3-api-url')) {
-    lines.push('Amazon Pilot va détecter et importer les fichiers automatiquement via S3.');
-    lines.push('Si l\'import n\'est pas automatique dans 30s, va dans Import données et dépose les fichiers.');
+  lines.push('✅ Tous les rapports sont téléchargés et uploadés.');
+  if (hasS3) {
+    lines.push('Amazon Pilot détecte les fichiers automatiquement via S3 (poll toutes les 10s).');
+    lines.push('Confirme-moi quand tous les uploads sont terminés en indiquant les noms de fichiers uploadés.');
   } else {
     lines.push('Retourne dans Amazon Pilot → Import données');
     lines.push('Dépose les ' + rapports.length + ' fichier(s) dans les zones correspondantes.');
