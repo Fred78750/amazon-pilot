@@ -447,7 +447,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.40';
+const APP_VERSION = '3.1.41';
 let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
 let activeId = null;
@@ -9007,8 +9007,19 @@ function initDragDrop() {
       const input = document.getElementById('hist-files');
       if (input) { input.files = dt.files; handleHistCSV(input); }
     } else if (screen === 'import') {
-      const input = document.getElementById('csv-files');
-      if (input) { input.files = dt.files; handleMultiCSV(input); }
+      // Détecter si le drop est sur la zone historique ou hebdomadaire
+      const dropTarget = e.target.closest('.import-zone');
+      const histZone = document.getElementById('hist-files-import')?.closest('.import-zone') ||
+                       document.querySelector('[onclick*="hist-files-import"]')?.closest('.import-zone');
+      if (dropTarget && histZone && (dropTarget === histZone || histZone.contains(dropTarget))) {
+        // Drop sur la zone historique
+        const input = document.getElementById('hist-files-import');
+        if (input) { input.files = dt.files; handleHistCSVImport(input); }
+      } else {
+        // Drop sur la zone hebdomadaire (ou ailleurs dans l'écran)
+        const input = document.getElementById('csv-files');
+        if (input) { input.files = dt.files; handleMultiCSV(input); }
+      }
     }
   });
 }
