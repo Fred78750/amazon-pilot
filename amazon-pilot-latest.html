@@ -447,7 +447,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.41';
+const APP_VERSION = '3.1.42';
 let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
 let activeId = null;
@@ -1052,7 +1052,7 @@ function mergeImportData(client, parsedFiles) {
     // Évite les données "fantômes" des ASINs absents du nouveau CSV
     const fileMarket = file.market || '.fr';
     const fileDistView = file.distributorView || 'fab';
-    // Construire le set des marques fabricant du client pour la fusion Fab/Appro
+    // Construire le set des marques fabricant — disponible pour tous les blocs (annual, ytd, hebdo)
     const clientFabBrands = new Set(
       (client.brands || [])
         .filter(b => b.role === 'fabricant')
