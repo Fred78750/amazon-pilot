@@ -447,7 +447,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.47';
+const APP_VERSION = '3.1.48';
 let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
 let activeId = null;
@@ -731,7 +731,8 @@ function detectFileType(headers) {
   const h = headers.map(x => norm(x)).join(' ');
   if ((h.includes('chiffre') && h.includes('affaires')) || h.includes('ordered revenue') || h.includes('revenus')) return 'ventes';
   if (h.includes('vues') || h.includes('glance') || h.includes('offre vedette')) return 'trafic';
-  if (h.includes('stock') || h.includes('rupture') || h.includes('vendable') || h.includes('invendable')) return 'stock';
+  if (h.includes('stock') || h.includes('rupture') || h.includes('vendable') || h.includes('invendable')
+    || h.includes('sellable') || h.includes('unsellable') || h.includes('inventory') || h.includes('fill rate') || h.includes('purchase order')) return 'stock';
   return 'unknown';
 }
 
@@ -740,7 +741,7 @@ function detectPeriodType(startDate, endDate, intervalMeta) {
   if (intervalMeta) {
     const iv = norm(intervalMeta).trim(); // norm() pour neutraliser les accents
     if (iv.includes('annee en cours') || iv.includes('year to date') || iv.includes('ytd')) return 'ytd';
-    if (iv === 'an' || iv === 'year' || iv === 'annual' || iv.includes('chaque annee') || iv.includes('chaque an')) return 'annual';
+    if (iv === 'an' || iv === 'year' || iv === 'annual' || iv.includes('chaque annee') || iv.includes('chaque an') || iv.includes('each year') || iv.includes('annually')) return 'annual';
     if (iv.includes('semaine') || iv === 'week' || iv.includes('weekly')) return 'weekly';
     if (iv.includes('mois') || iv === 'month' || iv.includes('monthly')) return 'monthly';
   }
@@ -761,8 +762,9 @@ function parseCSVFile(text, filename) {
   const meta = parseMetadata(lines[0]);
   const market = MARKET_CODES[meta.pays] || '.fr';
   // Détecter la vue distributeur : Fabrication (manufacturing) vs Approvisionnement (sourcing)
-  const apercu = (meta['apercu du distributeur.'] || meta['apercu du distributeur'] || '').toLowerCase();
-  const distributorView = apercu.includes('approvisionnement') ? 'appro' : 'fab';
+  const apercu = (meta['apercu du distributeur.'] || meta['apercu du distributeur']
+    || meta['distributor view'] || meta['distributor view.'] || '').toLowerCase();
+  const distributorView = (apercu.includes('approvisionnement') || apercu.includes('sourcing')) ? 'appro' : 'fab';
   log(`Metadata: Pays=${meta.pays || '?'}, ${meta.entreprises || ''}, Vue=${distributorView}`);
   let periodStart = null, periodEnd = null;
 
@@ -942,6 +944,11 @@ function mergeImportData(client, parsedFiles) {
       if (fileDistViewAnn === 'appro' && file.type === 'stock') {
         const existingStockFab = client.annualData[year]['stock'];
         if (existingStockFab) {
+          // Purger les ASINs sourcingOnly précédents avant re-merge
+          for (const asin of Object.keys(existingStockFab.asins || {})) {
+            if (existingStockFab.asins[asin].sourcingOnly) delete existingStockFab.asins[asin];
+          }
+          const fabStockBaseCount = Object.keys(existingStockFab.asins).length;
           let stockApproCount = 0;
           for (const row of file.data) {
             if (!row.asin) continue;
@@ -953,7 +960,7 @@ function mergeImportData(client, parsedFiles) {
             }
           }
           if (stockApproCount > 0) {
-            existingStockFab.asinCount += stockApproCount;
+            existingStockFab.asinCount = fabStockBaseCount + stockApproCount;
             existingStockFab.hasApproData = true;
             log(`✓ Stock annuel ${year} Appro fusionné: +${stockApproCount} ASINs`, 'ok');
           }
@@ -1034,6 +1041,11 @@ function mergeImportData(client, parsedFiles) {
       if (fileDistViewYtd === 'appro' && file.type === 'stock') {
         const existingYtdStock = client.ytdData['stock'];
         if (existingYtdStock) {
+          // Purger les ASINs sourcingOnly précédents avant re-merge
+          for (const asin of Object.keys(existingYtdStock.asins || {})) {
+            if (existingYtdStock.asins[asin].sourcingOnly) delete existingYtdStock.asins[asin];
+          }
+          const fabYtdStockBaseCount = Object.keys(existingYtdStock.asins).length;
           let ytdStockCount = 0;
           for (const row of file.data) {
             if (!row.asin) continue;
