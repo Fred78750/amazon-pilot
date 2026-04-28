@@ -447,7 +447,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.46';
+const APP_VERSION = '3.1.47';
 let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
 let activeId = null;
@@ -901,7 +901,15 @@ function mergeImportData(client, parsedFiles) {
       if (fileDistViewAnn === 'appro' && file.type === 'ventes') {
         // Appro annuel : additionner les ASINs fabricant absents de la vue Fab
         const existingFab = client.annualData[year]['ventes'];
-        const fabASINs = existingFab ? existingFab.asins || {} : {};
+        if (!existingFab) { client.imports.push({ date: new Date().toISOString(), type: file.type, distributorView: 'appro', market: file.market, periodStart: file.periodStart, periodEnd: file.periodEnd, periodType: 'annual', year, filename: file.filename, rowCount: file.rowCount }); continue; }
+        // Si re-import Appro sur slot déjà fusionné : repartir de la base Fab pure
+        const fabBaseCA    = existingFab.fabOnlyCA    != null ? existingFab.fabOnlyCA    : existingFab.totalCA;
+        const fabBaseUnits = existingFab.fabOnlyUnits != null ? existingFab.fabOnlyUnits : existingFab.totalUnits;
+        // Purger les ASINs sourcingOnly précédents avant de re-merger
+        for (const asin of Object.keys(existingFab.asins || {})) {
+          if (existingFab.asins[asin].sourcingOnly) delete existingFab.asins[asin];
+        }
+        const fabASINs = existingFab.asins || {};
         let approExtra = 0, approExtraUnits = 0, approCount = 0;
         for (const row of file.data) {
           if (!row.asin) continue;
@@ -909,18 +917,20 @@ function mergeImportData(client, parsedFiles) {
           const isFab = clientFabBrands.size === 0 || clientFabBrands.has(brand);
           if (!fabASINs[row.asin] && isFab) {
             // ASIN absent de Fab mais marque fabricant → à additionner
-            if (existingFab) existingFab.asins[row.asin] = { ...row, sourcingOnly: true };
+            existingFab.asins[row.asin] = { ...row, sourcingOnly: true };
             approExtra += row.revenue || 0;
             approExtraUnits += row.units || 0;
             approCount++;
           }
         }
         if (existingFab && approExtra > 0) {
-          existingFab.totalCA += approExtra;
-          existingFab.approOnlyCA = approExtra;
+          existingFab.fabOnlyCA    = fabBaseCA;
+          existingFab.fabOnlyUnits = fabBaseUnits;
+          existingFab.totalCA      = fabBaseCA + approExtra;
+          existingFab.approOnlyCA  = approExtra;
           existingFab.approOnlyUnits = approExtraUnits;
           existingFab.approOnlyCount = approCount;
-          existingFab.totalUnits += approExtraUnits;
+          existingFab.totalUnits   = fabBaseUnits + approExtraUnits;
           existingFab.asinCount += approCount;
           existingFab.hasApproData = true;
           log(`✓ Données annuelles ${year} Appro fusionnées: +${approCount} ASINs, +${approExtra.toFixed(0)}€`, 'ok');
@@ -984,25 +994,35 @@ function mergeImportData(client, parsedFiles) {
       // Fusion Fab/Appro pour YTD
       if (fileDistViewYtd === 'appro' && file.type === 'ventes') {
         const existingYtdFab = client.ytdData['ventes'];
-        const fabYtdASINs = existingYtdFab ? existingYtdFab.asins || {} : {};
+        if (!existingYtdFab) { client.imports.push({ date: new Date().toISOString(), type: file.type, distributorView: 'appro', market: file.market, periodStart: file.periodStart, periodEnd: file.periodEnd, periodType: 'ytd', filename: file.filename, rowCount: file.rowCount }); continue; }
+        // Si re-import Appro sur slot déjà fusionné : repartir de la base Fab pure
+        const fabYtdBaseCA    = existingYtdFab.fabOnlyCA    != null ? existingYtdFab.fabOnlyCA    : existingYtdFab.totalCA;
+        const fabYtdBaseUnits = existingYtdFab.fabOnlyUnits != null ? existingYtdFab.fabOnlyUnits : existingYtdFab.totalUnits;
+        // Purger les ASINs sourcingOnly précédents avant de re-merger
+        for (const asin of Object.keys(existingYtdFab.asins || {})) {
+          if (existingYtdFab.asins[asin].sourcingOnly) delete existingYtdFab.asins[asin];
+        }
+        const fabYtdASINs = existingYtdFab.asins || {};
         let approYtdExtra = 0, approYtdUnits = 0, approYtdCount = 0;
         for (const row of file.data) {
           if (!row.asin) continue;
           const brand = norm(row.brand || '');
           const isFab = clientFabBrands.size === 0 || clientFabBrands.has(brand);
           if (!fabYtdASINs[row.asin] && isFab) {
-            if (existingYtdFab) existingYtdFab.asins[row.asin] = { ...row, sourcingOnly: true };
+            existingYtdFab.asins[row.asin] = { ...row, sourcingOnly: true };
             approYtdExtra += row.revenue || 0;
             approYtdUnits += row.units || 0;
             approYtdCount++;
           }
         }
         if (existingYtdFab && approYtdExtra > 0) {
-          existingYtdFab.totalCA += approYtdExtra;
-          existingYtdFab.approOnlyCA = approYtdExtra;
+          existingYtdFab.fabOnlyCA    = fabYtdBaseCA;
+          existingYtdFab.fabOnlyUnits = fabYtdBaseUnits;
+          existingYtdFab.totalCA      = fabYtdBaseCA + approYtdExtra;
+          existingYtdFab.approOnlyCA  = approYtdExtra;
           existingYtdFab.approOnlyUnits = approYtdUnits;
           existingYtdFab.approOnlyCount = approYtdCount;
-          existingYtdFab.totalUnits += approYtdUnits;
+          existingYtdFab.totalUnits   = fabYtdBaseUnits + approYtdUnits;
           existingYtdFab.asinCount += approYtdCount;
           existingYtdFab.hasApproData = true;
           log(`✓ Données YTD Appro fusionnées: +${approYtdCount} ASINs, +${approYtdExtra.toFixed(0)}€`, 'ok');
@@ -2770,6 +2790,8 @@ function renderImport() {
           cellIcon = '+'; cellLabel = 'À charger';
         }
       } else if (col === 'ventesAppro') {
+        // Affiche uniquement le CA des ASINs Appro absents de la vue Fab (sourcingOnly)
+        // = delta Brand Registry : ventes sur ASINs que Fab ne voit pas encore
         if (!hasFab) {
           // Fab pas encore chargé
           cellBg = 'var(--s2)'; cellBd = 'var(--bd2,#ddd)';
