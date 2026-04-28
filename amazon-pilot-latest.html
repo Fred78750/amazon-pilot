@@ -447,7 +447,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.43';
+const APP_VERSION = '3.1.44';
 let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
 let activeId = null;
@@ -2680,65 +2680,123 @@ function renderImport() {
   h += `<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">N-2, N-1, YTD — contextualisent le compte dans sa trajectoire longue. Déposez jusqu'à ${hasFabBrandsHist?'12 (Fab + Appro)':'9'} fichiers d'un coup.</p>`;
   if (hasFabBrandsHist) h += `<div style="font-size:11px;color:var(--a);background:var(--a-bg);border:1px solid var(--a-bd);border-radius:var(--rd);padding:6px 10px;margin-bottom:10px">⚡ Client avec marques fabricant — importer aussi les vues Approvisionnement Ventes + Stock pour chaque période</div>`;
 
-  // Grille historique : 1 ligne par période, 3 colonnes par type de donnée
+  // Grille historique : 5 colonnes si marques fabricant, 3 sinon
+  const histCols = hasFabBrandsHist
+    ? ['ventesFab','ventesAppro','trafic','stockFab','stockAppro']
+    : ['ventes','trafic','stock'];
+  const histColCount = histCols.length;
+  const histGridCols = `100px repeat(${histColCount},1fr)`;
+
   // En-têtes colonnes
-  h += `<div style="display:grid;grid-template-columns:100px repeat(3,1fr);gap:6px;margin-bottom:6px;padding:0 2px">
+  const histHeaders = hasFabBrandsHist ? [
+    '<span>💰 Ventes</span><span style="font-size:9px;font-weight:600;color:var(--b);background:var(--b-bg);border-radius:3px;padding:1px 4px;margin-left:3px">Fab</span>',
+    '<span>💰 Ventes</span><span style="font-size:9px;font-weight:600;color:var(--a);background:var(--a-bg);border-radius:3px;padding:1px 4px;margin-left:3px">Appro</span>',
+    '👁 Trafic',
+    '<span>📦 Stock</span><span style="font-size:9px;font-weight:600;color:var(--b);background:var(--b-bg);border-radius:3px;padding:1px 4px;margin-left:3px">Fab</span>',
+    '<span>📦 Stock</span><span style="font-size:9px;font-weight:600;color:var(--a);background:var(--a-bg);border-radius:3px;padding:1px 4px;margin-left:3px">Appro</span>',
+  ] : ['💰 Ventes','👁 Trafic','📦 Stock'];
+
+  h += `<div style="display:grid;grid-template-columns:${histGridCols};gap:6px;margin-bottom:6px;padding:0 2px">
     <div></div>
-    <div style="text-align:center;font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px">💰 Ventes</div>
-    <div style="text-align:center;font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px">👁 Trafic</div>
-    <div style="text-align:center;font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px">📦 Stock</div>
+    ${histHeaders.map(hh => `<div style="text-align:center;font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px">${hh}</div>`).join('')}
   </div>`;
 
-  // Lignes : 1 par période
+  // Lignes : 1 par période (3 périodes × 5 cols = 15 emplacements)
   h += `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">`;
   annSlots.forEach(({ year, type, label }) => {
     const isYTD = type === 'ytd';
     const slotLabel = label || String(year);
-    const isObl = !isYTD; // annuels = recommandés, YTD = obligatoire hebdo
-    h += `<div style="display:grid;grid-template-columns:100px repeat(3,1fr);gap:6px;align-items:stretch">`;
+    h += `<div style="display:grid;grid-template-columns:${histGridCols};gap:6px;align-items:stretch">`;
     // Label période
     h += `<div style="display:flex;flex-direction:column;justify-content:center;padding:0 4px">
       <div style="font-weight:700;font-size:13px;color:var(--tx)">${slotLabel}</div>
       <div style="font-size:10px;color:${isYTD?'var(--or)':'var(--tx3)'};margin-top:2px">${isYTD?'Recommandé':'Optionnel'}</div>
     </div>`;
-    // 3 cellules données
-    ['ventes','trafic','stock'].forEach(key => {
-      const data = isYTD ? c.ytdData?.[key] : c.annualData?.[year]?.[key];
-      const ok = !!data;
-      const bg = ok ? 'var(--g-bg)' : 'var(--s2)';
-      const bd = ok ? 'var(--g-bd)' : 'var(--bd)';
 
-      // Valeur principale selon le type
-      let mainVal = '—', subVal = '';
-      if (ok) {
-        if (key === 'ventes') {
-          mainVal = fmtEur(data.totalCA || 0);
-          const approBadgeV = data.hasApproData
-            ? '<span style="font-size:9px;font-weight:700;color:var(--a);background:var(--a-bg);border-radius:3px;padding:1px 4px;margin-left:4px">Fab+Appro</span>'
-            : (hasFabBrandsHist ? '<span style="font-size:9px;font-weight:700;color:var(--or);background:var(--or-bg,#fff8ee);border-radius:3px;padding:1px 4px;margin-left:4px">Appro manquant</span>' : '');
-          subVal = fmt(data.totalUnits || 0) + ' unités · ' + data.asinCount + ' ASINs' + approBadgeV;
-        } else if (key === 'trafic') {
+    // Colonnes selon le mode (3 ou 5)
+    histCols.forEach(col => {
+      // Déterminer type et vue
+      const isFabCol   = col === 'ventesFab' || col === 'ventes';
+      const isApproCol = col === 'ventesAppro' || col === 'stockAppro';
+      const isTrafic   = col === 'trafic';
+      const isStockFab = col === 'stockFab' || col === 'stock';
+      const dataKey    = isTrafic ? 'trafic' : (isFabCol ? 'ventes' : (isStockFab ? 'stock' : (col === 'ventesAppro' ? 'ventes' : 'stock')));
+
+      // Récupérer les données
+      const data = isYTD ? c.ytdData?.[dataKey] : c.annualData?.[year]?.[dataKey];
+      const hasFab   = !!data;
+      const hasAppro = data?.hasApproData;
+
+      // Pour les colonnes Appro : vide si Fab pas encore chargé, sinon montrer statut
+      let ok = false, mainVal = '', subVal = '', cellBg, cellBd, cellIcon, cellLabel;
+
+      if (isTrafic) {
+        ok = hasFab;
+        if (ok) {
           mainVal = fmt(data.totalGV || 0) + ' GV';
-          subVal = data.asinCount + ' ASINs';
-        } else if (key === 'stock') {
+          subVal  = data.asinCount + ' ASINs';
+          cellBg = 'var(--g-bg)'; cellBd = 'var(--g-bd)';
+        } else {
+          cellBg = 'var(--s2)'; cellBd = 'var(--bd)';
+          cellIcon = '+'; cellLabel = 'À charger';
+        }
+      } else if (col === 'ventesFab' || col === 'ventes') {
+        ok = hasFab;
+        if (ok) {
+          mainVal = fmtEur(data.totalCA || 0);
+          subVal  = fmt(data.totalUnits || 0) + ' unités · ' + data.asinCount + ' ASINs';
+          cellBg = 'var(--g-bg)'; cellBd = 'var(--g-bd)';
+        } else {
+          cellBg = 'var(--s2)'; cellBd = 'var(--bd)';
+          cellIcon = '+'; cellLabel = 'À charger';
+        }
+      } else if (col === 'ventesAppro') {
+        if (!hasFab) {
+          // Fab pas encore chargé
+          cellBg = 'var(--s2)'; cellBd = 'var(--bd2,#ddd)';
+          cellIcon = '🔒'; cellLabel = 'Fab en 1er';
+        } else if (hasAppro) {
+          ok = true;
+          const extraCA = (data.totalCA || 0) - (data._fabOnlyCA || data.totalCA || 0);
+          mainVal = fmtEur(data.totalCA || 0);
+          subVal  = data.asinCount + ' ASINs';
+          cellBg = 'var(--a-bg)'; cellBd = 'var(--a-bd,var(--a))';
+        } else {
+          // Fab chargé, Appro manquant
+          cellBg = 'var(--or-bg,#fff8ee)'; cellBd = 'var(--or,#e8a000)';
+          cellIcon = '📤'; cellLabel = 'À charger';
+        }
+      } else if (col === 'stockFab' || col === 'stock') {
+        ok = hasFab;
+        if (ok) {
           mainVal = data.asinCount + ' ASINs';
-          const approBadgeS = data.hasApproData
-            ? '<span style="font-size:9px;font-weight:700;color:var(--a);background:var(--a-bg);border-radius:3px;padding:1px 4px;margin-left:4px">Fab+Appro</span>'
-            : (hasFabBrandsHist ? '<span style="font-size:9px;font-weight:700;color:var(--or);background:var(--or-bg,#fff8ee);border-radius:3px;padding:1px 4px;margin-left:4px">Appro manquant</span>' : '');
-          subVal = (data.periodStart ? data.periodStart + ' → ' + data.periodEnd : '') + approBadgeS;
+          subVal  = data.periodStart ? data.periodStart + ' → ' + data.periodEnd : '';
+          cellBg = 'var(--g-bg)'; cellBd = 'var(--g-bd)';
+        } else {
+          cellBg = 'var(--s2)'; cellBd = 'var(--bd)';
+          cellIcon = '+'; cellLabel = 'À charger';
+        }
+      } else if (col === 'stockAppro') {
+        if (!hasFab) {
+          cellBg = 'var(--s2)'; cellBd = 'var(--bd2,#ddd)';
+          cellIcon = '🔒'; cellLabel = 'Fab en 1er';
+        } else if (hasAppro) {
+          ok = true;
+          mainVal = data.asinCount + ' ASINs';
+          subVal  = '';
+          cellBg = 'var(--a-bg)'; cellBd = 'var(--a-bd,var(--a))';
+        } else {
+          cellBg = 'var(--or-bg,#fff8ee)'; cellBd = 'var(--or,#e8a000)';
+          cellIcon = '📤'; cellLabel = 'À charger';
         }
       }
 
-      // Cellule "À charger" en orange si Appro manquant pour Ventes/Stock
-      const needsApproWarning = !ok && hasFabBrandsHist && (key === 'ventes' || key === 'stock');
-      const cellBg  = needsApproWarning ? 'var(--s2)' : bg;
-      const cellBd  = needsApproWarning ? 'var(--or,#e8a000)' : bd;
-      h += `<div style="padding:10px 12px;background:${cellBg};border:1px solid ${cellBd};border-radius:var(--rdl);text-align:center">
+      h += `<div style="padding:10px 12px;background:${cellBg};border:1px solid ${cellBd};border-radius:var(--rdl);text-align:center;min-height:60px;display:flex;flex-direction:column;justify-content:center">
         ${ok
-          ? `<div style="font-weight:700;font-size:13px;color:var(--tx);line-height:1.2">${mainVal}</div>
-             <div style="font-size:10px;color:var(--tx3);margin-top:4px">${subVal}</div>`
-          : `<div style="font-size:18px;color:var(--bd3);margin-bottom:2px">${needsApproWarning ? '📤' : '+'}</div>
-             <div style="font-size:10px;color:var(--tx3)">${needsApproWarning ? 'Fab en premier' : 'À charger'}</div>`
+          ? `<div style="font-weight:700;font-size:12px;color:var(--tx);line-height:1.3">${mainVal}</div>
+             <div style="font-size:9px;color:var(--tx3);margin-top:3px">${subVal}</div>`
+          : `<div style="font-size:16px;margin-bottom:2px">${cellIcon}</div>
+             <div style="font-size:9px;color:var(--tx3);font-weight:600">${cellLabel}</div>`
         }
       </div>`;
     });
