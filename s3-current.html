@@ -1,0 +1,2181 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amazon Pilot v3.1 — Pilotage Vendor Central</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* ═══════════════════════════════════════════
+   TOKENS v3.1 — Dark Premium
+   ═══════════════════════════════════════════ */
+:root {
+  --or: #FF9900;
+  --or-d: #E68A00;
+  --or-l: rgba(255,153,0,0.12);
+  --or-border: rgba(255,153,0,0.3);
+
+  /* Surfaces */
+  --bg: #0D0D12;
+  --s1: #14141C;
+  --s2: #1C1C28;
+  --s3: #242434;
+  --s4: #2C2C40;
+
+  /* Borders */
+  --bd: rgba(255,255,255,0.06);
+  --bd2: rgba(255,255,255,0.1);
+  --bd3: rgba(255,255,255,0.16);
+
+  /* Text */
+  --tx: #F0F0F8;
+  --tx2: #9090B0;
+  --tx3: #56567A;
+
+  /* Semantic */
+  --g: #22C55E; --g-bg: rgba(34,197,94,0.1); --g-bd: rgba(34,197,94,0.2);
+  --r: #EF4444; --r-bg: rgba(239,68,68,0.1); --r-bd: rgba(239,68,68,0.2);
+  --a: #F59E0B; --a-bg: rgba(245,158,11,0.1); --a-bd: rgba(245,158,11,0.2);
+  --b: #3B82F6; --b-bg: rgba(59,130,246,0.1); --b-bd: rgba(59,130,246,0.2);
+  --p: #8B5CF6; --p-bg: rgba(139,92,246,0.1); --p-bd: rgba(139,92,246,0.2);
+
+  /* Misc */
+  --rd: 8px; --rdl: 12px; --rdxl: 16px;
+  --sh: 0 1px 3px rgba(0,0,0,0.4);
+  --sh-lg: 0 4px 16px rgba(0,0,0,0.5);
+  --sh-or: 0 4px 20px rgba(255,153,0,0.25);
+  --fn: 'DM Sans', system-ui, sans-serif;
+  --fm: 'JetBrains Mono', monospace;
+  --sb: 240px;
+  --tb: 52px;
+}
+
+[data-theme="light"] {
+  --bg: #F0F2F5;
+  --s1: #FFFFFF;
+  --s2: #F7F8FA;
+  --s3: #EEF0F4;
+  --s4: #E4E7EC;
+  --bd: rgba(0,0,0,0.07);
+  --bd2: rgba(0,0,0,0.12);
+  --bd3: rgba(0,0,0,0.2);
+  --tx: #0F1117;
+  --tx2: #5A6070;
+  --tx3: #9AA0AE;
+  --or-l: rgba(255,153,0,0.08);
+  --or-border: rgba(255,153,0,0.35);
+  --g-bg: rgba(22,163,74,0.08); --g-bd: rgba(22,163,74,0.2); --g: #16A34A;
+  --r-bg: rgba(220,38,38,0.07); --r-bd: rgba(220,38,38,0.18); --r: #DC2626;
+  --a-bg: rgba(217,119,6,0.08); --a-bd: rgba(217,119,6,0.2);  --a: #D97706;
+  --b-bg: rgba(37,99,235,0.08); --b-bd: rgba(37,99,235,0.18); --b: #2563EB;
+  --p-bg: rgba(124,58,237,0.08);--p-bd: rgba(124,58,237,0.18);--p: #7C3AED;
+  --sh: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  --sh-lg: 0 4px 16px rgba(0,0,0,0.1);
+}
+
+/* ═══════════════════════════════════════════
+   RESET
+   ═══════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: var(--fn); font-size: 13px; color: var(--tx); background: var(--bg); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font-family: inherit; font-size: inherit; }
+a { color: var(--or); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ═══════════════════════════════════════════
+   LAYOUT
+   ═══════════════════════════════════════════ */
+.app { display: flex; height: 100vh; overflow: hidden; }
+
+/* SIDEBAR */
+.sb { width: var(--sb); min-width: var(--sb); background: var(--s1); border-right: 1px solid var(--bd); display: flex; flex-direction: column; overflow: hidden; transition: width 0.2s ease; box-shadow: 1px 0 0 var(--bd); }
+.sb-logo { padding: 16px; border-bottom: 1px solid var(--bd); display: flex; align-items: center; gap: 10px; }
+.sb-logo-ic { width: 34px; height: 34px; background: linear-gradient(135deg, var(--or) 0%, var(--or-d) 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; color: #000; box-shadow: var(--sh-or); flex-shrink: 0; }
+.sb-logo-text b { font-size: 14px; font-weight: 600; display: block; }
+.sb-logo-text small { font-size: 10px; color: var(--tx3); font-weight: 400; }
+
+.sb-section { padding: 16px 12px 4px; font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--tx3); font-weight: 600; }
+.sb-nav { padding: 4px 8px; }
+.sb-it { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: var(--rd); cursor: pointer; color: var(--tx2); font-size: 12px; font-weight: 500; transition: all .15s; margin-bottom: 1px; border: none; background: none; width: 100%; text-align: left; }
+.sb-it:hover { background: var(--s3); color: var(--tx); }
+.sb-it.on { background: var(--or-l); color: var(--or); border: 1px solid var(--or-border); }
+.sb-it-ic { width: 18px; text-align: center; font-size: 14px; flex-shrink: 0; }
+.sb-it .badge { margin-left: auto; background: var(--r); color: #fff; font-size: 9px; padding: 1px 5px; border-radius: 10px; line-height: 1.4; }
+
+.sb-clients { padding: 0 8px 8px; overflow-y: auto; flex: 1; }
+.sb-cl { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: var(--rd); cursor: pointer; color: var(--tx2); font-size: 12px; margin-bottom: 1px; border: none; background: none; width: 100%; text-align: left; transition: all .15s; }
+.sb-cl:hover { background: var(--s3); color: var(--tx); }
+.sb-cl.on { background: var(--or-l); color: var(--or); }
+.sb-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.sb-add { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px; border-radius: var(--rd); cursor: pointer; color: var(--tx3); font-size: 11px; border: 1px dashed var(--bd3); margin: 6px 10px; background: none; width: calc(100% - 20px); transition: all .15s; }
+.sb-add:hover { border-color: var(--or-border); color: var(--or); background: var(--or-l); }
+
+.sb-footer { padding: 10px 8px; border-top: 1px solid var(--bd); }
+.sb-theme-btn { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--rd); cursor: pointer; color: var(--tx3); font-size: 11px; border: none; background: none; width: 100%; text-align: left; transition: all .15s; }
+.sb-theme-btn:hover { background: var(--s3); color: var(--tx); }
+
+/* MAIN */
+.mn { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar { height: var(--tb); min-height: var(--tb); background: var(--s1); border-bottom: 1px solid var(--bd); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; gap: 12px; box-shadow: 0 1px 0 var(--bd); }
+.topbar-l { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.topbar-t { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-r { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.ct { flex: 1; overflow-y: auto; padding: 20px; background: var(--bg); }
+
+/* ═══════════════════════════════════════════
+   COMPONENTS
+   ═══════════════════════════════════════════ */
+
+/* BUTTONS */
+.btn { padding: 7px 13px; border-radius: var(--rd); border: 1px solid var(--bd2); background: var(--s3); cursor: pointer; font-size: 12px; color: var(--tx); transition: all .12s; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; white-space: nowrap; }
+.btn:hover { border-color: var(--bd3); background: var(--s4); }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn-p { background: var(--or); color: #000; border-color: var(--or); font-weight: 600; }
+.btn-p:hover { background: var(--or-d); border-color: var(--or-d); }
+.btn-g { background: var(--g-bg); color: var(--g); border-color: var(--g-bd); }
+.btn-g:hover { background: rgba(34,197,94,0.15); }
+.btn-r { background: var(--r-bg); color: var(--r); border-color: var(--r-bd); }
+.btn-b { background: var(--b-bg); color: var(--b); border-color: var(--b-bd); }
+.btn-purple { background: var(--p-bg); color: var(--p); border-color: var(--p-bd); }
+.btn-amazon { background: var(--or); color: #000; border-color: var(--or); font-weight: 600; }
+.btn-sm { padding: 4px 9px; font-size: 11px; }
+.btn-xs { padding: 3px 7px; font-size: 10px; }
+
+/* PILLS */
+.pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; line-height: 1.5; }
+.pill-g { background: var(--g-bg); color: var(--g); }
+.pill-r { background: var(--r-bg); color: var(--r); }
+.pill-a { background: var(--a-bg); color: var(--a); }
+.pill-b { background: var(--b-bg); color: var(--b); }
+.pill-p { background: var(--p-bg); color: var(--p); }
+.pill-gr { background: var(--s4); color: var(--tx2); }
+.pill-or { background: var(--or-l); color: var(--or); border: 1px solid var(--or-border); }
+
+/* ALERTS */
+.alr { padding: 12px 16px; border-radius: var(--rdl); display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; font-size: 12px; line-height: 1.6; border: 1px solid; }
+.alr-b { background: var(--b-bg); border-color: var(--b-bd); color: var(--b); }
+.alr-a { background: var(--a-bg); border-color: var(--a-bd); color: var(--a); }
+.alr-g { background: var(--g-bg); border-color: var(--g-bd); color: var(--g); }
+.alr-r { background: var(--r-bg); border-color: var(--r-bd); color: var(--r); }
+.alr-p { background: var(--p-bg); border-color: var(--p-bd); color: var(--p); }
+
+/* CARDS */
+.cd { background: var(--s1); border-radius: var(--rdl); border: 1px solid var(--bd); padding: 18px; margin-bottom: 14px; box-shadow: var(--sh); }
+.cd-t { font-size: 13px; font-weight: 600; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; color: var(--tx); }
+.cd-t.space { justify-content: space-between; }
+
+/* KPIs */
+.kpi-g { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.kpi { background: var(--s1); border-radius: var(--rdl); border: 1px solid var(--bd); padding: 14px 16px; transition: all .15s; cursor: default; box-shadow: var(--sh); }
+.kpi:hover { border-color: var(--bd2); }
+.kpi.al { border-left: 3px solid var(--r); }
+.kpi.warn { border-left: 3px solid var(--a); }
+.kpi.good { border-left: 3px solid var(--g); }
+.kpi-lb { font-size: 10px; color: var(--tx3); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; font-weight: 500; }
+.kpi-v { font-size: 20px; font-weight: 700; line-height: 1.1; }
+.kpi-d { font-size: 11px; margin-top: 5px; font-weight: 500; display: flex; align-items: center; gap: 3px; }
+.kpi-d.up { color: var(--g); }
+.kpi-d.down { color: var(--r); }
+
+/* HEALTH SCORE */
+.hs { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; font-weight: 700; }
+.hs.critical { background: var(--r-bg); color: var(--r); border: 1px solid var(--r-bd); }
+.hs.warning  { background: var(--a-bg); color: var(--a); border: 1px solid var(--a-bd); }
+.hs.good     { background: var(--g-bg); color: var(--g); border: 1px solid var(--g-bd); }
+.hs.excellent { background: var(--b-bg); color: var(--b); border: 1px solid var(--b-bd); }
+.hs-sm { width: 40px; height: 40px; font-size: 13px; }
+.hs-lg { width: 64px; height: 64px; font-size: 22px; }
+
+/* TABLE */
+.tbl-wrap { overflow-x: auto; border-radius: var(--rd); border: 1px solid var(--bd); }
+.tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+.tbl th { text-align: left; padding: 9px 12px; font-weight: 600; color: var(--tx3); font-size: 10px; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--bd2); background: var(--s2); white-space: nowrap; position: sticky; top: 0; z-index: 1; }
+.tbl td { padding: 10px 12px; border-bottom: 1px solid var(--bd); vertical-align: middle; }
+.tbl tr:last-child td { border-bottom: none; }
+.tbl tr:hover td { background: var(--s2); }
+.tbl .al-row td { background: rgba(239,68,68,0.05); }
+.tbl .warn-row td { background: rgba(245,158,11,0.05); }
+.tbl .r { text-align: right; }
+.tbl .mono { font-family: var(--fm); font-size: 11px; }
+
+/* FORMS */
+.fg { display: flex; flex-direction: column; gap: 4px; }
+.fg-lb { font-size: 10px; font-weight: 600; color: var(--tx3); text-transform: uppercase; letter-spacing: .5px; }
+.fg-in { padding: 8px 11px; border-radius: var(--rd); border: 1px solid var(--bd2); font-size: 13px; color: var(--tx); background: var(--s2); transition: border .15s, box-shadow .15s; width: 100%; }
+.fg-in:focus { outline: none; border-color: var(--or); box-shadow: 0 0 0 3px rgba(255,153,0,0.12); }
+.fg-in option { background: var(--s2); }
+.fg2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+/* WIZARD */
+.wz-bar { display: flex; margin-bottom: 20px; background: var(--s2); border: 1px solid var(--bd); border-radius: var(--rdl); overflow: hidden; }
+.wz-s { flex: 1; padding: 12px 10px; display: flex; align-items: center; gap: 9px; cursor: pointer; border-right: 1px solid var(--bd); transition: background .15s; }
+.wz-s:last-child { border-right: none; }
+.wz-s.on { background: var(--or-l); }
+.wz-s.done { background: var(--g-bg); }
+.wz-n { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; background: var(--s4); color: var(--tx3); flex-shrink: 0; }
+.wz-s.on .wz-n { background: var(--or); color: #000; }
+.wz-s.done .wz-n { background: var(--g); color: #000; }
+.wz-lb { font-size: 11px; color: var(--tx3); font-weight: 500; }
+.wz-s.on .wz-lb { color: var(--or); font-weight: 600; }
+.wz-s.done .wz-lb { color: var(--g); }
+
+/* TOGGLES */
+.tog { display: flex; gap: 6px; margin-top: 5px; }
+.tog-b { flex: 1; padding: 8px 10px; border-radius: var(--rd); border: 1px solid var(--bd2); background: var(--s2); cursor: pointer; font-size: 12px; font-weight: 600; color: var(--tx2); text-align: center; transition: all .15s; }
+.tog-b:hover { border-color: var(--bd3); }
+.tog-b.sel-ok { border-color: var(--g-bd); background: var(--g-bg); color: var(--g); }
+.tog-b.sel-no { border-color: var(--r-bd); background: var(--r-bg); color: var(--r); }
+
+/* IMPORT */
+.import-zone { background: var(--s2); border: 2px dashed var(--bd3); border-radius: var(--rdl); padding: 36px 20px; text-align: center; cursor: pointer; transition: all .2s; }
+.import-zone:hover, .import-zone.dragover { border-color: var(--or); background: var(--or-l); }
+.import-files { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.import-file { display: flex; align-items: center; gap: 10px; padding: 11px 14px; background: var(--s2); border: 1px solid var(--bd); border-radius: var(--rd); }
+.import-file.loaded { border-color: var(--g-bd); background: var(--g-bg); }
+.import-file.error { border-color: var(--r-bd); background: var(--r-bg); }
+.import-file-ic { width: 34px; height: 34px; border-radius: var(--rd); display: flex; align-items: center; justify-content: center; font-size: 16px; background: var(--s3); }
+.import-file-info { flex: 1; text-align: left; }
+.import-file-name { font-weight: 600; font-size: 12px; }
+.import-file-meta { font-size: 10px; color: var(--tx3); margin-top: 1px; }
+
+/* FILTERS */
+.filters { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding: 10px 14px; background: var(--s1); border: 1px solid var(--bd); border-radius: var(--rdl); flex-wrap: wrap; box-shadow: var(--sh); }
+.filter-label { font-size: 10px; font-weight: 600; color: var(--tx3); text-transform: uppercase; }
+.filter-select { padding: 5px 9px; border-radius: 6px; border: 1px solid var(--bd2); font-size: 12px; background: var(--s2); color: var(--tx); cursor: pointer; }
+.filter-select:focus { outline: none; border-color: var(--or); }
+
+/* MARKETS */
+.mk-list { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.mk-cb { display: flex; align-items: center; gap: 5px; font-size: 12px; cursor: pointer; color: var(--tx2); }
+.mk-cb input { accent-color: var(--or); width: 14px; height: 14px; cursor: pointer; }
+
+/* RECAP */
+.rec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.rec { padding: 11px 13px; border-radius: var(--rd); border: 1px solid var(--bd); background: var(--s2); }
+.rec.warn { background: var(--r-bg); border-color: var(--r-bd); }
+.rec-lb { font-size: 9px; color: var(--tx3); font-weight: 600; text-transform: uppercase; }
+.rec-v { font-size: 13px; font-weight: 600; margin-top: 2px; }
+.rec.warn .rec-lb, .rec.warn .rec-v { color: var(--r); }
+
+/* AI OUTPUT */
+.ai-out { background: var(--s2); border-radius: var(--rdl); padding: 18px; border: 1px solid var(--bd2); font-size: 13px; line-height: 1.8; white-space: pre-wrap; margin-top: 14px; }
+
+/* SPINNER */
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.spin { animation: spin .8s linear infinite; display: inline-block; }
+
+/* CHART */
+.chart-container { position: relative; height: 260px; width: 100%; }
+.chart-sm { height: 160px; }
+
+/* ASIN GRID */
+.asin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 8px; }
+.charts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 14px; }
+@media (max-width: 800px) { .charts-grid { grid-template-columns: 1fr; } }
+.asin-card { display: flex; align-items: center; gap: 10px; padding: 11px 13px; border-radius: var(--rd); border: 1px solid var(--bd); background: var(--s1); cursor: pointer; transition: all .15s; }
+.asin-card:hover { border-color: var(--or-border); background: var(--or-l); }
+.asin-card.selected { border-color: var(--or-border); background: var(--or-l); }
+.asin-card.decline { border-color: var(--r-bd); background: var(--r-bg); }
+.asin-card.decline:hover { border-color: var(--r); }
+.asin-card-info { flex: 1; min-width: 0; }
+.asin-card-title { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.asin-card-meta { font-size: 10px; color: var(--tx3); margin-top: 2px; display: flex; gap: 6px; }
+.asin-card-ca { font-weight: 700; font-size: 13px; white-space: nowrap; text-align: right; }
+.asin-card-delta { font-size: 10px; font-weight: 600; text-align: right; }
+.asin-card-delta.up { color: var(--g); }
+.asin-card-delta.down { color: var(--r); }
+
+/* WEEKLY REVIEW HEADER */
+.week-header { background: linear-gradient(135deg, #1B2235 0%, #232F3E 100%); border: 1px solid transparent; padding: 20px; border-radius: var(--rdxl); margin-bottom: 14px; position: relative; overflow: hidden; color: #fff; }
+.week-header::before { content: ''; position: absolute; top: -40px; right: -40px; width: 140px; height: 140px; border-radius: 50%; background: radial-gradient(circle, rgba(255,153,0,0.1) 0%, transparent 70%); }
+.week-header h2 { font-size: 18px; margin-bottom: 3px; font-weight: 700; color: #fff; }
+.week-header p { color: rgba(255,255,255,0.6); font-size: 12px; }
+.week-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; }
+.week-kpi { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.15); border-radius: var(--rdl); padding: 12px 14px; }
+.week-kpi-label { font-size: 10px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: .5px; }
+.week-kpi-value { font-size: 20px; font-weight: 700; margin-top: 3px; color: #fff; }
+.week-kpi-delta { font-size: 11px; margin-top: 3px; font-weight: 500; color: rgba(255,255,255,0.8); }
+.week-kpi-delta.up { color: var(--g); }
+.week-kpi-delta.down { color: var(--r); }
+
+/* ACTION ITEMS */
+.action-list { display: flex; flex-direction: column; gap: 6px; }
+.action-item { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--s2); border: 1px solid var(--bd); border-radius: var(--rd); transition: all .15s; }
+.action-item:hover { border-color: var(--bd2); }
+.action-item.done { opacity: .45; }
+.action-item.done .action-title { text-decoration: line-through; }
+.action-check { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--bd3); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .15s; flex-shrink: 0; font-size: 11px; }
+.action-check:hover { border-color: var(--g); }
+.action-check.checked { background: var(--g); border-color: var(--g); color: #000; }
+.action-content { flex: 1; }
+.action-title { font-weight: 500; font-size: 12px; }
+.action-meta { font-size: 11px; color: var(--tx3); margin-top: 1px; }
+.action-priority { padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+.action-priority.high { background: var(--r-bg); color: var(--r); }
+.action-priority.medium { background: var(--a-bg); color: var(--a); }
+.action-priority.low { background: var(--s4); color: var(--tx2); }
+.action-day-label { font-size: 10px; font-weight: 600; color: var(--tx3); margin-top: 10px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; }
+
+/* SEGMENTS */
+.seg-a { background: linear-gradient(135deg, rgba(255,153,0,0.2), rgba(255,153,0,0.1)); color: var(--or); border: 1px solid var(--or-border); padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+.seg-b { background: var(--b-bg); color: var(--b); border: 1px solid var(--b-bd); padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+.seg-c { background: var(--s4); color: var(--tx3); border: 1px solid var(--bd2); padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+
+/* HISTORY TABS */
+.htabs { display: flex; gap: 4px; margin-bottom: 12px; }
+.htab { padding: 6px 14px; border-radius: var(--rd); background: var(--s3); color: var(--tx3); cursor: pointer; font-size: 11px; font-weight: 500; border: 1px solid var(--bd); transition: all .15s; }
+.htab:hover { background: var(--s4); color: var(--tx); }
+.htab.active { background: var(--or-l); color: var(--or); border-color: var(--or-border); }
+
+/* DEBUG LOG */
+.debug-log { font-family: var(--fm); font-size: 11px; background: #1A1F2E; color: #4EC94E; padding: 14px; border-radius: var(--rd); max-height: 180px; overflow-y: auto; border: 1px solid var(--bd); white-space: pre-wrap; }
+.debug-log .err { color: #FF6B6B; }
+.debug-log .warn { color: #FFD93D; }
+.debug-log .ok { color: #4EC94E; }
+
+/* WELCOME */
+.welcome-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 65vh; text-align: center; }
+.welcome-icon { width: 72px; height: 72px; background: linear-gradient(135deg, var(--or), var(--or-d)); border-radius: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; font-size: 32px; box-shadow: var(--sh-or); }
+
+/* COMPETITOR */
+.comp-card { background: var(--s2); border: 1px solid var(--bd); border-radius: var(--rd); padding: 14px; margin-bottom: 10px; }
+.comp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+/* RESPONSIVE */
+@media (max-width: 900px) {
+  :root { --sb: 52px; }
+  .sb-logo-text, .sb-section, .sb-it span:not(.sb-it-ic), .sb-cl span:not(.sb-dot), .sb-add span { display: none; }
+  .sb-it, .sb-cl { justify-content: center; padding: 10px; }
+  .fg2 { grid-template-columns: 1fr; }
+  .kpi-g { grid-template-columns: repeat(2, 1fr); }
+  .asin-grid { grid-template-columns: 1fr; }
+  .week-kpis { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ALERT CHIPS — alertes inline cliquables */
+.alert-chip { display:inline-flex; align-items:center; gap:6px; padding:7px 12px; border-radius:var(--rdl); font-size:12px; font-weight:500; cursor:pointer; border:1px solid; transition:all .15s; white-space:nowrap; }
+.alert-chip:hover { filter:brightness(0.96); transform:translateY(-1px); box-shadow:var(--sh); }
+.chip-r { background:var(--r-bg); border-color:var(--r-bd); color:var(--r); }
+.chip-a { background:var(--a-bg); border-color:var(--a-bd); color:var(--a); }
+.chip-g { background:var(--g-bg); border-color:var(--g-bd); color:var(--g); }
+.chip-cta { font-size:11px; opacity:0.7; margin-left:2px; }
+
+/* ANIMATIONS */
+@keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+.ct > * { animation: fadeUp 0.2s ease; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sb">
+    <div class="sb-logo">
+      <div class="sb-logo-ic">AP</div>
+      <div class="sb-logo-text"><b>Amazon Pilot</b><small>v3.1 — Vendor Central</small></div>
+    </div>
+    <div class="sb-section">Navigation</div>
+    <div class="sb-nav" id="nav-list"></div>
+    <div class="sb-section">Clients</div>
+    <div class="sb-clients" id="client-list"></div>
+    <div class="sb-footer">
+      <button class="sb-theme-btn" onclick="toggleTheme()">
+        <span id="theme-icon">🌙</span><span>Thème</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="mn">
+    <div class="topbar">
+      <div class="topbar-l">
+        <span class="topbar-t" id="tb-name">Amazon Pilot</span>
+        <span id="tb-badges"></span>
+      </div>
+      <div class="topbar-r" id="tb-actions"></div>
+    </div>
+    <div class="ct" id="content"></div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════
+   STATE v3.1
+   ═══════════════════════════════════════════ */
+let clients = [];
+let activeId = null;
+let screen = 'welcome';
+let wizStep = 0;
+let newClient = freshClient();
+let aiResult = '';
+let aiLoading = false;
+let selectedAsin = null;
+let chartInst = null;
+let historyChartInst = null;
+let debugLog = [];
+let historyView = 'weekly';
+let asinSort = 'ca_desc';
+let asinLimit = 50;
+let pompierThreshold = 10;
+let pendingFiles = { ventes: null, trafic: null, stock: null };
+let filters = { market: 'all', brand: 'all', segment: 'all' };
+
+const NAV = [
+  { id: 'weekly',    icon: '🗓️', label: 'Revue Hebdo', badge: true },
+  { id: 'dashboard', icon: '📊', label: 'Tableau de bord' },
+  { id: 'import',    icon: '📥', label: 'Import données' },
+  { id: 'asins',     icon: '📦', label: 'Analyse ASINs' },
+  { id: 'pompier',   icon: '🚨', label: 'Diagnostic CA' },
+  { id: 'fiche',     icon: '📋', label: 'Fiche client' },
+  { id: 'config',    icon: '⚙️', label: 'Configuration' },
+];
+
+const MARKETS = ['.fr', '.de', '.it', '.es', '.co.uk', '.nl', '.be', '.se', '.pl'];
+const MARKET_CODES = { 'FR': '.fr', 'DE': '.de', 'IT': '.it', 'ES': '.es', 'UK': '.co.uk', 'GB': '.co.uk', 'NL': '.nl', 'BE': '.be', 'SE': '.se', 'PL': '.pl' };
+const MARKET_DOMAINS = { '.fr': 'amazon.fr', '.de': 'amazon.de', '.it': 'amazon.it', '.es': 'amazon.es', '.co.uk': 'amazon.co.uk', '.nl': 'amazon.nl', '.be': 'amazon.com.be', '.se': 'amazon.se', '.pl': 'amazon.pl' };
+const WIZ_STEPS = ['Identité', 'Config Amazon', 'Contraintes', 'Récapitulatif'];
+
+function freshClient() {
+  return {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2,5),
+    name: '', brand: '', sector: '', contactOp: '', reason: '',
+    model: '1P (Vendor Central)', vendorCode: '', markets: ['.fr'], mainMarket: '.fr',
+    fulfillment: 'Amazon (Vendor Direct)',
+    stockDeporte: false, btr: 'Autorisé', btrNote: '', threeP: true,
+    budget: '', pricingPolicy: 'Prix libre',
+    imports: [], asins: [],
+    history: { weekly: [], monthly: [], yearly: [] },
+    weeklyActions: [],
+    csvImported: false
+  };
+}
+
+function log(msg, type = '') {
+  const ts = new Date().toLocaleTimeString('fr-FR');
+  debugLog.push({ ts, msg, type });
+  if (debugLog.length > 80) debugLog.shift();
+  console.log(`[${ts}] ${msg}`);
+}
+
+/* ═══════════════════════════════════════════
+   PERSISTENCE — IndexedDB (pas de quota)
+   localStorage uniquement pour clé API + thème
+   ═══════════════════════════════════════════ */
+let apiKey = '';
+let _db = null;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    if (_db) return resolve(_db);
+    const req = indexedDB.open('AmazonPilot', 2);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('clients')) {
+        db.createObjectStore('clients', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('meta')) {
+        db.createObjectStore('meta');
+      }
+    };
+    req.onsuccess = e => { _db = e.target.result; resolve(_db); };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function save() {
+  try {
+    const db = await openDB();
+    const tx = db.transaction('clients', 'readwrite');
+    const store = tx.objectStore('clients');
+    // Vider et réécrire tous les clients
+    await new Promise(r => { store.clear().onsuccess = r; });
+    for (const c of clients) {
+      store.put({ ...c, imports: (c.imports||[]).slice(-50) });
+    }
+    await new Promise((res, rej) => {
+      tx.oncomplete = res;
+      tx.onerror = () => rej(tx.error);
+    });
+    // Calcul taille estimée pour info
+    const json = JSON.stringify(clients);
+    const kb = Math.round(json.length / 1024);
+    if (kb > 500) log(`💾 Sauvegardé — ${kb} KB (IndexedDB)`, 'ok');
+  } catch(e) {
+    log('Save error: ' + e.message, 'err');
+    // Fallback localStorage (limité mais mieux que rien)
+    try {
+      const slim = clients.map(c => ({ ...c, asins: (c.asins||[]).slice(0,200).map(a => ({...a,history:[]})), imports:(c.imports||[]).slice(-5) }));
+      localStorage.setItem('ap-v31-fallback', JSON.stringify(slim));
+      log('⚠ Fallback localStorage (200 ASINs max)', 'warn');
+    } catch(e2) { log('Save fatal: ' + e2.message, 'err'); }
+  }
+}
+
+function saveApiKey(key) {
+  apiKey = key;
+  localStorage.setItem('ap-api-key', key);
+  log('✓ Clé API sauvegardée', 'ok');
+}
+
+async function load() {
+  try {
+    const db = await openDB();
+    const tx = db.transaction('clients', 'readonly');
+    const store = tx.objectStore('clients');
+    const data = await new Promise((res, rej) => {
+      const req = store.getAll();
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error);
+    });
+
+    if (data && data.length) {
+      clients = data;
+      activeId = data[0].id;
+      screen = 'dashboard';
+      log(`✓ IndexedDB: ${data.length} client(s), ${data.reduce((s,c)=>s+(c.asins?.length||0),0)} ASINs`, 'ok');
+    } else {
+      // Migration depuis localStorage v3.1 ou v3.0
+      const lsNew = localStorage.getItem('ap-v31');
+      const lsOld = localStorage.getItem('ap-clients-v30');
+      const raw = lsNew || lsOld;
+      if (raw) {
+        try {
+          let d = JSON.parse(raw);
+          d = d.map(c => ({ ...freshClient(), ...c,
+            history: c.history || { weekly:[], monthly:[], yearly:[] },
+            weeklyActions: c.weeklyActions || []
+          }));
+          clients = d;
+          activeId = d[0]?.id || null;
+          screen = d.length ? 'dashboard' : 'welcome';
+          await save(); // migrer vers IndexedDB
+          localStorage.removeItem('ap-v31');
+          localStorage.removeItem('ap-clients-v30');
+          log(`✓ Migration localStorage → IndexedDB: ${d.length} client(s)`, 'ok');
+        } catch(e) { log('Migration error: ' + e.message, 'err'); }
+      }
+    }
+    apiKey = localStorage.getItem('ap-api-key') || '';
+    const theme = localStorage.getItem('ap-theme') || 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+    updateThemeIcon(theme);
+  } catch(e) {
+    log('Load error: ' + e.message + ' — Tentative localStorage', 'err');
+    // Fallback total localStorage
+    try {
+      const raw = localStorage.getItem('ap-v31') || localStorage.getItem('ap-v31-fallback');
+      if (raw) { clients = JSON.parse(raw); activeId = clients[0]?.id; screen = 'dashboard'; }
+    } catch(e2) {}
+    apiKey = localStorage.getItem('ap-api-key') || '';
+  }
+}
+
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('ap-theme', next);
+  updateThemeIcon(next);
+  // Re-init charts with new colors
+  if (chartInst) { chartInst.destroy(); chartInst = null; }
+  if (historyChartInst) { historyChartInst.destroy(); historyChartInst = null; }
+  if (segChartInst) { segChartInst.destroy(); segChartInst = null; }
+}
+
+function updateThemeIcon(theme) {
+  const el = document.getElementById('theme-icon');
+  if (el) el.textContent = theme === 'dark' ? '☀️' : '🌙';
+}
+
+/* ═══════════════════════════════════════════
+   CSV PARSER — Identique v3.0, robuste
+   ═══════════════════════════════════════════ */
+function norm(s) {
+  return (s || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u2018\u2019\u0027\u0060\u00B4]/g, "'")
+    .replace(/[\u2013\u2014\u2212]/g, '-')
+    .replace(/[\u00a0\u202f\u2009]/g, ' ')
+    .trim();
+}
+
+function findCol(row, ...keywords) {
+  const keys = Object.keys(row);
+  for (const kw of keywords) {
+    const kwN = norm(kw);
+    for (const key of keys) {
+      if (norm(key).includes(kwN)) return row[key];
+    }
+  }
+  return null;
+}
+
+function parseNum(val) {
+  if (val == null || val === '') return 0;
+  let s = String(val).replace(/[€$£%]/g, '').replace(/[\s\u00a0\u202f\u2009]+/g, '');
+  if (s.includes(',') && !s.includes('.')) s = s.replace(',', '.');
+  else if (s.includes(',') && s.includes('.')) s = s.replace(/,/g, '');
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+function parseMetadata(line) {
+  const meta = {};
+  const matches = line.matchAll(/([^,=\[\]]+)=\[([^\]]*)\]/g);
+  for (const m of matches) meta[norm(m[1])] = m[2].trim();
+  return meta;
+}
+
+function detectFileType(headers) {
+  const h = headers.map(x => norm(x)).join(' ');
+  if ((h.includes('chiffre') && h.includes('affaires')) || h.includes('ordered revenue') || h.includes('revenus')) return 'ventes';
+  if (h.includes('vues') || h.includes('glance') || h.includes('offre vedette')) return 'trafic';
+  if (h.includes('stock') || h.includes('rupture') || h.includes('vendable') || h.includes('invendable')) return 'stock';
+  return 'unknown';
+}
+
+function detectPeriodType(startDate, endDate) {
+  if (!startDate || !endDate) return 'weekly';
+  const pd = s => { const [d,m,y] = s.split('/').map(Number); return new Date(y,m-1,d); };
+  const days = Math.round((pd(endDate) - pd(startDate)) / 86400000);
+  if (days <= 14) return 'weekly';
+  if (days <= 45) return 'monthly';
+  return 'yearly';
+}
+
+function parseCSVFile(text, filename) {
+  const lines = text.split('\n');
+  if (lines.length < 2) return { error: 'Fichier vide ou invalide' };
+  const meta = parseMetadata(lines[0]);
+  const market = MARKET_CODES[meta.pays] || '.fr';
+  log(`Metadata: Pays=${meta.pays || '?'}, ${meta.entreprises || ''}`);
+  let periodStart = null, periodEnd = null;
+  const ps = meta['champ de vision.'] || meta['champ de vision'] || '';
+  const pm = ps.match(/(\d{2}\/\d{2}\/\d{4})\s*-\s*(\d{2}\/\d{2}\/\d{4})/);
+  if (pm) { periodStart = pm[1]; periodEnd = pm[2]; }
+  const periodType = detectPeriodType(periodStart, periodEnd);
+  const csvText = lines.slice(1).join('\n');
+  const res = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+  if (!res.data.length) return { error: 'Aucune donnée' };
+  const headers = res.meta.fields || [];
+  const fileType = detectFileType(headers);
+  log(`📁 ${filename.slice(0,35)}... → ${fileType}, ${res.data.length} lignes, ${periodType}`, fileType === 'unknown' ? 'warn' : 'ok');
+  const data = [];
+  for (const row of res.data) {
+    const asin = row['ASIN'] || findCol(row, 'asin') || '';
+    if (!asin || asin.length < 5) continue;
+    const item = { asin, title: findCol(row, 'nom du produit', 'product title') || '', brand: findCol(row, 'marque', 'brand') || '', market, periodStart, periodEnd, periodType };
+    if (fileType === 'ventes') {
+      item.revenue = parseNum(findCol(row, 'chiffre', 'ordered revenue'));
+      item.revenueDelta = findCol(row, 'periode anterieure') || '';
+      item.revenueYoY = findCol(row, "l'annee derniere", 'annee derniere') || '';
+      item.units = parseNum(findCol(row, 'unites commandees', 'ordered units', 'commandees'));
+      item.unitsDelta = findCol(row, 'unites commandees - periode') || '';
+      item.shippedRevenue = parseNum(findCol(row, 'expeditions', 'shipped'));
+      item.shippedUnits = parseNum(findCol(row, 'unites expediees'));
+      item.returns = parseNum(findCol(row, 'retours client', 'retours'));
+    }
+    if (fileType === 'trafic') {
+      item.glanceViews = parseNum(findCol(row, 'vues', 'glance views', 'offre vedette'));
+      item.gvDelta = findCol(row, 'vues de la page de l', 'periode anterieure') || '';
+      item.gvYoY = findCol(row, 'vues', "l'annee derniere") || '';
+    }
+    if (fileType === 'stock') {
+      item.oosPct = findCol(row, 'rupture', 'approvisionnement possible') || '';
+      item.sellableStock = parseNum(findCol(row, 'stock disponible a la vente', 'stock vendable'));
+      item.sellableUnits = parseNum(findCol(row, 'unites vendables', 'vendables en stock'));
+      item.unsellableUnits = parseNum(findCol(row, 'unites invendables'));
+      item.unhealthyStock = parseNum(findCol(row, 'stock malsain'));
+      item.unhealthyUnits = parseNum(findCol(row, 'unites malsaines'));
+      item.openPOQty = parseNum(findCol(row, 'bons de commande', 'quantite de bons'));
+      item.retailPct = findCol(row, 'vente au detail', '% de vente') || '';
+      item.confirmPct = findCol(row, 'confirmation fournisseur', '% de confirmation') || '';
+    }
+    data.push(item);
+  }
+  log(`✓ ${data.length} ASINs parsés (${fileType})`, 'ok');
+  return { type: fileType, market, periodStart, periodEnd, periodType, company: meta.entreprises || '', rowCount: data.length, data, filename };
+}
+
+function mergeImportData(client, parsedFiles) {
+  const asinMap = new Map();
+  for (const a of client.asins) asinMap.set(a.asin, { ...a, history: a.history || [] });
+  let periodType = 'weekly', periodLabel = '';
+  let totalCA = 0, totalUnits = 0, totalGV = 0;
+  for (const file of parsedFiles) {
+    if (!file || file.error) continue;
+    periodType = file.periodType || 'weekly';
+    periodLabel = file.periodEnd || new Date().toISOString().slice(0, 10);
+    for (const row of file.data) {
+      if (asinMap.has(row.asin)) {
+        const ex = asinMap.get(row.asin);
+        if (ex.revenue && file.type === 'ventes') {
+          if (!ex.history) ex.history = [];
+          ex.history.push({ period: ex.periodEnd || 'prev', periodType: ex.periodType || 'weekly', revenue: ex.revenue, units: ex.units, glanceViews: ex.glanceViews });
+          if (ex.history.length > 52) ex.history.shift();
+        }
+        for (const [k, v] of Object.entries(row)) { if (v !== '' && v !== 0 && v != null) ex[k] = v; }
+      } else {
+        asinMap.set(row.asin, { ...row, history: [] });
+      }
+      if (file.type === 'ventes') { totalCA += row.revenue || 0; totalUnits += row.units || 0; }
+      if (file.type === 'trafic') totalGV += row.glanceViews || 0;
+    }
+    client.imports.push({ date: new Date().toISOString(), type: file.type, market: file.market, periodStart: file.periodStart, periodEnd: file.periodEnd, periodType: file.periodType, filename: file.filename, rowCount: file.rowCount });
+  }
+  client.asins = Array.from(asinMap.values());
+  client.csvImported = client.asins.length > 0;
+  if (!client.history) client.history = { weekly: [], monthly: [], yearly: [] };
+  const entry = { period: periodLabel, date: new Date().toISOString(), totalCA, totalUnits, totalGV, asinCount: client.asins.length };
+  const hArr = client.history[periodType === 'yearly' ? 'yearly' : periodType === 'monthly' ? 'monthly' : 'weekly'];
+  hArr.push(entry);
+  if (hArr.length > 52) hArr.shift();
+  for (const f of parsedFiles) { if (f?.market && !client.markets.includes(f.market)) client.markets.push(f.market); }
+  log(`🔗 Merge: ${client.asins.length} ASINs total`, 'ok');
+  return client;
+}
+
+/* ═══════════════════════════════════════════
+   HEALTH SCORE & SEGMENTATION
+   ═══════════════════════════════════════════ */
+function calcHealth(a) {
+  let s = 50;
+  const rd = parseNum(a.revenueDelta);
+  if (rd > 20) s += 30; else if (rd > 0) s += 15 + rd * 0.75; else if (rd > -20) s += rd * 1.5; else s -= 30;
+  if (a.sellableUnits > 100) s += 25; else if (a.sellableUnits > 50) s += 15; else if (a.sellableUnits > 20) s += 5; else if (a.sellableUnits > 0) s -= 10; else if (a.sellableUnits === 0 && a.revenue > 0) s -= 25;
+  const gd = parseNum(a.gvDelta);
+  if (gd > 20) s += 20; else if (gd > 0) s += 10 + gd * 0.5; else if (gd > -20) s += gd; else s -= 20;
+  const rp = parseNum(a.retailPct);
+  if (rp > 90) s += 15; else if (rp > 70) s += 10; else if (rp > 50) s += 5; else if (rp > 0) s -= 5;
+  if (a.returns > 10) s -= 10; else if (a.returns > 5) s -= 5;
+  return Math.max(0, Math.min(100, Math.round(s)));
+}
+
+function healthClass(score) {
+  if (score >= 80) return 'excellent';
+  if (score >= 60) return 'good';
+  if (score >= 40) return 'warning';
+  return 'critical';
+}
+
+function calcSegment(a, totalCA) {
+  if (!totalCA || !(a.revenue > 0)) return 'C';
+  const pct = (a.revenue / totalCA) * 100;
+  if (pct > 2) return 'A';
+  if (pct > 0.5) return 'B';
+  return 'C';
+}
+
+/* ═══════════════════════════════════════════
+   FILTERING
+   ═══════════════════════════════════════════ */
+function getFilteredAsins(client) {
+  if (!client?.asins) return [];
+  let asins = [...client.asins];
+  if (filters.market !== 'all') asins = asins.filter(a => a.market === filters.market);
+  if (filters.brand !== 'all') asins = asins.filter(a => a.brand && norm(a.brand) === norm(filters.brand));
+  if (filters.segment !== 'all') {
+    const tc = asins.reduce((s, a) => s + (a.revenue || 0), 0);
+    asins = asins.filter(a => calcSegment(a, tc) === filters.segment);
+  }
+  return asins;
+}
+
+/* ═══════════════════════════════════════════
+   WEEKLY ACTIONS
+   ═══════════════════════════════════════════ */
+function generateWeeklyActions(client) {
+  if (!client?.asins?.length) return [];
+  const asins = client.asins;
+  const totalCA = asins.reduce((s, a) => s + (a.revenue || 0), 0);
+  const actions = [];
+  const ts = Date.now();
+  const lowStock = asins.filter(a => a.sellableUnits > 0 && a.sellableUnits < 30 && (a.revenue || 0) > 50);
+  if (lowStock.length) actions.push({ id: 'stock-'+ts, type: 'stock', priority: 'high', title: `Relancer PO pour ${lowStock.length} produit(s) en rupture imminente`, description: lowStock.slice(0,3).map(shortName).join(', '), asins: lowStock.map(a => a.asin), done: false, day: 'Lundi' });
+  const declining = asins.filter(a => (a.revenue || 0) > 50 && parseNum(a.revenueDelta) < -15);
+  if (declining.length) actions.push({ id: 'decline-'+ts, type: 'analysis', priority: 'high', title: `Analyser ${declining.length} ASIN(s) en baisse CA >15%`, description: 'Vérifier prix, Buy Box, contenu, concurrence', asins: declining.map(a => a.asin), done: false, day: 'Mardi' });
+  const growing = asins.filter(a => (a.revenue || 0) > 100 && parseNum(a.revenueDelta) > 30);
+  if (growing.length) actions.push({ id: 'growth-'+ts, type: 'opportunity', priority: 'medium', title: `Capitaliser sur ${growing.length} ASIN(s) en forte croissance`, description: 'Augmenter stock, booster Ads, A+ Content', asins: growing.map(a => a.asin), done: false, day: 'Mercredi' });
+  const lowTraffic = asins.filter(a => parseNum(a.gvDelta) < -20 && parseNum(a.revenueDelta) > -5 && (a.revenue || 0) > 50);
+  if (lowTraffic.length) actions.push({ id: 'seo-'+ts, type: 'seo', priority: 'medium', title: `Optimiser SEO pour ${lowTraffic.length} ASIN(s) trafic en baisse`, description: 'Revoir titres, bullets, backend keywords', asins: lowTraffic.map(a => a.asin), done: false, day: 'Jeudi' });
+  actions.push({ id: 'report-'+ts, type: 'report', priority: 'low', title: 'Préparer le rapport hebdomadaire client', description: `CA: ${fmtEur(totalCA)} | ${asins.length} ASINs`, asins: [], done: false, day: 'Vendredi' });
+  return actions;
+}
+
+/* ═══════════════════════════════════════════
+   AI (Anthropic API)
+   ═══════════════════════════════════════════ */
+async function askClaude(sys, usr) {
+  if (!apiKey) return `⚠️ Clé API non configurée\n\nAllez dans ⚙️ Configuration → entrez votre clé Anthropic (sk-ant-...).`;
+  try {
+    log('🤖 Appel Claude API...');
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: localStorage.getItem('ap-model') || 'claude-sonnet-4-20250514',
+        max_tokens: 2500,
+        system: sys,
+        messages: [{ role: 'user', content: usr }]
+      })
+    });
+    if (!res.ok) {
+      const et = await res.text();
+      log('API Error ' + res.status, 'err');
+      if (res.status === 401) return `❌ Clé API invalide. Vérifiez dans ⚙️ Configuration.`;
+      if (res.status === 403) return `❌ Accès refusé (CORS). Utilisez l'app dans un Artifact Claude.ai.`;
+      return `Erreur API (${res.status}): ${et.slice(0,200)}`;
+    }
+    const d = await res.json();
+    log('✓ Réponse OK', 'ok');
+    return d.content?.map(b => b.text || '').join('\n') || 'Pas de réponse';
+  } catch(e) {
+    log('AI Error: ' + e.message, 'err');
+    if (e.message.includes('Failed to fetch')) return `❌ Erreur CORS. Utilisez l'app dans un Artifact Claude.ai.`;
+    return `Erreur: ${e.message}`;
+  }
+}
+
+function getSysPrompt(c) {
+  const cs = [];
+  if (!c.stockDeporte) cs.push('Stock déporté INTERDIT');
+  if (c.btr === 'Conditionnel') cs.push('Born to Run CONDITIONNEL');
+  if (c.btr === 'Interdit') cs.push('Born to Run INTERDIT');
+  if (!c.threeP) cs.push('3P / Seller Central INTERDIT');
+  return `Tu es un expert Amazon Vendor Central. Tu analyses les performances et formules des recommandations concrètes.\n\nCLIENT: ${c.name}\nMODÈLE: ${c.model}\nMARCHÉS: ${c.markets.join(', ')}\nCONTRAINTES: ${cs.join(', ') || 'Aucune'}\n\nRÈGLES: Ne recommande JAMAIS un levier interdit. Priorise par impact CA. Sois concis et actionnable. Réponds en français avec des émojis pour structurer.`;
+}
+
+/* ═══════════════════════════════════════════
+   HELPERS
+   ═══════════════════════════════════════════ */
+const cl = () => clients.find(c => c.id === activeId) || null;
+const fmt = n => (n || 0).toLocaleString('fr-FR');
+const fmtEur = n => fmt(Math.round(n || 0)) + ' €';
+function esc(s) {
+  if (s == null) return '';
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function shortName(a) {
+  if (!a.title) return a.asin;
+  let t = a.title;
+  if (a.brand && t.toUpperCase().startsWith(a.brand.toUpperCase())) t = t.slice(a.brand.length).replace(/^[\s\-–—:]+/, '');
+  const dash = t.indexOf(' - ');
+  if (dash > 10 && dash < 50) t = t.slice(0, dash);
+  return t.slice(0, 45) + (t.length > 45 ? '…' : '');
+}
+
+function getMainKeyword(a) {
+  if (!a.title) return a.brand || '';
+  let t = a.title.split(' - ')[0].split(',')[0];
+  if (a.brand && t.toUpperCase().startsWith(a.brand.toUpperCase())) t = t.slice(a.brand.length).trim();
+  return t.split(' ').slice(0, 5).join(' ');
+}
+
+function deltaBadge(val) {
+  if (!val) return `<span style="color:var(--tx3)">—</span>`;
+  const n = parseNum(val);
+  if (n > 5) return `<span class="kpi-d up">▲ ${esc(String(val).trim())}</span>`;
+  if (n < -5) return `<span class="kpi-d down">▼ ${esc(String(val).trim())}</span>`;
+  return `<span class="kpi-d" style="color:var(--tx3)">${esc(String(val).trim())}</span>`;
+}
+
+function segBadge(s) { return `<span class="seg-${s.toLowerCase()}">${s}</span>`; }
+
+function pillH(val, type) { return `<span class="pill pill-${type}">${esc(String(val))}</span>`; }
+
+function getCurrentWeek() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 1);
+  const week = Math.ceil(((now - start) / 86400000 + start.getDay() + 1) / 7);
+  return `S${week} — ${now.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })}`;
+}
+
+function getChartColors() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  return {
+    grid: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+    text: isDark ? '#56567A' : '#AAAAC0',
+  };
+}
+
+/* ═══════════════════════════════════════════
+   RENDER ORCHESTRATOR
+   ═══════════════════════════════════════════ */
+function render() {
+  renderNav();
+  renderClients();
+  renderTopbar();
+  renderContent();
+}
+
+function renderNav() {
+  const c = cl();
+  const alertCount = c ? c.asins?.filter(a => (a.revenue || 0) > 0 && parseNum(a.revenueDelta) < -15).length : 0;
+  document.getElementById('nav-list').innerHTML = NAV.map(n => {
+    const badge = n.badge && alertCount > 0 ? `<span class="badge">${alertCount}</span>` : '';
+    return `<button class="sb-it${screen === n.id ? ' on' : ''}" onclick="go('${n.id}')">
+      <span class="sb-it-ic">${n.icon}</span><span>${n.label}</span>${badge}
+    </button>`;
+  }).join('');
+}
+
+function renderClients() {
+  const h = clients.map(c =>
+    `<button class="sb-cl${activeId === c.id ? ' on' : ''}" onclick="selClient('${c.id}')">
+      <span class="sb-dot" style="background:${c.csvImported ? 'var(--g)' : 'var(--a)'}"></span>
+      <span>${esc(c.name || 'Sans nom')}</span>
+    </button>`
+  ).join('');
+  document.getElementById('client-list').innerHTML = h +
+    `<button class="sb-add" onclick="startOnboarding()"><span>+ Nouveau client</span></button>`;
+}
+
+function renderTopbar() {
+  const c = cl();
+  document.getElementById('tb-name').textContent = c ? c.name : 'Amazon Pilot';
+  let badges = '';
+  if (c) {
+    const mc = c.model.includes('1P') ? 'b' : c.model.includes('3P') ? 'g' : 'gr';
+    badges = `<span class="pill pill-${mc}" style="margin-left:8px">${esc(c.model.split(' ')[0])}</span>`;
+    c.markets.slice(0,4).forEach(m => {
+      badges += `<span class="pill pill-gr" style="margin-left:4px">${m}</span>`;
+    });
+    if (c.asins?.length) {
+      badges += `<span class="pill pill-gr" style="margin-left:4px">${c.asins.length} ASINs</span>`;
+    }
+  }
+  document.getElementById('tb-badges').innerHTML = badges;
+  let acts = '';
+  if (c) {
+    acts = `<button class="btn btn-sm" onclick="go('import')">📥 Import</button>`;
+    if (c.csvImported) acts += `<button class="btn btn-p btn-sm" onclick="go('weekly')">🗓️ Revue Hebdo</button>`;
+  }
+  document.getElementById('tb-actions').innerHTML = acts;
+}
+
+function renderContent() {
+  const el = document.getElementById('content');
+  const map = {
+    welcome: renderWelcome, onboarding: renderOnboarding, import: renderImport,
+    dashboard: renderDashboard, fiche: renderFiche, asins: renderAsins,
+    pompier: renderPompier, config: renderConfig, weekly: renderWeeklyReview
+  };
+  el.innerHTML = (map[screen] || renderWelcome)();
+  if (screen === 'dashboard' && cl()?.asins?.length) { setTimeout(initChart, 150); setTimeout(initSegChart, 150); }
+  if (screen === 'asins' && selectedAsin) setTimeout(initHistoryChart, 200);
+}
+
+/* ═══════════════════════════════════════════
+   SCREEN: WELCOME
+   ═══════════════════════════════════════════ */
+function renderWelcome() {
+  return `<div class="welcome-wrap">
+    <div class="welcome-icon">🛒</div>
+    <h1 style="font-size:22px;font-weight:700;margin-bottom:8px">Amazon Pilot v3.1</h1>
+    <p style="color:var(--tx2);margin-bottom:24px;max-width:400px;line-height:1.7">Pilotez vos comptes Vendor Central avec l'IA. Import multi-périodes, diagnostic CA, revue hebdomadaire.</p>
+    <button class="btn btn-p" style="padding:11px 22px;font-size:14px" onclick="startOnboarding()">+ Créer un client</button>
+  </div>`;
+}
+
+/* ═══════════════════════════════════════════
+   SCREEN: ONBOARDING
+   ═══════════════════════════════════════════ */
+function fgEl(label, val, onchangeExpr, ph = '') {
+  return `<div class="fg"><label class="fg-lb">${label}</label><input class="fg-in" value="${esc(val)}" placeholder="${ph}" onchange="${onchangeExpr}"/></div>`;
+}
+function fgSel(label, val, opts, onchangeExpr) {
+  const o = opts.map(x => `<option value="${esc(x)}"${x === val ? ' selected' : ''}>${esc(x)}</option>`).join('');
+  return `<div class="fg"><label class="fg-lb">${label}</label><select class="fg-in" onchange="${onchangeExpr}">${o}</select></div>`;
+}
+function recRow(label, val, warn = false) {
+  return `<div class="rec${warn ? ' warn' : ''}"><div class="rec-lb">${label}</div><div class="rec-v">${esc(val)}</div></div>`;
+}
+
+function renderOnboarding() {
+  const nc = newClient;
+  let h = `<div style="max-width:680px;margin:0 auto">`;
+  h += `<div class="wz-bar">`;
+  WIZ_STEPS.forEach((s, i) => {
+    const cls = i === wizStep ? 'on' : i < wizStep ? 'done' : '';
+    h += `<div class="wz-s ${cls}" onclick="${i <= wizStep ? 'wizGo('+i+')' : ''}">
+      <span class="wz-n">${i < wizStep ? '✓' : i + 1}</span><span class="wz-lb">${s}</span>
+    </div>`;
+  });
+  h += `</div><div class="cd" style="padding:22px">`;
+
+  if (wizStep === 0) {
+    h += `<h3 style="font-size:15px;font-weight:700;margin-bottom:16px">Identité du client</h3><div class="fg2">`;
+    h += fgEl('Nom du compte *', nc.name, "newClient.name=this.value", 'Ex: Cogex Outillage');
+    h += fgEl('Marque(s)', nc.brand, "newClient.brand=this.value", 'COGEX, ITENSE…');
+    h += fgEl('Secteur', nc.sector, "newClient.sector=this.value", 'Bricolage & Outillage');
+    h += fgEl('Contact opérationnel', nc.contactOp, "newClient.contactOp=this.value", 'Nom + rôle');
+    h += `</div>`;
+  } else if (wizStep === 1) {
+    h += `<h3 style="font-size:15px;font-weight:700;margin-bottom:16px">Configuration Amazon</h3><div class="fg2">`;
+    h += fgSel('Modèle de vente', nc.model, ['1P (Vendor Central)', '3P (Seller Central)', 'Hybride 1P + 3P'], "newClient.model=this.value");
+    h += fgEl('Vendor Code', nc.vendorCode, "newClient.vendorCode=this.value", 'Identifiant Vendor');
+    h += fgSel('Marché principal', nc.mainMarket, MARKETS, "newClient.mainMarket=this.value");
+    h += `<div class="fg"><label class="fg-lb">Marchés actifs</label><div class="mk-list">`;
+    MARKETS.slice(0, 5).forEach(m => {
+      h += `<label class="mk-cb"><input type="checkbox" ${nc.markets.includes(m) ? 'checked' : ''} onchange="toggleMarket('${m}',this.checked)"/>${m}</label>`;
+    });
+    h += `</div></div></div>`;
+  } else if (wizStep === 2) {
+    h += `<h3 style="font-size:15px;font-weight:700;margin-bottom:14px">Contraintes internes</h3>`;
+    h += `<div class="alr alr-a" style="margin-bottom:16px">Ces contraintes filtrent les recommandations IA — un levier interdit ne sera jamais proposé.</div>`;
+    h += `<div class="fg2">`;
+    h += `<div class="fg"><label class="fg-lb">Stock déporté (FBA)</label><div class="tog">
+      <button class="tog-b ${nc.stockDeporte ? 'sel-ok' : ''}" onclick="ncSet('stockDeporte',true)">Autorisé</button>
+      <button class="tog-b ${!nc.stockDeporte ? 'sel-no' : ''}" onclick="ncSet('stockDeporte',false)">Interdit</button>
+    </div></div>`;
+    h += `<div class="fg"><label class="fg-lb">3P / Seller Central</label><div class="tog">
+      <button class="tog-b ${nc.threeP ? 'sel-ok' : ''}" onclick="ncSet('threeP',true)">Autorisé</button>
+      <button class="tog-b ${!nc.threeP ? 'sel-no' : ''}" onclick="ncSet('threeP',false)">Interdit</button>
+    </div></div>`;
+    h += fgSel('Born to Run', nc.btr, ['Autorisé', 'Conditionnel', 'Interdit'], "newClient.btr=this.value");
+    h += fgEl('Budget Ads mensuel', nc.budget, "newClient.budget=this.value", '5 000 € ou 8% du CA');
+    h += `</div>`;
+  } else if (wizStep === 3) {
+    h += `<h3 style="font-size:15px;font-weight:700;margin-bottom:14px">Récapitulatif — ${esc(nc.name)}</h3>`;
+    h += `<div class="rec-grid">`;
+    h += recRow('Modèle', nc.model);
+    h += recRow('Marchés', nc.markets.join(', '));
+    h += recRow('Stock déporté', nc.stockDeporte ? 'Autorisé' : 'Interdit', !nc.stockDeporte);
+    h += recRow('Born to Run', nc.btr, nc.btr !== 'Autorisé');
+    h += recRow('3P autorisé', nc.threeP ? 'Oui' : 'Non', !nc.threeP);
+    h += recRow('Budget Ads', nc.budget || 'Non défini');
+    h += `</div>`;
+    h += `<div class="alr alr-b" style="margin-top:16px"><strong>Prochaine étape :</strong> Importer vos fichiers CSV Vendor Central (Ventes, Trafic, Stock).</div>`;
+  }
+
+  h += `<div style="display:flex;justify-content:space-between;margin-top:20px">`;
+  h += `<button class="btn" onclick="${wizStep > 0 ? 'wizGo('+(wizStep-1)+')' : 'go(clients.length?\'dashboard\':\'welcome\')'}"> ${wizStep > 0 ? '← Précédent' : 'Annuler'}</button>`;
+  if (wizStep < 3) h += `<button class="btn btn-p" onclick="wizNext()">Suivant →</button>`;
+  else h += `<button class="btn btn-g" onclick="finishOnboarding()">Créer & importer →</button>`;
+  h += `</div></div></div>`;
+  return h;
+}
+
+/* ═══════════════════════════════════════════
+   SCREEN: IMPORT
+   ═══════════════════════════════════════════ */
+function renderImport() {
+  const c = cl();
+  if (!c) return `<p>Sélectionnez un client</p>`;
+  let h = `<div style="max-width:760px;margin:0 auto">`;
+  h += `<h2 style="font-size:17px;font-weight:700;margin-bottom:4px">📥 Import — ${esc(c.name)}</h2>`;
+  h += `<p style="color:var(--tx2);margin-bottom:16px;font-size:12px">Glissez vos exports Vendor Central. Détection automatique du type (Ventes/Trafic/Stock) et de la période.</p>`;
+  h += `<div class="cd">`;
+  h += `<div class="import-zone" id="drop-zone" onclick="document.getElementById('csv-files').click()">
+    <div style="font-size:32px;margin-bottom:10px">📁</div>
+    <p style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:3px">Déposez 1 à 3 fichiers CSV</p>
+    <p style="font-size:11px;color:var(--tx3)">Ventes + Trafic + Stock — Semaine, Mois ou Année</p>
+    <input type="file" id="csv-files" accept=".csv,.tsv,.txt" multiple onchange="handleMultiCSV(this)" style="display:none"/>
+  </div>`;
+
+  h += `<div class="import-files" id="pending-files">`;
+  [
+    { key: 'ventes', icon: '💰', label: 'Ventes', desc: 'CA commandé, unités, expéditions' },
+    { key: 'trafic', icon: '👁', label: 'Trafic', desc: 'Glance Views, offre vedette' },
+    { key: 'stock',  icon: '📦', label: 'Stock',  desc: 'Disponibilité, ruptures, malsain' }
+  ].forEach(t => {
+    const f = pendingFiles[t.key];
+    const st = f ? (f.error ? 'error' : 'loaded') : '';
+    const pi = f?.periodType ? ` (${f.periodType})` : '';
+    h += `<div class="import-file ${st}">
+      <div class="import-file-ic">${t.icon}</div>
+      <div class="import-file-info">
+        <div class="import-file-name">${t.label}${pi}</div>
+        <div class="import-file-meta">${f ? (f.error || `${f.rowCount} ASINs · ${f.market} · ${f.periodStart || ''}→${f.periodEnd || ''}`) : t.desc}</div>
+      </div>
+      <span style="font-size:11px;font-weight:600;color:${f?.error ? 'var(--r)' : f ? 'var(--g)' : 'var(--tx3)'}">
+        ${f?.error ? '✕ Erreur' : f ? '✓ Prêt' : '—'}
+      </span>
+    </div>`;
+  });
+  h += `</div>`;
+
+  const hasFiles = pendingFiles.ventes || pendingFiles.trafic || pendingFiles.stock;
+  h += `<div style="margin-top:14px;display:flex;gap:8px">`;
+  h += `<button class="btn btn-p" onclick="processImport()" ${hasFiles ? '' : 'disabled'}>✓ Fusionner et importer</button>`;
+  if (hasFiles) h += `<button class="btn" onclick="clearPending()">Effacer</button>`;
+  h += `</div>`;
+
+  if (debugLog.length) {
+    h += `<div class="debug-log" style="margin-top:14px">`;
+    debugLog.slice(-12).forEach(l => { h += `<div class="${l.type}">[${l.ts}] ${l.msg}</div>`; });
+    h += `</div>`;
+  }
+  h += `</div>`;
+
+  if (c.imports?.length) {
+    h += `<div class="cd"><div class="cd-t">📋 Historique des imports</div>`;
+    h += `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Date</th><th>Type</th><th>Période</th><th>Marché</th><th class="r">ASINs</th></tr></thead><tbody>`;
+    c.imports.slice(-8).reverse().forEach(imp => {
+      const tc = imp.type === 'ventes' ? 'g' : imp.type === 'trafic' ? 'b' : 'a';
+      h += `<tr><td>${new Date(imp.date).toLocaleDateString('fr-FR')}</td><td>${pillH(imp.type, tc)}</td><td style="font-size:10px">${pillH(imp.periodType||'weekly','gr')} ${imp.periodStart||'—'} → ${imp.periodEnd||'—'}</td><td><strong>${imp.market}</strong></td><td class="r"><strong>${imp.rowCount}</strong></td></tr>`;
+    });
+    h += `</tbody></table></div></div>`;
+  }
+
+  if (c.csvImported && c.asins.length) {
+    h += `<div class="alr alr-g">✓ <strong>${c.asins.length} ASINs</strong> en base. Prêt pour l'analyse.</div>`;
+    h += `<button class="btn btn-p" onclick="go('weekly')">🗓️ Lancer la revue hebdo →</button>`;
+  }
+  h += `</div>`;
+  return h;
+}
+
+/* ═══════════════════════════════════════════
+   SCREEN: WEEKLY REVIEW
+   ═══════════════════════════════════════════ */
+function renderWeeklyReview() {
+  const c = cl();
+  if (!c) return renderWelcome();
+  if (!c.asins?.length) return `<div class="alr alr-a">Importez d'abord des données CSV pour lancer la revue hebdomadaire.</div>`;
+
+  const asins = getFilteredAsins(c);
+  const totalCA = asins.reduce((s, a) => s + (a.revenue || 0), 0);
+  const totalUnits = asins.reduce((s, a) => s + (a.units || 0), 0);
+  const totalGV = asins.reduce((s, a) => s + (a.glanceViews || 0), 0);
+  const prevH = c.history?.weekly?.slice(-2)?.[0];
+  const caDelta = prevH && prevH.totalCA ? ((totalCA - prevH.totalCA) / prevH.totalCA * 100).toFixed(1) : null;
+  const declining = asins.filter(a => (a.revenue || 0) > 0 && parseNum(a.revenueDelta) < -10);
+  const lowStock = asins.filter(a => a.sellableUnits > 0 && a.sellableUnits < 30 && (a.revenue || 0) > 50);
+  const growing = asins.filter(a => (a.revenue || 0) > 50 && parseNum(a.revenueDelta) > 20);
+
+  if (!c.weeklyActions?.length) { c.weeklyActions = generateWeeklyActions(c); save(); }
+
+  let h = '';
+  h += `<div class="week-header">
+    <h2>🗓️ Revue Hebdomadaire — ${esc(c.name)}</h2>
+    <p>${getCurrentWeek()}</p>
+    <div class="week-kpis">
+      <div class="week-kpi">
+        <div class="week-kpi-label">CA Commandé</div>
+        <div class="week-kpi-value">${fmtEur(totalCA)}</div>
+        ${caDelta ? `<div class="week-kpi-delta ${parseFloat(caDelta)>=0?'up':'down'}">${parseFloat(caDelta)>=0?'▲':'▼'} ${caDelta}% vs sem. préc.</div>` : ''}
+      </div>
+      <div class="week-kpi"><div class="week-kpi-label">Unités</div><div class="week-kpi-value">${fmt(totalUnits)}</div></div>
+      <div class="week-kpi"><div class="week-kpi-label">Glance Views</div><div class="week-kpi-value">${fmt(totalGV)}</div></div>
+      <div class="week-kpi"><div class="week-kpi-label">ASINs Actifs</div><div class="week-kpi-value">${asins.filter(a=>(a.revenue||0)>0).length}</div></div>
+    </div>
+  </div>`;
+
+  h += `<div class="cd"><div class="cd-t">🚨 Alertes Critiques</div>`;
+  if (!declining.length && !lowStock.length) {
+    h += `<div class="alr alr-g">✓ Aucune alerte critique cette semaine.</div>`;
+  } else {
+    if (lowStock.length) h += `<div class="alr alr-r"><strong>🔴 ${lowStock.length} rupture(s) imminente(s)</strong> — Stock < 30u sur des produits actifs</div>`;
+    if (declining.length) h += `<div class="alr alr-a"><strong>🟡 ${declining.length} ASIN(s) en baisse</strong> — CA en recul de plus de 10%</div>`;
+  }
+  if (growing.length) h += `<div class="alr alr-g"><strong>🟢 ${growing.length} opportunité(s)</strong> — ASINs en croissance >20%</div>`;
+  h += `</div>`;
+
+  h += `<div class="cd"><div class="cd-t space"><span>📋 Plan d'Action Semaine</span><button class="btn btn-sm" onclick="regenerateActions()">🔄 Régénérer</button></div>`;
+  h += `<div class="action-list">`;
+  ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi'].forEach(day => {
+    const dayActs = c.weeklyActions.filter(a => a.day === day);
+    if (dayActs.length) {
+      h += `<div class="action-day-label">${day}</div>`;
+      dayActs.forEach(act => {
+        h += `<div class="action-item${act.done ? ' done' : ''}">
+          <div class="action-check${act.done ? ' checked' : ''}" onclick="toggleAction('${act.id}')">${act.done ? '✓' : ''}</div>
+          <div class="action-content">
+            <div class="action-title">${esc(act.title)}</div>
+            <div class="action-meta">${esc(act.description)}</div>
+          </div>
+          <span class="action-priority ${act.priority}">${act.priority==='high'?'🔴 Urgent':act.priority==='medium'?'🟡 Moyen':'🟢 Normal'}</span>
+        </div>`;
+      });
+    }
+  });
+  h += `</div></div>`;
+
+  h += `<div class="cd"><div class="cd-t">🤖 Analyse IA</div>`;
+  h += `<div style="display:flex;gap:8px;flex-wrap:wrap">`;
+  h += `<button class="btn btn-p" onclick="runAI('weekly')" ${aiLoading?'disabled':''}>${aiLoading?'<span class="spin">⏳</span> Analyse...':'▶ Diagnostic complet'}</button>`;
+  h += `<button class="btn btn-b" onclick="runAI('opportunities')">💡 Opportunités</button>`;
+  h += `<button class="btn btn-r" onclick="runAI('risks')">⚠️ Risques</button>`;
+  h += `</div>`;
+  if (aiResult) h += `<div class="ai-out">${esc(aiResult)}</div><button class="btn" style="margin-top:10px" onclick="copyAI()">📋 Copier</button>`;
+  h += `</div>`;
+  return h;
+}
+
+/* ═══════════════════════════════════════════
+   SCREEN: DASHBOARD
+   ═══════════════════════════════════════════ */
+function renderDashboard() {
+  const c = cl();
+  if (!c) return renderWelcome();
+  let h = '';
+
+  if (!c.stockDeporte || c.btr !== 'Autorisé' || !c.threeP) {
+    const csts = [];
+    if (!c.stockDeporte) csts.push('Stock déporté interdit');
+    if (c.btr === 'Conditionnel') csts.push('BTR conditionnel');
+    if (c.btr === 'Interdit') csts.push('BTR interdit');
+    if (!c.threeP) csts.push('3P interdit');
+    h += `<div class="alr alr-a"><strong>Contraintes ${esc(c.name)} :</strong> ${csts.join(' · ')}</div>`;
+  }
+
+  if (!c.asins?.length) {
+    return h + `<div class="cd" style="padding:48px;text-align:center">
+      <div style="font-size:32px;margin-bottom:10px">📥</div>
+      <p style="font-size:14px;font-weight:600;margin-bottom:4px">Pas encore de données</p>
+      <p style="font-size:12px;color:var(--tx3);margin-bottom:16px">Importez vos fichiers CSV Vendor Central</p>
+      <button class="btn btn-p" onclick="go('import')">Importer des données</button>
+    </div>`;
+  }
+
+  const brands = [...new Set(c.asins.map(a => a.brand).filter(Boolean))].sort();
+  const markets = [...new Set(c.asins.map(a => a.market).filter(Boolean))].sort();
+
+  h += `<div class="filters">`;
+  h += `<div style="display:flex;align-items:center;gap:6px"><span class="filter-label">Marché</span>
+    <select class="filter-select" onchange="setFilter('market',this.value)">
+      <option value="all"${filters.market==='all'?' selected':''}>Tous (${markets.length})</option>
+      ${markets.map(m => `<option value="${m}"${filters.market===m?' selected':''}>${m}</option>`).join('')}
+    </select></div>`;
+  if (brands.length > 1) {
+    h += `<div style="display:flex;align-items:center;gap:6px"><span class="filter-label">Marque</span>
+      <select class="filter-select" onchange="setFilter('brand',this.value)">
+        <option value="all"${filters.brand==='all'?' selected':''}>Toutes</option>
+        ${brands.map(b => `<option value="${b}"${filters.brand===b?' selected':''}>${esc(b)}</option>`).join('')}
+      </select></div>`;
+  }
+  h += `<div style="display:flex;align-items:center;gap:6px"><span class="filter-label">Segment</span>
+    <select class="filter-select" onchange="setFilter('segment',this.value)">
+      <option value="all"${filters.segment==='all'?' selected':''}>Tous</option>
+      <option value="A"${filters.segment==='A'?' selected':''}>🥇 A</option>
+      <option value="B"${filters.segment==='B'?' selected':''}>🥈 B</option>
+      <option value="C"${filters.segment==='C'?' selected':''}>🥉 C</option>
+    </select></div>`;
+  if (filters.market !== 'all' || filters.brand !== 'all' || filters.segment !== 'all') {
+    h += `<button class="btn btn-sm" onclick="resetFilters()">✕ Reset</button>`;
+  }
+  h += `</div>`;
+
+  const asins = getFilteredAsins(c);
+  const totalCA = asins.reduce((s, a) => s + (a.revenue || 0), 0);
+  const totalUnits = asins.reduce((s, a) => s + (a.units || 0), 0);
+  const totalGV = asins.reduce((s, a) => s + (a.glanceViews || 0), 0);
+  const totalStock = asins.reduce((s, a) => s + (a.sellableUnits || 0), 0);
+  const lowStockN = asins.filter(a => a.sellableUnits > 0 && a.sellableUnits < 50 && (a.revenue||0) > 50).length;
+  const declineN = asins.filter(a => (a.revenue||0) > 0 && parseNum(a.revenueDelta) < -10).length;
+
+  h += `<div class="kpi-g">`;
+  h += `<div class="kpi"><div class="kpi-lb">CA Commandé</div><div class="kpi-v">${fmtEur(totalCA)}</div></div>`;
+  h += `<div class="kpi"><div class="kpi-lb">Unités</div><div class="kpi-v">${fmt(totalUnits)}</div></div>`;
+  h += `<div class="kpi"><div class="kpi-lb">Glance Views</div><div class="kpi-v">${fmt(totalGV)}</div></div>`;
+  h += `<div class="kpi"><div class="kpi-lb">ASINs</div><div class="kpi-v">${asins.length}</div></div>`;
+  h += `<div class="kpi"><div class="kpi-lb">Stock</div><div class="kpi-v">${fmt(totalStock)}u</div></div>`;
+  h += `<div class="kpi${declineN>0?' al':''}"><div class="kpi-lb">CA en baisse</div><div class="kpi-v">${declineN}</div></div>`;
+  h += `<div class="kpi${lowStockN>0?' warn':''}"><div class="kpi-lb">Stock faible</div><div class="kpi-v">${lowStockN}</div></div>`;
+  h += `</div>`;
+
+  h += `<div class="charts-grid">
+    <div class="cd" style="margin-bottom:0"><div class="cd-t">📊 Top 10 par CA</div><div class="chart-container"><canvas id="top-chart"></canvas></div></div>
+    <div class="cd" style="margin-bottom:0"><div class="cd-t">🥧 Répartition Segments</div><div class="chart-container"><canvas id="seg-chart"></canvas></div></div>
+  </div>`;
+
+  h += `<div class="cd"><div class="cd-t space"><span>📦 ASINs (${asins.length})</span><button class="btn btn-sm" onclick="exportAsinsCsv()">⬇ Export CSV</button></div>`;
+  h += `<div class="tbl-wrap"><table class="tbl"><thead><tr>
+    <th style="width:44px">Score</th><th>Produit</th><th>Seg.</th>
+    <th class="r">CA</th><th class="r">Δ</th><th class="r">GV</th><th class="r">Stock</th><th></th>
+  </tr></thead><tbody>`;
+
+  asins.sort((a,b) => (b.revenue||0)-(a.revenue||0)).slice(0, 50).forEach(a => {
+    const health = calcHealth(a);
+    const hCls = healthClass(health);
+    const seg = calcSegment(a, totalCA);
+    const isLow = a.sellableUnits > 0 && a.sellableUnits < 50;
+    const isDec = (a.revenue||0) > 0 && parseNum(a.revenueDelta) < -10;
+    const rc = isDec ? 'al-row' : isLow ? 'warn-row' : '';
+    h += `<tr class="${rc}">
+      <td><div class="hs hs-sm ${hCls}">${health}</div></td>
+      <td style="max-width:220px">
+        <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(a.title)}">${esc(shortName(a))}</div>
+        <div class="mono" style="font-size:10px;color:var(--tx3)">${a.asin}</div>
+      </td>
+      <td>${segBadge(seg)}</td>
+      <td class="r" style="font-weight:600">${fmtEur(a.revenue||0)}</td>
+      <td class="r">${deltaBadge(a.revenueDelta)}</td>
+      <td class="r">${fmt(a.glanceViews||0)}</td>
+      <td class="r">${a.sellableUnits ? fmt(a.sellableUnits)+'u' : '—'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-xs" onclick="analyzeAsin('${esc(a.asin)}')" title="Analyser">📊</button>
+        <button class="btn btn-xs btn-amazon" onclick="openAmazonProduct('${esc(a.asin)}','${a.market||'.fr'}')" title="Amazon">🔗</button>
+      </td>
+    </tr>`;
+  });
+  h += `</tbody></table></div>`;
+  if (asins.length > 50) h += `<p style="font-size:10px;color:var(--tx3);margin-top:6px">50 premiers sur ${asins.length}</p>`;
+  h += `</div>`;
+  return h;
+}
+
+/* ═══════════════════════════════════════════
+   SCREEN: ASINs
+   ═══════════════════════════════════════════ */
+function renderAsins() {
+  const c = cl();
+  if (!c?.asins?.length) return `<div class="alr alr-a">Importez d'abord des données CSV.</div>`;
+  const asins = getFilteredAsins(c);
+  const totalCA = asins.reduce((s, a) => s + (a.revenue || 0), 0);
+  const withRevenue = asins.filter(a => (a.revenue||0) > 0);
+  let h = '';
+
+  h += `<div class="filters">
+    <div style="display:flex;align-items:center;gap:6px"><span class="filter-label">Segment</span>
+      <select class="filter-select" onchange="setFilter('segment',this.value)">
+        <option value="all">Tous</option>
+        <option value="A"${filters.segment==='A'?' selected':''}>🥇 A — Top sellers</option>
+        <option value="B"${filters.segment==='B'?' selected':''}>🥈 B — Développement</option>
+        <option value="C"${filters.segment==='C'?' selected':''}>🥉 C — Long tail</option>
+      </select></div>
+    <span style="color:var(--tx3);font-size:11px;margin-left:4px">${withRevenue.length} ASINs avec CA / ${asins.length} total</span>
+  </div>`;
+
+  if (!selectedAsin) {
+    // ── Filtres enrichis ──────────────────────────────────────────
+    const asinSortOpts = [
+      { v: 'ca_desc',    l: '💰 CA décroissant' },
+      { v: 'ca_asc',     l: '💰 CA croissant' },
+      { v: 'hausse',     l: '📈 Meilleures hausses' },
+      { v: 'baisse',     l: '📉 Plus fortes baisses' },
+      { v: 'stock_asc',  l: '📦 Stock critique d'abord' },
+      { v: 'health_asc', l: '🩺 Health Score bas d'abord' },
+      { v: 'gv_desc',    l: '👁 Glance Views décroissant' },
+    ];
+    const asinLimitOpts = [
+      { v: 25,  l: 'Top 25' },
+      { v: 50,  l: 'Top 50' },
+      { v: 100, l: 'Top 100' },
+      { v: 9999,l: 'Tous' },
+    ];
+
+    h += `<div class="filters" style="gap:12px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="filter-label">Trier par</span>
+        <select class="filter-select" onchange="asinSort=this.value;render()">
+          ${asinSortOpts.map(o => `<option value="${o.v}"${asinSort===o.v?' selected':''}>${o.l}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="filter-label">Afficher</span>
+        <select class="filter-select" onchange="asinLimit=+this.value;render()">
+          ${asinLimitOpts.map(o => `<option value="${o.v}"${asinLimit===o.v?' selected':''}>${o.l}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="filter-label">Segment</span>
+        <select class="filter-select" onchange="setFilter('segment',this.value)">
+          <option value="all">Tous</option>
+          <option value="A"${filters.segment==='A'?' selected':''}>🥇 A</option>
+          <option value="B"${filters.segment==='B'?' selected':''}>🥈 B</option>
+          <option value="C"${filters.segment==='C'?' selected':''}>🥉 C</option>
+        </select>
+      </div>
+      <span style="color:var(--tx3);font-size:11px;margin-left:auto">${withRevenue.length} ASINs avec CA / ${asins.length} total</span>
+      <button class="btn btn-sm" onclick="exportAsinsCsv()">⬇ CSV</button>
+    </div>`;
+
+    // ── Tri ──────────────────────────────────────────────────────
+    let sorted = [...withRevenue];
+    if (asinSort === 'ca_desc')    sorted.sort((a,b) => (b.revenue||0)-(a.revenue||0));
+    else if (asinSort === 'ca_asc')     sorted.sort((a,b) => (a.revenue||0)-(b.revenue||0));
+    else if (asinSort === 'hausse')     sorted.sort((a,b) => parseNum(b.revenueDelta)-parseNum(a.revenueDelta));
+    else if (asinSort === 'baisse')     sorted.sort((a,b) => parseNum(a.revenueDelta)-parseNum(b.revenueDelta));
+    else if (asinSort === 'stock_asc')  sorted.sort((a,b) => (a.sellableUnits||9999)-(b.sellableUnits||9999));
+    else if (asinSort === 'health_asc') sorted.sort((a,b) => calcHealth(a)-calcHealth(b));
+    else if (asinSort === 'gv_desc')    sorted.sort((a,b) => (b.glanceViews||0)-(a.glanceViews||0));
+
+    const visible = sorted.slice(0, asinLimit);
+
+    // ── Tableau ──────────────────────────────────────────────────
+    h += `<div class="tbl-wrap"><table class="tbl"><thead><tr>
+      <th style="width:36px">Score</th>
+      <th>Produit / ASIN</th>
+      <th style="width:44px">Seg.</th>
+      <th class="r">CA</th>
+      <th class="r">Δ CA</th>
+      <th class="r">GV</th>
+      <th class="r">Δ GV</th>
+      <th class="r">Stock</th>
+      <th class="r">Retail%</th>
+      <th></th>
+    </tr></thead><tbody>`;
+
+    visible.forEach(a => {
+      const health = calcHealth(a);
+      const seg = calcSegment(a, totalCA);
+      const delta = parseNum(a.revenueDelta);
+      const isLow = a.sellableUnits >= 0 && a.sellableUnits < 30 && (a.revenue||0) > 50;
+      const isDec = delta < -10;
+      const rc = isDec ? 'al-row' : isLow ? 'warn-row' : '';
+      h += `<tr class="${rc}" style="cursor:pointer" onclick="selectAsin('${esc(a.asin)}')">
+        <td><div class="hs hs-sm ${healthClass(health)}">${health}</div></td>
+        <td>
+          <div style="font-weight:500;font-size:12px;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(a.title)}">${esc(shortName(a))}</div>
+          <div style="font-size:10px;color:var(--tx3);font-family:var(--fm)">${a.asin} <span style="margin-left:4px;opacity:.6">${a.market||'.fr'}</span></div>
+        </td>
+        <td>${segBadge(seg)}</td>
+        <td class="r" style="font-weight:600">${fmtEur(a.revenue||0)}</td>
+        <td class="r">${deltaBadge(a.revenueDelta)}</td>
+        <td class="r">${fmt(a.glanceViews||0)}</td>
+        <td class="r">${deltaBadge(a.gvDelta)}</td>
+        <td class="r ${isLow?'':''}">
+          ${a.sellableUnits != null ? `<span style="font-weight:600;color:${isLow?'var(--r)':'inherit'}">${fmt(a.sellableUnits)}u</span>` : '—'}
+        </td>
+        <td class="r">${a.retailPct||'—'}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-xs btn-amazon" onclick="event.stopPropagation();openAmazonProduct('${esc(a.asin)}','${a.market||'.fr'}')" title="Amazon">🔗</button>
+        </td>
+      </tr>`;
+    });
+    h += `</tbody></table></div>`;
+    if (sorted.length > asinLimit) h += `<p style="font-size:10px;color:var(--tx3);margin-top:8px;padding:0 4px">${asinLimit} affichés sur ${sorted.length} — changez le filtre "Afficher" pour voir plus</p>`;
+  } else {
+    const a = asins.find(x => x.asin === selectedAsin);
+    if (!a) { selectedAsin = null; return renderAsins(); }
+    const health = calcHealth(a);
+    const seg = calcSegment(a, totalCA);
+    const keyword = getMainKeyword(a);
+
+    h += `<button class="btn btn-sm" onclick="selectedAsin=null;render()" style="margin-bottom:14px">← Retour</button>`;
+
+    h += `<div class="cd" style="display:flex;gap:18px;align-items:flex-start">`;
+    h += `<div class="hs hs-lg ${healthClass(health)}">${health}</div>`;
+    h += `<div style="flex:1">
+      <h2 style="font-size:15px;margin-bottom:6px">${esc(shortName(a))}</h2>
+      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+        <span class="mono" style="font-size:10px;color:var(--tx3)">${a.asin}</span>
+        ${segBadge(seg)}
+        <span class="pill pill-gr">${a.market||'.fr'}</span>
+        ${a.brand ? `<span class="pill pill-b">${esc(a.brand)}</span>` : ''}
+      </div>
+      <p style="font-size:11px;color:var(--tx3);max-width:500px">${esc(a.title||'')}</p>
+    </div>`;
+    h += `<div style="display:flex;flex-direction:column;gap:6px">
+      <button class="btn btn-amazon btn-sm" onclick="openAmazonProduct('${esc(a.asin)}','${a.market||'.fr'}')">🔗 Amazon</button>
+      <button class="btn btn-purple btn-sm" onclick="openAmazonSearch('${esc(keyword)}','${a.market||'.fr'}')">🔍 Concurrence</button>
+      <button class="btn btn-b btn-sm" onclick="launchChromeAnalysis('${esc(a.asin)}','${a.market||'.fr'}')">🌐 Chrome</button>
+    </div>`;
+    h += `</div>`;
+
+    h += `<div class="kpi-g">`;
+    h += `<div class="kpi"><div class="kpi-lb">CA Commandé</div><div class="kpi-v">${fmtEur(a.revenue||0)}</div><div>${deltaBadge(a.revenueDelta)}</div></div>`;
+    h += `<div class="kpi"><div class="kpi-lb">Unités</div><div class="kpi-v">${fmt(a.units||0)}</div><div>${deltaBadge(a.unitsDelta)}</div></div>`;
+    h += `<div class="kpi"><div class="kpi-lb">Glance Views</div><div class="kpi-v">${fmt(a.glanceViews||0)}</div><div>${deltaBadge(a.gvDelta)}</div></div>`;
+    h += `<div class="kpi"><div class="kpi-lb">Stock Vendable</div><div class="kpi-v">${a.sellableUnits ? fmt(a.sellableUnits)+'u' : '—'}</div></div>`;
+    h += `<div class="kpi"><div class="kpi-lb">Retail %</div><div class="kpi-v">${a.retailPct||'—'}</div></div>`;
+    h += `<div class="kpi"><div class="kpi-lb">Retours</div><div class="kpi-v">${a.returns ? fmt(a.returns) : '—'}</div></div>`;
+    h += `</div>`;
+
+    if (a.history?.length > 0) {
+      h += `<div class="cd"><div class="cd-t">📈 Historique Performance</div>`;
+      h += `<div class="htabs">
+        <button class="htab${historyView==='weekly'?' active':''}" onclick="setHistoryView('weekly')">Semaines</button>
+        <button class="htab${historyView==='monthly'?' active':''}" onclick="setHistoryView('monthly')">Mois</button>
+      </div>`;
+      h += `<div class="chart-container chart-sm"><canvas id="history-chart"></canvas></div></div>`;
+    }
+
+    h += `<div class="cd"><div class="cd-t">🎯 Analyse Concurrentielle</div>`;
+    h += `<div class="comp-grid">`;
+    h += `<div class="comp-card"><div style="font-weight:600;margin-bottom:6px">📦 Page Produit</div><p style="font-size:11px;color:var(--tx3);margin-bottom:10px">Prix, Buy Box, avis, A+</p><button class="btn btn-amazon btn-sm" onclick="openAmazonProduct('${esc(a.asin)}','${a.market||'.fr'}')">Ouvrir</button></div>`;
+    h += `<div class="comp-card"><div style="font-weight:600;margin-bottom:6px">🔍 Résultats Recherche</div><p style="font-size:11px;color:var(--tx3);margin-bottom:10px">Position, concurrents directs</p><button class="btn btn-sm" onclick="openAmazonSearch('${esc(keyword)}','${a.market||'.fr'}')">Rechercher</button></div>`;
+    h += `<div class="comp-card"><div style="font-weight:600;margin-bottom:6px">📊 Best Sellers</div><p style="font-size:11px;color:var(--tx3);margin-bottom:10px">Top ventes de la catégorie</p><button class="btn btn-sm" onclick="openAmazonBestSellers('${a.market||'.fr'}')">Explorer</button></div>`;
+    h += `</div></div>`;
+
+    h += `<div class="cd"><div class="cd-t">🤖 Analyse IA</div>`;
+    h += `<button class="btn btn-p" onclick="runAsinAI('${esc(a.asin)}')" ${aiLoading?'disabled':''}>${aiLoading?'<span class="spin">⏳</span> Analyse...':'▶ Lancer l\'analyse IA'}</button>`;
+    if (aiResult && selectedAsin === a.asin) h += `<div class="ai-out">${esc(aiResult)}</div><button class="btn" style="margin-top:10px" onclick="copyAI()">📋 Copier</button>`;
+    h += `</div>`;
+  }
+  return h;
+}
+
+/* ═══════════════════════════════════════════
+   SCREEN: POMPIER (Diagnostic CA)
+   ═══════════════════════════════════════════ */
+function renderPompier() {
+  const c = cl();
+  if (!c) return renderWelcome();
+  if (!c.asins?.length) return `<div class="alr alr-a">Importez d'abord des données pour lancer le diagnostic.</div>`;
+  const asins = getFilteredAsins(c);
+  const totalCA = asins.reduce((s, a) => s + (a.revenue || 0), 0);
+
+  // Seuil configurable via le filtre pompier
+  const threshold = pompierThreshold;
+  const declining = asins.filter(a => (a.revenue||0) > 0 && parseNum(a.revenueDelta) < -threshold)
+    .sort((a, b) => parseNum(a.revenueDelta) - parseNum(b.revenueDelta));
+
+  const totalLost = declining.reduce((s,a) => s + Math.abs(parseNum(a.revenueDelta)/100*(a.revenue||0)), 0);
+
+  let h = '';
+
+  // ── Header avec stats clés ──
+  h += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+    <h2 style="font-size:17px;font-weight:700">🚨 Diagnostic CA — ASINs en baisse</h2>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="filter-label">Seuil de baisse</span>
+      <select class="filter-select" onchange="pompierThreshold=+this.value;render()">
+        <option value="5"${threshold===5?' selected':''}>› 5%</option>
+        <option value="10"${threshold===10?' selected':''}>› 10%</option>
+        <option value="20"${threshold===20?' selected':''}>› 20%</option>
+        <option value="30"${threshold===30?' selected':''}>› 30%</option>
+        <option value="50"${threshold===50?' selected':''}>› 50%</option>
+      </select>
+      <button class="btn btn-p btn-sm" onclick="runAI('decline')" ${aiLoading?'disabled':''}>${aiLoading?'<span class="spin">⏳</span>':'🤖'} Diagnostic IA</button>
+      <button class="btn btn-sm" onclick="exportPompierCsv()">⬇ CSV</button>
+    </div>
+  </div>`;
+
+  if (!declining.length) {
+    h += `<div class="alr alr-g">✓ Aucun ASIN en baisse de plus de ${threshold}%. Bonne nouvelle !</div>`;
+    if (aiResult) h += `<div class="cd"><div class="cd-t space"><span>🤖 Analyse IA</span><button class="btn btn-sm" onclick="copyAI()">📋 Copier</button></div><div class="ai-out">${renderMarkdown(aiResult)}</div></div>`;
+    return h;
+  }
+
+  // ── KPIs résumé ──
+  h += `<div class="kpi-g" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px">
+    <div class="kpi al"><div class="kpi-lb">ASINs en baisse</div><div class="kpi-v">${declining.length}</div></div>
+    <div class="kpi al"><div class="kpi-lb">CA perdu estimé</div><div class="kpi-v" style="font-size:16px">-${fmtEur(totalLost)}</div></div>
+    <div class="kpi"><div class="kpi-lb">CA total base</div><div class="kpi-v" style="font-size:16px">${fmtEur(totalCA)}</div></div>
+    <div class="kpi"><div class="kpi-lb">Impact / CA</div><div class="kpi-v">${totalCA>0?Math.round(totalLost/totalCA*100):0}%</div></div>
+  </div>`;
+
+  // ── Tableau ──
+  h += `<div class="tbl-wrap"><table class="tbl"><thead><tr>
+    <th style="width:36px">Score</th>
+    <th>Produit / ASIN</th>
+    <th style="width:44px">Seg.</th>
+    <th class="r">CA actuel</th>
+    <th class="r">Δ CA</th>
+    <th class="r">CA perdu</th>
+    <th class="r">GV</th>
+    <th class="r">Δ GV</th>
+    <th class="r">Stock</th>
+    <th class="r">Retail%</th>
+    <th></th>
+  </tr></thead><tbody>`;
+
+  declining.forEach(a => {
+    const health = calcHealth(a);
+    const seg = calcSegment(a, totalCA);
+    const delta = parseNum(a.revenueDelta);
+    const lost = Math.abs(delta / 100 * (a.revenue || 0));
+    const isNoStock = (a.sellableUnits || 0) === 0;
+    h += `<tr class="al-row" style="cursor:pointer" onclick="analyzeAsin('${esc(a.asin)}')">
+      <td><div class="hs hs-sm ${healthClass(health)}">${health}</div></td>
+      <td>
+        <div style="font-weight:500;font-size:12px;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(a.title)}">${esc(shortName(a))}</div>
+        <div style="font-size:10px;color:var(--tx3);font-family:var(--fm)">${a.asin} <span style="opacity:.6">${a.market||'.fr'}</span></div>
+      </td>
+      <td>${segBadge(seg)}</td>
+      <td class="r" style="font-weight:600">${fmtEur(a.revenue||0)}</td>
+      <td class="r"><span style="font-weight:700;color:var(--r)">▼ ${a.revenueDelta||'?'}</span></td>
+      <td class="r" style="color:var(--r);font-weight:600">-${fmtEur(lost)}</td>
+      <td class="r">${fmt(a.glanceViews||0)}</td>
+      <td class="r">${deltaBadge(a.gvDelta)}</td>
+      <td class="r"><span style="color:${isNoStock?'var(--r)':'inherit'};font-weight:${isNoStock?'700':'400'}">${isNoStock?'⚠ 0u':a.sellableUnits!=null?fmt(a.sellableUnits)+'u':'—'}</span></td>
+      <td class="r">${a.retailPct||'—'}</td>
+      <td>
+        <button class="btn btn-xs btn-amazon" onclick="event.stopPropagation();openAmazonProduct('${esc(a.asin)}','${a.market||'.fr'}')" title="Amazon">🔗</button>
+      </td>
+    </tr>`;
+  });
+  h += `</tbody></table></div>`;
+
+  // ── Résultat IA ──
+  if (aiResult) {
+    h += `<div class="cd" style="margin-top:14px"><div class="cd-t space"><span>🤖 Analyse IA</span><button class="btn btn-sm" onclick="copyAI()">📋 Copier</button></div>`;
+    h += `<div class="ai-out">${renderMarkdown(aiResult)}</div></div>`;
+  }
+
+  return h;
+}
+
+/* ═══════════════════════════════════════════
+   SCREEN: FICHE CLIENT
+   ═══════════════════════════════════════════ */
+function renderFiche() {
+  const c = cl();
+  if (!c) return renderWelcome();
+  let h = `<div style="max-width:680px">`;
+  h += `<h2 style="font-size:17px;font-weight:700;margin-bottom:16px">📋 Fiche Client — ${esc(c.name)}</h2>`;
+
+  h += `<div class="cd"><div class="cd-t">Identité</div><div class="fg2">`;
+  h += fgEl('Nom du compte', c.name, "updClient('name',this.value)");
+  h += fgEl('Marque(s)', c.brand, "updClient('brand',this.value)");
+  h += fgEl('Secteur', c.sector, "updClient('sector',this.value)");
+  h += fgEl('Contact opérationnel', c.contactOp, "updClient('contactOp',this.value)");
+  h += `</div></div>`;
+
+  h += `<div class="cd"><div class="cd-t">Configuration Amazon</div><div class="fg2">`;
+  h += fgSel('Modèle de vente', c.model, ['1P (Vendor Central)', '3P (Seller Central)', 'Hybride 1P + 3P'], "updClient('model',this.value)");
+  h += fgEl('Vendor Code', c.vendorCode, "updClient('vendorCode',this.value)");
+  h += `</div><div class="fg" style="margin-top:12px"><label class="fg-lb">Marchés actifs</label><div class="mk-list">`;
+  MARKETS.forEach(m => {
+    h += `<label class="mk-cb"><input type="checkbox" ${c.markets.includes(m)?'checked':''} onchange="toggleClientMarket('${m}',this.checked)"/>${m}</label>`;
+  });
+  h += `</div></div></div>`;
+
+  h += `<div class="cd"><div class="cd-t">Contraintes</div><div class="fg2">`;
+  h += `<div class="fg"><label class="fg-lb">Stock déporté</label><div class="tog">
+    <button class="tog-b ${c.stockDeporte?'sel-ok':''}" onclick="updClient('stockDeporte',true);render()">Autorisé</button>
+    <button class="tog-b ${!c.stockDeporte?'sel-no':''}" onclick="updClient('stockDeporte',false);render()">Interdit</button>
+  </div></div>`;
+  h += `<div class="fg"><label class="fg-lb">3P autorisé</label><div class="tog">
+    <button class="tog-b ${c.threeP?'sel-ok':''}" onclick="updClient('threeP',true);render()">Oui</button>
+    <button class="tog-b ${!c.threeP?'sel-no':''}" onclick="updClient('threeP',false);render()">Non</button>
+  </div></div>`;
+  h += fgSel('Born to Run', c.btr, ['Autorisé', 'Conditionnel', 'Interdit'], "updClient('btr',this.value);render()");
+  h += fgEl('Budget Ads mensuel', c.budget, "updClient('budget',this.value)");
+  h += `</div></div>`;
+
+  // Stats
+  if (c.csvImported) {
+    h += `<div class="cd"><div class="cd-t">📊 Statistiques</div><div class="kpi-g">`;
+    h += `<div class="kpi"><div class="kpi-lb">ASINs en base</div><div class="kpi-v">${c.asins.length}</div></div>`;
+    h += `<div class="kpi"><div class="kpi-lb">Imports réalisés</div><div class="kpi-v">${c.imports.length}</div></div>`;
+    const ca = c.asins.reduce((s,a) => s+(a.revenue||0), 0);
+    h += `<div class="kpi"><div class="kpi-lb">CA Total Base</div><div class="kpi-v">${fmtEur(ca)}</div></div>`;
+    h += `</div></div>`;
+  }
+
+  h += `<div style="display:flex;gap:8px;margin-top:16px">`;
+  h += `<button class="btn btn-r" onclick="if(confirm('Supprimer ce client ?')){deleteClient('${c.id}')}">🗑 Supprimer</button>`;
+  h += `<button class="btn" onclick="exportClient()">📤 Exporter JSON</button>`;
+  h += `</div></div>`;
+  return h;
+}
+
+/* ═══════════════════════════════════════════
+   SCREEN: CONFIG
+   ═══════════════════════════════════════════ */
+function renderConfig() {
+  const maskedKey = apiKey ? '••••••••' + apiKey.slice(-8) : '';
+  const currentModel = localStorage.getItem('ap-model') || 'claude-sonnet-4-20250514';
+
+  let h = `<div style="max-width:580px">`;
+  h += `<h2 style="font-size:17px;font-weight:700;margin-bottom:16px">⚙️ Configuration</h2>`;
+
+  h += `<div class="cd"><div class="cd-t">🔑 Clé API Anthropic</div>`;
+  h += `<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Nécessaire pour l'analyse IA. Obtenez votre clé sur <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a></p>`;
+  if (apiKey) {
+    h += `<div class="alr alr-g" style="margin-bottom:10px">✓ Clé configurée : ${maskedKey}</div>`;
+    h += `<button class="btn btn-r btn-sm" onclick="clearApiKey()">Supprimer la clé</button>`;
+  } else {
+    h += `<div class="fg" style="margin-bottom:10px"><label class="fg-lb">Clé API (sk-ant-...)</label><input type="password" class="fg-in" id="api-key-input" placeholder="sk-ant-api03-..."/></div>`;
+    h += `<button class="btn btn-p" onclick="saveApiKeyFromInput()">Sauvegarder</button>`;
+  }
+  h += `</div>`;
+
+  h += `<div class="cd"><div class="cd-t">🤖 Modèle IA</div>`;
+  h += `<div class="fg"><label class="fg-lb">Modèle Claude</label>
+    <select class="fg-in" onchange="localStorage.setItem('ap-model',this.value)">
+      <option value="claude-sonnet-4-20250514" ${currentModel==='claude-sonnet-4-20250514'?'selected':''}>Claude Sonnet 4 (recommandé)</option>
+      <option value="claude-haiku-4-5-20251001" ${currentModel==='claude-haiku-4-5-20251001'?'selected':''}>Claude Haiku 4.5 (rapide)</option>
+    </select></div>`;
+  h += `</div>`;
+
+  h += `<div class="cd"><div class="cd-t">🌐 Claude in Chrome — Amazon</div>`;
+  h += `<div class="alr alr-p">Installez l'extension Claude Chrome, ouvrez une page Amazon, cliquez sur l'icône Claude et demandez une analyse.</div>`;
+  const PROMPTS = [
+    { label: 'Analyse fiche produit', txt: "Analyse cette fiche produit Amazon : prix, avis, contenu, images. Recommandations d'optimisation." },
+    { label: 'Analyse concurrentielle', txt: "Identifie les 5 principaux concurrents sur cette page, compare prix, notes et avis. Stratégie gagnante ?" },
+    { label: 'Audit Buy Box', txt: "Qui détient la Buy Box ? Y a-t-il des vendeurs 3P ? Analyse le risque de perte de Buy Box." },
+    { label: 'Analyse des avis', txt: "Analyse les avis clients. Points positifs récurrents ? Plaintes principales ? Suggestions d'amélioration produit." }
+  ];
+  PROMPTS.forEach((p, i) => {
+    h += `<div style="display:flex;align-items:center;gap:10px;padding:9px;background:var(--s2);border-radius:var(--rd);margin-bottom:6px;border:1px solid var(--bd)">
+      <div style="flex:1"><div style="font-weight:500;font-size:12px">${p.label}</div><div style="font-size:10px;color:var(--tx3);margin-top:1px">${p.txt.slice(0,55)}…</div></div>
+      <button class="btn btn-sm" onclick="copyPrompt(${i})">📋 Copier</button>
+    </div>`;
+  });
+  h += `</div>`;
+
+  h += `<div class="cd"><div class="cd-t">💾 Données</div>`;
+  const totalAsins = clients.reduce((s,c)=>s+(c.asins?.length||0),0);
+  const estKB = Math.round(JSON.stringify(clients).length/1024);
+  h += `<div class="alr alr-g" style="margin-bottom:10px">✓ Stockage IndexedDB — pas de quota. ${clients.length} client(s) · ${totalAsins} ASINs · ~${estKB} KB en mémoire</div>`;
+  h += `<div style="display:flex;gap:8px">`;
+  h += `<button class="btn" onclick="exportAllData()">📤 Exporter tout</button>`;
+  h += `<button class="btn" onclick="document.getElementById('import-data').click()">📥 Importer</button>`;
+  h += `<input type="file" id="import-data" accept=".json" style="display:none" onchange="importAllData(this)"/>`;
+  h += `<button class="btn btn-r" onclick="if(confirm('Effacer TOUTES les données ?')){localStorage.clear();location.reload()}">🗑 Reset</button>`;
+  h += `</div></div>`;
+
+  if (debugLog.length) {
+    h += `<div class="cd"><div class="cd-t">🐛 Debug Log</div>`;
+    h += `<div class="debug-log">`;
+    debugLog.slice(-20).forEach(l => { h += `<div class="${l.type}">[${l.ts}] ${l.msg}</div>`; });
+    h += `</div><button class="btn btn-sm" style="margin-top:8px" onclick="debugLog=[];render()">Effacer</button></div>`;
+  }
+  h += `</div>`;
+  return h;
+}
+
+/* ═══════════════════════════════════════════
+   CHARTS
+   ═══════════════════════════════════════════ */
+function initChart() {
+  const c = cl();
+  if (!c?.asins?.length) return;
+  const canvas = document.getElementById('top-chart');
+  if (!canvas) return;
+  if (chartInst) chartInst.destroy();
+  const asins = getFilteredAsins(c);
+  const top10 = asins.filter(a => (a.revenue||0) > 0).sort((a,b) => (b.revenue||0)-(a.revenue||0)).slice(0, 10);
+  const colors = getChartColors();
+  const deltas = top10.map(a => parseNum(a.revenueDelta));
+  chartInst = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: top10.map(a => shortName(a).slice(0, 20)),
+      datasets: [{ label: 'CA (€)', data: top10.map(a => a.revenue||0), backgroundColor: deltas.map(d => d >= 0 ? '#22C55E' : '#EF4444'), borderRadius: 5 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { afterLabel: ctx => `Δ ${deltas[ctx.dataIndex]>=0?'+':''}${deltas[ctx.dataIndex]}%` } } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: colors.grid }, ticks: { color: colors.text, callback: v => v>=1000 ? Math.round(v/1000)+'k€' : v+'€' } },
+        x: { grid: { display: false }, ticks: { color: colors.text, font: { size: 10 }, maxRotation: 30 } }
+      }
+    }
+  });
+}
+
+function initHistoryChart() {
+  const c = cl();
+  if (!c || !selectedAsin) return;
+  const a = c.asins.find(x => x.asin === selectedAsin);
+  if (!a?.history?.length) return;
+  const canvas = document.getElementById('history-chart');
+  if (!canvas) return;
+  if (historyChartInst) historyChartInst.destroy();
+  const history = a.history.slice(-12);
+  const colors = getChartColors();
+  historyChartInst = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: history.map(h => h.period || '?'),
+      datasets: [{ label: 'CA (€)', data: history.map(h => h.revenue||0), borderColor: '#FF9900', backgroundColor: 'rgba(255,153,0,0.08)', fill: true, tension: 0.3, pointBackgroundColor: '#FF9900' }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: colors.grid }, ticks: { color: colors.text } },
+        x: { grid: { display: false }, ticks: { color: colors.text, font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+let segChartInst = null;
+
+function initSegChart() {
+  const c = cl();
+  if (!c?.asins?.length) return;
+  const canvas = document.getElementById('seg-chart');
+  if (!canvas) return;
+  if (segChartInst) segChartInst.destroy();
+  const asins = getFilteredAsins(c);
+  const totalCA = asins.reduce((s, a) => s + (a.revenue || 0), 0);
+  const segs = { A: 0, B: 0, C: 0 };
+  const cnts = { A: 0, B: 0, C: 0 };
+  for (const a of asins) {
+    const s = calcSegment(a, totalCA);
+    segs[s] += (a.revenue || 0);
+    cnts[s]++;
+  }
+  const colors = getChartColors();
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  segChartInst = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: [
+        `A — ${cnts.A} ASINs`,
+        `B — ${cnts.B} ASINs`,
+        `C — ${cnts.C} ASINs`
+      ],
+      datasets: [{
+        data: [segs.A, segs.B, segs.C],
+        backgroundColor: ['#FF9900', '#3B82F6', isDark ? '#3A3A50' : '#E4E7EC'],
+        borderColor: isDark ? '#14141C' : '#FFFFFF',
+        borderWidth: 3,
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      plugins: {
+        legend: { position: 'bottom', labels: { color: colors.text, font: { size: 11 }, padding: 12, boxWidth: 12 } },
+        tooltip: { callbacks: { label: ctx => ` ${fmtEur(ctx.raw)} (${totalCA > 0 ? Math.round(ctx.raw/totalCA*100) : 0}%)` } }
+      }
+    }
+  });
+}
+
+function exportPompierCsv() {
+  const c = cl();
+  if (!c?.asins?.length) return;
+  const asins = getFilteredAsins(c);
+  const totalCA = asins.reduce((s, a) => s + (a.revenue || 0), 0);
+  const declining = asins.filter(a => (a.revenue||0) > 0 && parseNum(a.revenueDelta) < -pompierThreshold)
+    .sort((a, b) => parseNum(a.revenueDelta) - parseNum(b.revenueDelta));
+  const headers = ['ASIN','Titre','Marque','Segment','CA actuel (€)','Δ CA','CA perdu estimé (€)','Glance Views','Δ GV','Stock','Retail%'];
+  const rows = declining.map(a => {
+    const seg = calcSegment(a, totalCA);
+    const lost = Math.abs(parseNum(a.revenueDelta)/100*(a.revenue||0));
+    return [a.asin, '"'+(a.title||'').replace(/"/g,'""')+'"', a.brand||'', seg,
+      Math.round(a.revenue||0), a.revenueDelta||'', Math.round(lost),
+      a.glanceViews||'', a.gvDelta||'', a.sellableUnits!=null?a.sellableUnits:'', a.retailPct||''];
+  });
+  const csv = [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${(c.name||'export').replace(/\s+/g,'_')}_Diagnostic_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+  log(`✓ Export Diagnostic: ${declining.length} ASINs`, 'ok');
+}
+
+function exportAsinsCsv() {
+  const c = cl();
+  if (!c?.asins?.length) return;
+  const asins = getFilteredAsins(c);
+  const totalCA = asins.reduce((s, a) => s + (a.revenue || 0), 0);
+  const headers = ['ASIN','Titre','Marque','Marché','Segment','Health Score','CA (€)','Δ CA','Unités','Glance Views','Δ GV','Stock Vendable','Retail %','Retours'];
+  const rows = asins.sort((a,b) => (b.revenue||0)-(a.revenue||0)).map(a => [
+    a.asin,
+    '"' + (a.title||'').replace(/"/g,'""') + '"',
+    a.brand || '',
+    a.market || '',
+    calcSegment(a, totalCA),
+    calcHealth(a),
+    Math.round(a.revenue || 0),
+    a.revenueDelta || '',
+    a.units || '',
+    a.glanceViews || '',
+    a.gvDelta || '',
+    a.sellableUnits || '',
+    a.retailPct || '',
+    a.returns || ''
+  ]);
+  const csv = [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }); // BOM pour Excel
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${(c.name||'export').replace(/\s+/g,'_')}_ASINs_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  log(`✓ Export CSV: ${asins.length} ASINs`, 'ok');
+}
+
+function setHistoryView(v) { historyView = v; render(); }
+
+/* ═══════════════════════════════════════════
+   AI FUNCTIONS
+   ═══════════════════════════════════════════ */
+async function runAI(type) {
+  const c = cl();
+  if (!c) return;
+  aiLoading = true; aiResult = ''; render();
+  const asins = getFilteredAsins(c);
+  const totalCA = asins.reduce((s,a) => s+(a.revenue||0), 0);
+  let prompt = '';
+
+  if (type === 'weekly') {
+    const dec = asins.filter(a => (a.revenue||0)>0 && parseNum(a.revenueDelta)<-10);
+    const grow = asins.filter(a => (a.revenue||0)>50 && parseNum(a.revenueDelta)>20);
+    const low = asins.filter(a => a.sellableUnits>0 && a.sellableUnits<30 && (a.revenue||0)>50);
+    prompt = `REVUE HEBDOMADAIRE — ${c.name}\n\n📊 CA Total: ${fmtEur(totalCA)} | ASINs: ${asins.filter(a=>(a.revenue||0)>0).length} | Baisses: ${dec.length} | Croissances: ${grow.length} | Stock critique: ${low.length}\n\n🔴 TOP BAISSES:\n${dec.slice(0,5).map(a=>`- ${shortName(a)} (${a.asin}): ${fmtEur(a.revenue)} | Δ ${a.revenueDelta}`).join('\n')}\n\n🟢 TOP CROISSANCES:\n${grow.slice(0,5).map(a=>`- ${shortName(a)} (${a.asin}): ${fmtEur(a.revenue)} | Δ ${a.revenueDelta}`).join('\n')}\n\nDiagnostic rapide + plan d'action prioritaire. Structure: 1) Synthèse (2 lignes) 2) Actions urgentes (max 3) 3) Opportunités (max 2) 4) Vigilance`;
+  } else if (type === 'opportunities') {
+    const grow = asins.filter(a => (a.revenue||0)>50 && parseNum(a.revenueDelta)>10).sort((a,b) => parseNum(b.revenueDelta)-parseNum(a.revenueDelta));
+    prompt = `ANALYSE OPPORTUNITÉS — ${c.name}\n\n${grow.slice(0,10).map(a=>`- ${shortName(a)} (${a.asin}): ${fmtEur(a.revenue)} | Δ ${a.revenueDelta} | GV: ${fmt(a.glanceViews||0)} | Stock: ${a.sellableUnits||'?'}u`).join('\n')}\n\nMeilleures opportunités de croissance + actions concrètes (Ads, stock, A+, bundles...)`;
+  } else if (type === 'risks') {
+    const dec = asins.filter(a => (a.revenue||0)>0 && parseNum(a.revenueDelta)<-5);
+    const low = asins.filter(a => a.sellableUnits>0 && a.sellableUnits<50 && (a.revenue||0)>30);
+    prompt = `ANALYSE RISQUES — ${c.name}\n\nBaisses:\n${dec.slice(0,10).map(a=>`- ${shortName(a)}: ${fmtEur(a.revenue)} | Δ ${a.revenueDelta}`).join('\n')}\n\nStock faible:\n${low.slice(0,10).map(a=>`- ${shortName(a)}: ${a.sellableUnits}u | CA ${fmtEur(a.revenue)}`).join('\n')}\n\nRisques principaux + actions de mitigation`;
+  } else if (type === 'decline') {
+    const dec = asins.filter(a => (a.revenue||0)>0 && parseNum(a.revenueDelta)<-10).sort((a,b) => parseNum(a.revenueDelta)-parseNum(b.revenueDelta));
+    prompt = `DIAGNOSTIC BAISSES CA — ${c.name}\n\n${dec.slice(0,15).map(a=>`📉 ${shortName(a)}\n   ASIN: ${a.asin} | ${a.market}\n   CA: ${fmtEur(a.revenue)} | Δ: ${a.revenueDelta} | YoY: ${a.revenueYoY||'N/A'}\n   GV: ${fmt(a.glanceViews||0)} (Δ ${a.gvDelta||'N/A'})\n   Stock: ${a.sellableUnits||'?'}u | Retail%: ${a.retailPct||'N/A'}`).join('\n\n')}\n\n1) Patterns communs 2) Hypothèses causes 3) Actions correctives par priorité`;
+  }
+
+  aiResult = await askClaude(getSysPrompt(c), prompt);
+  aiLoading = false; render();
+}
+
+async function runAsinAI(asin) {
+  const c = cl();
+  if (!c) return;
+  const a = c.asins.find(x => x.asin === asin);
+  if (!a) return;
+  aiLoading = true; aiResult = ''; selectedAsin = asin; render();
+  const totalCA = c.asins.reduce((s,x) => s+(x.revenue||0), 0);
+  const seg = calcSegment(a, totalCA);
+  const health = calcHealth(a);
+  const prompt = `ANALYSE ASIN DÉTAILLÉE\n\n📦 ${a.title||'N/A'}\nASIN: ${a.asin} | Marque: ${a.brand||'N/A'} | Marché: ${a.market||'.fr'}\nSegment: ${seg} | Health Score: ${health}/100\n\n📊 MÉTRIQUES:\n- CA: ${fmtEur(a.revenue||0)} (Δ période: ${a.revenueDelta||'N/A'}, Δ YoY: ${a.revenueYoY||'N/A'})\n- Unités: ${fmt(a.units||0)} (Δ ${a.unitsDelta||'N/A'})\n- Glance Views: ${fmt(a.glanceViews||0)} (Δ ${a.gvDelta||'N/A'})\n- Stock vendable: ${a.sellableUnits||'N/A'}u | Malsain: ${a.unhealthyUnits||0}u\n- Retail %: ${a.retailPct||'N/A'} | Confirm %: ${a.confirmPct||'N/A'}\n- Retours: ${a.returns||0}\n\n1) Diagnostic santé 2) Hypothèses dynamique 3) Recommandations (3 max) 4) Vigilance`;
+  aiResult = await askClaude(getSysPrompt(c), prompt);
+  aiLoading = false; render();
+}
+
+function renderMarkdown(text) {
+  // Renderer minimal : bold, headers, listes — sans lib externe
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/^### (.+)$/gm,'<div style="font-size:13px;font-weight:700;margin:14px 0 6px;color:var(--tx)">$1</div>')
+    .replace(/^## (.+)$/gm,'<div style="font-size:14px;font-weight:700;margin:16px 0 8px;color:var(--tx);border-bottom:1px solid var(--bd);padding-bottom:4px">$1</div>')
+    .replace(/^# (.+)$/gm,'<div style="font-size:15px;font-weight:700;margin:16px 0 8px">$1</div>')
+    .replace(/^- (.+)$/gm,'<div style="display:flex;gap:8px;margin:4px 0;padding-left:4px"><span style="color:var(--or);flex-shrink:0">•</span><span>$1</span></div>')
+    .replace(/^\d+\. (.+)$/gm,'<div style="margin:4px 0;padding-left:4px">$1</div>')
+    .replace(/\n\n/g,'<div style="height:8px"></div>')
+    .replace(/\n/g,'<br>');
+}
+
+function copyAI() {
+  navigator.clipboard.writeText(aiResult).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = aiResult;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  });
+  log('✓ Copié', 'ok');
+}
+
+/* ═══════════════════════════════════════════
+   AMAZON LINKS
+   ═══════════════════════════════════════════ */
+function getAmazonProductUrl(asin, market = '.fr') {
+  return `https://www.${MARKET_DOMAINS[market]||'amazon.fr'}/dp/${asin}`;
+}
+function openAmazonProduct(asin, market) { window.open(getAmazonProductUrl(asin, market), '_blank'); }
+function openAmazonSearch(kw, market = '.fr') { window.open(`https://www.${MARKET_DOMAINS[market]||'amazon.fr'}/s?k=${encodeURIComponent(kw)}`, '_blank'); }
+function openAmazonBestSellers(market = '.fr') { window.open(`https://www.${MARKET_DOMAINS[market]||'amazon.fr'}/gp/bestsellers/`, '_blank'); }
+function launchChromeAnalysis(asin, market = '.fr') {
+  localStorage.setItem('ap-chrome-context', JSON.stringify({ asin, market, timestamp: Date.now(), action: 'analyze_product' }));
+  window.open(getAmazonProductUrl(asin, market), '_blank');
+  setTimeout(() => alert(`Page Amazon ouverte.\n\nPour analyser avec Claude in Chrome :\n1. Cliquez sur l'icône Claude dans votre navigateur\n2. Demandez : "Analyse cette fiche produit Amazon"\n\nOu copiez un prompt depuis la Configuration.`), 500);
+}
+
+const CHROME_PROMPTS = [
+  "Analyse cette fiche produit Amazon : prix, avis clients, points forts/faibles du contenu, qualité des images. Donne des recommandations d'optimisation.",
+  "Sur cette page de résultats Amazon, identifie les 5 principaux concurrents, compare leurs prix, notes et nombre d'avis. Quelle est la stratégie gagnante ?",
+  "Qui détient la Buy Box sur cette page ? Y a-t-il des vendeurs 3P ? Analyse le risque de perte de Buy Box.",
+  "Analyse les avis clients de ce produit. Quels sont les points positifs récurrents ? Les plaintes principales ? Suggestions d'amélioration produit."
+];
+
+function copyPrompt(i) {
+  navigator.clipboard.writeText(CHROME_PROMPTS[i]).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = CHROME_PROMPTS[i];
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+  });
+  log('✓ Prompt copié', 'ok');
+  const el = event.target;
+  el.textContent = '✓ Copié !';
+  setTimeout(() => el.textContent = '📋 Copier', 1500);
+}
+
+/* ═══════════════════════════════════════════
+   NAVIGATION & ACTIONS
+   ═══════════════════════════════════════════ */
+function go(s) { screen = s; aiResult = ''; if (s !== 'asins') selectedAsin = null; render(); }
+
+function goFilteredAsins(preset) {
+  screen = 'asins';
+  selectedAsin = null;
+  aiResult = '';
+  if (preset === 'lowstock') {
+    asinSort = 'stock_asc';
+    asinLimit = 9999;
+    filters.segment = 'all';
+  } else if (preset === 'declining') {
+    asinSort = 'baisse';
+    asinLimit = 9999;
+    filters.segment = 'all';
+  } else if (preset === 'growing') {
+    asinSort = 'hausse';
+    asinLimit = 9999;
+    filters.segment = 'all';
+  }
+  render();
+}
+function selClient(id) { activeId = id; screen = 'dashboard'; selectedAsin = null; aiResult = ''; render(); }
+function startOnboarding() { newClient = freshClient(); wizStep = 0; screen = 'onboarding'; render(); }
+function wizGo(step) { wizStep = step; render(); }
+function wizNext() { if (wizStep === 0 && !newClient.name.trim()) { alert('Nom du client requis'); return; } wizStep++; render(); }
+function finishOnboarding() { clients.push(newClient); activeId = newClient.id; save(); screen = 'import'; render(); }
+function toggleMarket(m, checked) { if (checked && !newClient.markets.includes(m)) newClient.markets.push(m); if (!checked) newClient.markets = newClient.markets.filter(x => x !== m); render(); }
+function toggleClientMarket(m, checked) { const c = cl(); if (!c) return; if (checked && !c.markets.includes(m)) c.markets.push(m); if (!checked) c.markets = c.markets.filter(x => x !== m); save(); render(); }
+function ncSet(key, val) { newClient[key] = val; render(); }
+function updClient(key, val) { const c = cl(); if (c) { c[key] = val; save(); } }
+function deleteClient(id) { clients = clients.filter(c => c.id !== id); activeId = clients.length ? clients[0].id : null; screen = clients.length ? 'dashboard' : 'welcome'; save(); render(); }
+function setFilter(k, v) { filters[k] = v; render(); }
+function resetFilters() { filters = { market: 'all', brand: 'all', segment: 'all' }; render(); }
+function selectAsin(asin) { selectedAsin = asin; aiResult = ''; render(); }
+function analyzeAsin(asin) { selectedAsin = asin; screen = 'asins'; aiResult = ''; render(); }
+function toggleAction(id) { const c = cl(); if (!c) return; const a = c.weeklyActions.find(x => x.id === id); if (a) { a.done = !a.done; save(); render(); } }
+function regenerateActions() { const c = cl(); if (!c) return; c.weeklyActions = generateWeeklyActions(c); save(); render(); }
+
+/* ═══════════════════════════════════════════
+   IMPORT / EXPORT
+   ═══════════════════════════════════════════ */
+function handleMultiCSV(input) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  debugLog = [];
+  log(`📥 ${files.length} fichier(s) sélectionné(s)`);
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const parsed = parseCSVFile(e.target.result, file.name);
+      if (parsed.error) { log(`✗ ${file.name}: ${parsed.error}`, 'err'); return; }
+      if (parsed.type === 'ventes') pendingFiles.ventes = parsed;
+      else if (parsed.type === 'trafic') pendingFiles.trafic = parsed;
+      else if (parsed.type === 'stock') pendingFiles.stock = parsed;
+      else log(`⚠ Type inconnu pour ${file.name}`, 'warn');
+      render();
+    };
+    reader.readAsText(file, 'UTF-8');
+  });
+  input.value = '';
+}
+
+function clearPending() { pendingFiles = { ventes: null, trafic: null, stock: null }; debugLog = []; render(); }
+
+function processImport() {
+  const c = cl();
+  if (!c) return;
+  const files = [pendingFiles.ventes, pendingFiles.trafic, pendingFiles.stock].filter(Boolean);
+  if (!files.length) { alert('Aucun fichier valide'); return; }
+  log(`🔄 Fusion de ${files.length} fichier(s)...`);
+  mergeImportData(c, files);
+  if (!c.weeklyActions?.length) { c.weeklyActions = generateWeeklyActions(c); }
+  save();
+  pendingFiles = { ventes: null, trafic: null, stock: null };
+  log(`✓ Import terminé: ${c.asins.length} ASINs`, 'ok');
+  render();
+  // Flash message
+  setTimeout(() => {
+    const msg = document.createElement('div');
+    msg.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#16A34A;color:#fff;padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,0.2);z-index:999;animation:fadeUp .2s ease';
+    msg.textContent = `✓ ${c.asins.length} ASINs importés avec succès`;
+    document.body.appendChild(msg);
+    setTimeout(() => msg.remove(), 3000);
+  }, 100);
+}
+
+function exportClient() {
+  const c = cl();
+  if (!c) return;
+  const blob = new Blob([JSON.stringify(c, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${c.name.replace(/\s+/g,'_')}_export.json`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportAllData() {
+  const data = { version: '3.1', clients, exportDate: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `amazon_pilot_backup_${new Date().toISOString().slice(0,10)}.json`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importAllData(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.clients) {
+        clients = data.clients;
+        activeId = clients.length ? clients[0].id : null;
+        save(); screen = clients.length ? 'dashboard' : 'welcome';
+        log(`✓ Importé ${clients.length} client(s)`, 'ok');
+        render();
+      }
+    } catch(err) { alert('Fichier invalide: ' + err.message); }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+function saveApiKeyFromInput() {
+  const input = document.getElementById('api-key-input');
+  if (!input) return;
+  const key = input.value.trim();
+  if (!key.startsWith('sk-ant-')) { alert('La clé doit commencer par "sk-ant-"'); return; }
+  saveApiKey(key); render();
+}
+
+function clearApiKey() {
+  if (!confirm('Supprimer la clé API ?')) return;
+  apiKey = ''; localStorage.removeItem('ap-api-key');
+  log('✓ Clé supprimée', 'ok'); render();
+}
+
+/* ═══════════════════════════════════════════
+   DRAG & DROP
+   ═══════════════════════════════════════════ */
+function initDragDrop() {
+  document.addEventListener('dragover', e => {
+    e.preventDefault();
+    document.getElementById('drop-zone')?.classList.add('dragover');
+  });
+  document.addEventListener('dragleave', e => {
+    const z = document.getElementById('drop-zone');
+    if (z && !z.contains(e.relatedTarget)) z.classList.remove('dragover');
+  });
+  document.addEventListener('drop', e => {
+    e.preventDefault();
+    document.getElementById('drop-zone')?.classList.remove('dragover');
+    if (screen !== 'import') return;
+    const files = Array.from(e.dataTransfer.files).filter(f => /\.(csv|tsv|txt)$/i.test(f.name));
+    if (files.length) {
+      const input = document.getElementById('csv-files');
+      const dt = new DataTransfer();
+      files.forEach(f => dt.items.add(f));
+      input.files = dt.files;
+      handleMultiCSV(input);
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════
+   INIT
+   ═══════════════════════════════════════════ */
+async function init() {
+  await load();
+  initDragDrop();
+  if (!clients.length) screen = 'welcome';
+  render();
+  log('🚀 Amazon Pilot v3.1 initialisé', 'ok');
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

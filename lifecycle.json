@@ -1,0 +1,1 @@
+{"Rules":[{"ID":"delete-7-days","Status":"Enabled","Filter":{"Prefix":""},"Expiration":{"Days":7}}]}

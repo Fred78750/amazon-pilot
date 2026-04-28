@@ -1,0 +1,7 @@
+{
+  "AllowOrigins": ["https://amazon.foliow.app"],
+  "AllowMethods": ["*"],
+  "AllowHeaders": ["Content-Type", "Authorization"],
+  "AllowCredentials": false,
+  "MaxAge": 86400
+}
