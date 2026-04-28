@@ -447,7 +447,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.42';
+const APP_VERSION = '3.1.43';
 let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
 let activeId = null;
@@ -876,6 +876,13 @@ function mergeImportData(client, parsedFiles) {
   let periodType = 'weekly', periodLabel = '';
   let totalCA = 0, totalUnits = 0, totalGV = 0;
 
+  // Set des marques fabricant — calculé UNE FOIS avant la boucle
+  const clientFabBrands = new Set(
+    (client.brands || [])
+      .filter(b => b.role === 'fabricant')
+      .map(b => norm(b.name))
+  );
+
   for (const file of parsedFiles) {
     if (!file || file.error) continue;
     periodType = file.periodType || 'weekly';
@@ -1052,12 +1059,6 @@ function mergeImportData(client, parsedFiles) {
     // Évite les données "fantômes" des ASINs absents du nouveau CSV
     const fileMarket = file.market || '.fr';
     const fileDistView = file.distributorView || 'fab';
-    // Construire le set des marques fabricant — disponible pour tous les blocs (annual, ytd, hebdo)
-    const clientFabBrands = new Set(
-      (client.brands || [])
-        .filter(b => b.role === 'fabricant')
-        .map(b => norm(b.name))
-    );
     // Reset uniquement pour la vue Fabrication (vue principale)
     // La vue Approvisionnement fusionne sans reset : elle complète, ne remplace pas
     if (fileDistView !== 'appro') {
