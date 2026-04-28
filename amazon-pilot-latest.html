@@ -447,7 +447,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.44';
+const APP_VERSION = '3.1.45';
 let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
 let activeId = null;
@@ -835,7 +835,11 @@ function parseCSVFile(text, filename) {
     const itemMarket = BOUTIQUE_CODES[boutiqueCode.trim()] || market;
     const item = { asin, title: findCol(row, 'nom du produit', 'product title') || '', brand: findCol(row, 'marque', 'brand') || '', market: itemMarket, periodStart, periodEnd, periodType, distributorView };
     if (fileType === 'ventes') {
-      item.revenue = parseNum(findCol(row, 'chiffre', 'ordered revenue'));
+      // Fab : CA expédié = col "expéditions" (col[7]) — ne pas prendre "commandes" (col[3])
+      // Appro : CA expédié = col "chiffre" (unique, col[3])
+      item.revenue = distributorView === 'fab'
+        ? parseNum(findCol(row, 'expeditions', 'shipped revenue'))
+        : parseNum(findCol(row, 'chiffre', 'ordered revenue'));
       item.revenueDelta = findCol(row, 'periode anterieure') || '';
       item.revenueYoY = findCol(row, "l'annee derniere", 'annee derniere') || '';
       item.units = parseNum(findCol(row, 'unites commandees', 'ordered units', 'commandees'));
@@ -913,6 +917,9 @@ function mergeImportData(client, parsedFiles) {
         }
         if (existingFab && approExtra > 0) {
           existingFab.totalCA += approExtra;
+          existingFab.approOnlyCA = approExtra;
+          existingFab.approOnlyUnits = approExtraUnits;
+          existingFab.approOnlyCount = approCount;
           existingFab.totalUnits += approExtraUnits;
           existingFab.asinCount += approCount;
           existingFab.hasApproData = true;
@@ -957,9 +964,12 @@ function mergeImportData(client, parsedFiles) {
       client.annualData[year][file.type] = {
         periodStart: file.periodStart, periodEnd: file.periodEnd,
         totalCA: file.type === 'ventes' ? annualCA : 0,
+        fabOnlyCA: file.type === 'ventes' ? annualCA : 0,
         totalUnits: file.type === 'ventes' ? annualUnits : 0,
+        fabOnlyUnits: file.type === 'ventes' ? annualUnits : 0,
         totalGV: file.type === 'trafic' ? annualGV : 0,
         asinCount: file.data.length,
+        fabOnlyCount: file.data.length,
         asins: annualASINs,
         distributorView: fileDistViewAnn,
         importedAt: new Date().toISOString()
@@ -989,6 +999,9 @@ function mergeImportData(client, parsedFiles) {
         }
         if (existingYtdFab && approYtdExtra > 0) {
           existingYtdFab.totalCA += approYtdExtra;
+          existingYtdFab.approOnlyCA = approYtdExtra;
+          existingYtdFab.approOnlyUnits = approYtdUnits;
+          existingYtdFab.approOnlyCount = approYtdCount;
           existingYtdFab.totalUnits += approYtdUnits;
           existingYtdFab.asinCount += approYtdCount;
           existingYtdFab.hasApproData = true;
@@ -1033,9 +1046,12 @@ function mergeImportData(client, parsedFiles) {
       client.ytdData[file.type] = {
         periodStart: file.periodStart, periodEnd: file.periodEnd,
         totalCA: file.type === 'ventes' ? ytdCA : 0,
+        fabOnlyCA: file.type === 'ventes' ? ytdCA : 0,
         totalUnits: file.type === 'ventes' ? ytdUnits : 0,
+        fabOnlyUnits: file.type === 'ventes' ? ytdUnits : 0,
         totalGV: file.type === 'trafic' ? ytdGV : 0,
         asinCount: file.data.length,
+        fabOnlyCount: file.data.length,
         asins: ytdASINs,
         distributorView: fileDistViewYtd,
         importedAt: new Date().toISOString()
@@ -2743,8 +2759,11 @@ function renderImport() {
       } else if (col === 'ventesFab' || col === 'ventes') {
         ok = hasFab;
         if (ok) {
-          mainVal = fmtEur(data.totalCA || 0);
-          subVal  = fmt(data.totalUnits || 0) + ' unités · ' + data.asinCount + ' ASINs';
+          const displayCA = (data.fabOnlyCA != null) ? data.fabOnlyCA : data.totalCA;
+          const displayUnits = (data.fabOnlyUnits != null) ? data.fabOnlyUnits : data.totalUnits;
+          const displayCount = (data.fabOnlyCount != null) ? data.fabOnlyCount : data.asinCount;
+          mainVal = fmtEur(displayCA || 0);
+          subVal  = fmt(displayUnits || 0) + ' unités · ' + displayCount + ' ASINs';
           cellBg = 'var(--g-bg)'; cellBd = 'var(--g-bd)';
         } else {
           cellBg = 'var(--s2)'; cellBd = 'var(--bd)';
@@ -2757,9 +2776,8 @@ function renderImport() {
           cellIcon = '🔒'; cellLabel = 'Fab en 1er';
         } else if (hasAppro) {
           ok = true;
-          const extraCA = (data.totalCA || 0) - (data._fabOnlyCA || data.totalCA || 0);
-          mainVal = fmtEur(data.totalCA || 0);
-          subVal  = data.asinCount + ' ASINs';
+          mainVal = fmtEur(data.approOnlyCA || 0);
+          subVal  = (data.approOnlyCount || 0) + ' ASINs excl.';
           cellBg = 'var(--a-bg)'; cellBd = 'var(--a-bd,var(--a))';
         } else {
           // Fab chargé, Appro manquant
