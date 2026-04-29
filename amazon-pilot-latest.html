@@ -447,7 +447,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.52';
+const APP_VERSION = '3.1.53';
 let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
 let activeId = null;
@@ -1846,7 +1846,22 @@ function generateWeeklyActions(client) {
     });
   }
 
-  // Buy Box à risque : Retail% < 95% sur ASIN actif
+  // Buy // PO non confirmé — sortie programme 1P
+  const poUnconfirmed = asins.filter(a => {
+    const openPO = parseNum(a.openPOQty) || 0;
+    const cpct = parseNum(String(a.confirmPct || '0').replace(',', '.').replace(/[^0-9.]/g, ''));
+    return openPO > 0 && cpct < 50 && (a.revenue || 0) > 0;
+  });
+  if (poUnconfirmed.length) {
+    actions.push({
+      id: 'po-' + ts, type: 'buybox', priority: 'high', day: 'Lundi',
+      title: 'PO non confirmé — ' + poUnconfirmed.length + ' ASIN(s) risque sortie programme 1P',
+      description: 'Confirmation 0% sur commande ouverte. Amazon va réduire ses futures commandes. Confirmer dans Vendor Central : ' + poUnconfirmed.slice(0,3).map(a => (a.title||a.asin).slice(0,25)).join(', '),
+      asins: poUnconfirmed.map(a => a.asin), done: false
+    });
+  }
+
+  // Box à risque : Retail% < 95% sur ASIN actif
   const bbRisk = asins.filter(a => (a.revenue || 0) > 50 && a.retailPct && parseNum(a.retailPct) < 95 && parseNum(a.retailPct) > 0);
   if (bbRisk.length) {
     const canUse3P = client.threeP;
@@ -3106,11 +3121,17 @@ function calcBuyBoxAlerts(c) {
 
     // Cause probable (arbre de décision)
     const stockOk = a.sellableUnits == null || a.sellableUnits >= (a.units || 0);
-    const cause = isSuppressed   ? 'suppression'
-                : !stockOk       ? 'stock'
-                : isCritical     ? 'prix_3p'
-                : isDown         ? 'surveillance'
-                :                  'ok';
+    // PO non confirmé = cause racine si openPOQty > 0 et confirmPct < 50%
+    const openPOv = parseNum(a.openPOQty) || 0;
+    const cpctv = parseNum(String(a.confirmPct || '0').replace(',', '.').replace(/[^0-9.]/g, ''));
+    const isPOUnconfirmed = openPOv > 0 && cpctv < 50;
+
+    const cause = isSuppressed     ? 'suppression'
+                : isPOUnconfirmed  ? 'po_unconfirmed'
+                : !stockOk         ? 'stock'
+                : isCritical       ? 'prix_3p'
+                : isDown           ? 'surveillance'
+                :                    'ok';
 
     // Couverture stock via calcAppro (NaN-safe)
     const _apro = calcAppro(a, c, null, null);
@@ -3278,7 +3299,7 @@ function renderBuyBox() {
         <div style="width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0"></div>
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${shortTitle}</div>
-          <div style="font-size:11px;color:var(--tx2);margin-top:1px">${e.asin} · ${e.cause==='prix_3p'?'Vendeur 3P concurrent':e.cause==='stock'?'Stock faible':e.cause==='suppression'?'Éligibilité perdue':'En surveillance'} ${stockStr}</div>
+          <div style="font-size:11px;color:var(--tx2);margin-top:1px">${e.asin} · ${e.cause==='prix_3p'?'Vendeur 3P concurrent':e.cause==='stock'?'Stock faible':e.cause==='suppression'?'Éligibilité perdue':e.cause==='po_unconfirmed'?'PO non confirmé':'En surveillance'} ${stockStr}</div>
         </div>
         ${statusLabel}
         <div style="text-align:center;flex-shrink:0;width:52px">
@@ -3422,7 +3443,7 @@ function renderBBPlan(c, cas, e, asin, mkt) {
         t: 'Qui a pris ma Featured Offer ?',
         d: 'L\u2019IA analyse la fiche Amazon en direct et vous dit immédiatement qui détient la Buy Box et à quel prix.',
         ctas: [
-          { label: 'Analyser avec l\u2019IA', onclick: `copyBuyBoxChromePrompt('${asin}','${mkt||".fr"}');window.open('${amazonUrl}','_blank')`, primary: true },
+          { label: cas.iaLoading ? 'Analyse...' : (cas.iaResult ? 'Relancer' : 'Analyser avec l’IA'), onclick: "analyseBuyBoxLive('" + asin + "','" + (mkt||'.fr') + "',cl())", primary: true },
           { label: 'Voir la fiche Amazon', url: amazonUrl },
         ],
         iaField: 'concurrent',
@@ -3487,6 +3508,28 @@ function renderBBPlan(c, cas, e, asin, mkt) {
       { id:3, t: 'Ouvrir un cas Vendor Support en urgence', d: 'Si tout est conforme et la fiche reste invisible.',
         ctas: [{ label: 'Ouvrir un cas Support VC', url: vcLinks.support, primary: true }] },
     ],
+    po_unconfirmed: [
+      { id:0,
+        t: 'Confirmer le PO en urgence dans Vendor Central',
+        d: 'Amazon a émis une commande — taux de confirmation = 0%. Sans confirmation, Amazon réduit ses futures commandes.',
+        ctas: [{ label: 'Ouvrir les POs dans VC', url: 'https://vendor.amazon.fr/orders/purchaseOrders', primary: true }]
+      },
+      { id:1,
+        t: 'Identifier pourquoi la confirmation est à 0%',
+        d: 'Problème EDI ? Délai trop court ? Rupture chez le fournisseur ? Identifier la cause avant de confirmer.',
+        ctas: []
+      },
+      { id:2,
+        t: 'Contacter votre Account Manager Amazon',
+        d: 'Si le PO est bloqué administrativement, votre AM peut débloquer rapidement.',
+        ctas: [{ label: 'Support Vendor Central', url: 'https://vendor.amazon.fr/support' }]
+      },
+      { id:3,
+        t: 'Surveiller la Buy Box après confirmation',
+        d: 'Dès le stock Amazon reconstitué, la Featured Offer revient sous 48-72h.',
+        ctas: []
+      },
+    ],
     surveillance: [
       { id:0, t: 'Ouvrir la fiche Amazon et observer', d: 'Y a-t-il un nouveau vendeur tiers ? Le prix est-il toujours compétitif ?',
         ctas: [{ label: 'Voir la fiche Amazon', url: amazonUrl, primary: true }] },
@@ -3509,8 +3552,38 @@ function renderBBPlan(c, cas, e, asin, mkt) {
       <div style="padding:8px 0">${sparkline}${corrBlock}</div>
     </div>`;
 
+  // Alerte PO non confirme
+  const openPOdisp = parseNum((asinData && asinData.openPOQty) || 0);
+  const cpctDisp = parseNum(String((asinData && asinData.confirmPct) || '0').replace(',','.').replace(/[^0-9.]/g,''));
+  const poAlert = (e.cause === 'po_unconfirmed' || (openPOdisp > 0 && cpctDisp < 50))
+    ? '<div class="alr alr-r" style="margin-bottom:10px;font-size:12px">'
+      + '<strong>PO non confirmé</strong> — Amazon a commandé <strong>' + openPOdisp + ' unités</strong>'
+      + ' · Confirmation : <strong>' + cpctDisp.toFixed(0) + '%</strong><br>'
+      + 'Sans confirmation, Amazon réduit ses commandes futures et peut sortir cet ASIN du programme 1P.'
+      + '<a href="https://vendor.amazon.fr/orders/purchaseOrders" target="_blank" style="display:inline-block;margin-top:6px;font-size:11px;font-weight:500;padding:4px 10px;border-radius:var(--rd);background:#e24b4a;color:#fff;text-decoration:none">Confirmer le PO dans VC →</a>'
+      + '</div>'
+    : '';
+
   if (suggBlock) h += suggBlock;
+  if (poAlert) h += poAlert;
   if (stockAlert) h += stockAlert;
+
+  // Resultat IA
+  if (cas.iaLoading) {
+    h += '<div class="alr alr-b" style="font-size:12px;margin-bottom:10px">Analyse IA en cours…</div>';
+  } else if (cas.iaResult) {
+    const r = cas.iaResult;
+    h += '<div class="cd" style="margin-bottom:12px;border-left:3px solid #e24b4a;border-radius:0 var(--rd) var(--rd) 0">'
+      + '<div class="cd-t">Résultat analyse IA</div>'
+      + '<div style="font-size:12px;padding:6px 0;line-height:1.7">'
+      + (r.vendeurBB ? '<div><strong>Featured Offer :</strong> ' + esc(r.vendeurBB) + (r.isPrime ? ' · Prime' : '') + '</div>' : '')
+      + (r.prixBB ? '<div><strong>Prix Buy Box :</strong> ' + esc(r.prixBB) + '</div>' : '')
+      + (r.ecartPrix ? '<div><strong>Écart vs fournisseur :</strong> ' + esc(r.ecartPrix) + '</div>' : '')
+      + (r.autresOffres ? '<div style="color:var(--tx2);margin-top:2px">' + esc(r.autresOffres) + '</div>' : '')
+      + (r.causeProb ? '<div style="margin-top:6px;padding:6px 8px;background:var(--or-bg,#fff8ee);border-radius:var(--rd);"><strong>Cause :</strong> ' + esc(r.causeProb) + '</div>' : '')
+      + (r.actionReco ? '<div style="margin-top:4px;padding:6px 8px;background:#eaf3de;border-radius:var(--rd);color:#3b6d11"><strong>Action :</strong> ' + esc(r.actionReco) + '</div>' : '')
+      + '</div></div>';
+  }
 
   // Résultat IA si disponible
   if (iaResult) {
@@ -3707,6 +3780,62 @@ function renderBBBilan(c, cas, e, asin) {
   }
 
   return h;
+}
+
+function analyseBuyBoxLive(asin, market, c) {
+  const asinData = c && c.asins ? c.asins.find(a => a.asin === asin) : null;
+  const units = (asinData && (asinData.units || asinData.shippedUnits)) || 0;
+  const revenue = (asinData && (asinData.revenue || asinData.shippedRevenue)) || 0;
+  const prixHTCogex = units > 0 ? Math.round((revenue / units / 1.2) * 100) / 100 : null;
+  const openPOQ = parseNum((asinData && asinData.openPOQty) || 0);
+  const cpct = parseNum(String((asinData && asinData.confirmPct) || '0').replace(',', '.').replace(/[^0-9.]/g, ''));
+  const cas = bbGetCase(c, asin);
+  if (cas) { cas.iaLoading = true; save(); render(); }
+  const amazonUrl = 'https://www.amazon' + (market || '.fr') + '/dp/' + asin;
+  const prixCtx = prixHTCogex
+    ? ' Prix de vente moyen HT fournisseur = ' + prixHTCogex.toFixed(2) + ' EUR (' + units + ' unites a ' + (revenue/units).toFixed(2) + ' EUR TTC).'
+    : '';
+  const poCtx = openPOQ > 0 && cpct < 50
+    ? ' PO ouvert de ' + openPOQ + ' unites avec confirmation = ' + cpct + '% : cela explique probablement la perte de Buy Box.'
+    : '';
+  fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      messages: [{ role: 'user', content:
+        'Analyse cette fiche Amazon et reponds en JSON uniquement sans markdown : ' + amazonUrl +
+        prixCtx + poCtx +
+        ' JSON avec ces champs : {"vendeurBB":"nom vendeur Featured Offer","prixBB":"prix TTC en euros","isPrime":true/false,"autresOffres":"autres vendeurs et prix","stockStatus":"statut stock","ecartPrix":"comparaison prix BB vs fournisseur","causeProb":"cause perte Buy Box en 1 phrase","actionReco":"action recommandee en 1 phrase"}'
+      }]
+    })
+  })
+  .then(r => r.json())
+  .then(data => {
+    const c2 = cl(); const cas2 = bbGetCase(c2, asin);
+    if (!cas2) return;
+    cas2.iaLoading = false;
+    const tb = data.content && data.content.find(b => b.type === 'text');
+    if (tb && tb.text) {
+      try {
+        const clean = tb.text.replace(/```json|```/g, '').trim();
+        cas2.iaResult = JSON.parse(clean);
+      } catch(e) {
+        cas2.iaResult = { causeProb: tb.text.slice(0, 300), actionReco: 'Voir note' };
+      }
+    } else {
+      cas2.iaResult = { causeProb: 'Analyse indisponible', actionReco: 'Verifier la connexion' };
+    }
+    save(); render();
+    showToast('Analyse terminée', 'alr-g');
+  })
+  .catch(err => {
+    const c2 = cl(); const cas2 = bbGetCase(c2, asin);
+    if (cas2) { cas2.iaLoading = false; save(); render(); }
+    showToast('Erreur IA : ' + err.message, 'alr-r');
+  });
 }
 
 function copyBuyBoxChromePrompt(asin, market) {
