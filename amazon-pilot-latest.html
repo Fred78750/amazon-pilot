@@ -447,7 +447,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.53';
+const APP_VERSION = '3.1.54';
 let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
 let activeId = null;
@@ -734,6 +734,7 @@ function detectFileType(headers) {
   if (h.includes('vues') || h.includes('glance') || h.includes('offre vedette')) return 'trafic';
   if (h.includes('stock') || h.includes('rupture') || h.includes('vendable') || h.includes('invendable')
     || h.includes('sellable') || h.includes('unsellable') || h.includes('inventory') || h.includes('fill rate') || h.includes('purchase order')) return 'stock';
+  if (h.includes('bdc') || h.includes('quantite demandee') || h.includes('quantite acceptee') || h.includes('purchase order number') || h.includes('code fournisseur')) return 'po';
   return 'unknown';
 }
 
@@ -1846,8 +1847,10 @@ function generateWeeklyActions(client) {
     });
   }
 
-  // Buy // PO non confirmé — sortie programme 1P
+  // Buy // PO — fill rate faible ou fin de série (basé sur CSV PO importé)
   const poUnconfirmed = asins.filter(a => {
+    const po = getPOData(client, a.asin);
+    if (po) return (po.fillRate < 80 || po.isPermanentOOS || po.isDiscontinued) && (a.revenue || 0) > 0;
     const openPO = parseNum(a.openPOQty) || 0;
     const cpct = parseNum(String(a.confirmPct || '0').replace(',', '.').replace(/[^0-9.]/g, ''));
     return openPO > 0 && cpct < 50 && (a.revenue || 0) > 0;
@@ -2639,6 +2642,24 @@ function renderOnboarding() {
       <p style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:2px">Déposez vos fichiers CSV historiques</p>
       <p style="font-size:11px;color:var(--tx3)">Annuels 2024 · Annuels 2025 · YTD 2026 — Ventes, Trafic et/ou Stock</p>
       <input type="file" id="hist-files" accept=".csv,.tsv,.txt" multiple onchange="handleHistCSV(this)" style="display:none"/>
+    </div>`;
+
+    // Zone PO
+    const poImportDate = c.poImportDate ? new Date(c.poImportDate).toLocaleDateString('fr-FR') : null;
+    const poCount = c.poData ? Object.keys(c.poData).length : 0;
+    const poLowFill = c.poData ? Object.values(c.poData).filter(d => d.fillRate < 80).length : 0;
+    const poDiscontinued = c.poData ? Object.values(c.poData).filter(d => d.isDiscontinued).length : 0;
+    h += `<div class="cd" style="margin-top:12px">
+      <div class="cd-t space">
+        <span>1.5 — Purchase Orders <span style="font-size:11px;color:var(--tx3);font-weight:400">optionnel</span></span>
+        ${poImportDate ? `<span style="font-size:11px;color:var(--g,#3b6d11)">✓ Importé le ${poImportDate} · ${poCount} ASINs · ${poLowFill} fill rate < 80%</span>` : ''}
+      </div>
+      <p style="font-size:12px;color:var(--tx2);margin-bottom:10px">Fichier POItemExport depuis VC → Commandes. Calcule le fill rate réel et détecte les fins de série.</p>
+      <div id="po-drop-zone" class="drop-zone" style="cursor:pointer;padding:12px" onclick="document.getElementById('po-file-input').click()">
+        <p style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:2px">${poImportDate ? 'Remplacer le fichier PO' : 'Déposez le fichier PO'}</p>
+        <p style="font-size:11px;color:var(--tx3)">POItemExport_YYYY-MM-DD.csv — export Vendor Central</p>
+        <input type="file" id="po-file-input" accept=".csv" style="display:none" onchange="handlePOImport(this.files)">
+      </div>
     </div>`;
 
     // ── Statut des 3 périodes ──
@@ -3552,15 +3573,25 @@ function renderBBPlan(c, cas, e, asin, mkt) {
       <div style="padding:8px 0">${sparkline}${corrBlock}</div>
     </div>`;
 
+  // Données PO réelles (CSV PO importé)
+  const poD = getPOData(c, asin);
   // Alerte PO non confirme
   const openPOdisp = parseNum((asinData && asinData.openPOQty) || 0);
   const cpctDisp = parseNum(String((asinData && asinData.confirmPct) || '0').replace(',','.').replace(/[^0-9.]/g,''));
-  const poAlert = (e.cause === 'po_unconfirmed' || (openPOdisp > 0 && cpctDisp < 50))
+  const poAlert = poD && (poD.fillRate < 80 || poD.isPermanentOOS || poD.isDiscontinued)
+    ? '<div class="alr ' + (poD.isPermanentOOS || poD.isDiscontinued ? 'alr-r' : 'alr-a') + '" style="margin-bottom:10px;font-size:12px">'
+      + (poD.isDiscontinued ? '<strong>Fin de série (CP)</strong> — ' : poD.isPermanentOOS ? '<strong>Rupture permanente (CK)</strong> — ' : '<strong>Fill rate faible</strong> — ')
+      + 'Fill rate : <strong>' + poD.fillRate + '%</strong>'
+      + ' · ' + poD.totalAccepted + '/' + poD.totalAsked + ' unités acceptées'
+      + (poD.refusCount > 0 ? ' · ' + poD.refusCount + ' refus | Dernier : ' + poD.lastCancelReason.slice(0,40) : '')
+      + '<br><a href="https://vendor.amazon.fr/orders/purchaseOrders" target="_blank" style="display:inline-block;margin-top:6px;font-size:11px;font-weight:500;padding:4px 10px;border-radius:var(--rd);background:#e24b4a;color:#fff;text-decoration:none">Voir POs dans VC →</a>'
+      + '</div>'
+    : (e.cause === 'po_unconfirmed' || (openPOdisp > 0 && cpctDisp < 50))
     ? '<div class="alr alr-r" style="margin-bottom:10px;font-size:12px">'
       + '<strong>PO non confirmé</strong> — Amazon a commandé <strong>' + openPOdisp + ' unités</strong>'
       + ' · Confirmation : <strong>' + cpctDisp.toFixed(0) + '%</strong><br>'
-      + 'Sans confirmation, Amazon réduit ses commandes futures et peut sortir cet ASIN du programme 1P.'
-      + '<a href="https://vendor.amazon.fr/orders/purchaseOrders" target="_blank" style="display:inline-block;margin-top:6px;font-size:11px;font-weight:500;padding:4px 10px;border-radius:var(--rd);background:#e24b4a;color:#fff;text-decoration:none">Confirmer le PO dans VC →</a>'
+      + 'Confirmer dans Vendor Central.'
+      + '<a href="https://vendor.amazon.fr/orders/purchaseOrders" target="_blank" style="display:inline-block;margin-top:6px;font-size:11px;font-weight:500;padding:4px 10px;border-radius:var(--rd);background:#e24b4a;color:#fff;text-decoration:none">POs VC →</a>'
       + '</div>'
     : '';
 
@@ -9655,6 +9686,119 @@ function handleBannerCSV(input) {
   input.value = '';
 }
 
+// ═══════════════════════════════════════════════════════════════
+// IMPORT CSV PURCHASE ORDERS
+// ═══════════════════════════════════════════════════════════════
+function handlePOImport(files) {
+  const c = cl();
+  if (!c) return;
+  let done = 0;
+  const results = [];
+  Array.from(files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = evt => {
+      const text = evt.target.result;
+      const parsed = parsePOCSV(text, file.name);
+      results.push(parsed);
+      done++;
+      if (done === files.length) {
+        mergePOData(c, results);
+        save();
+        render();
+        log('✓ Import PO terminé : ' + parsed.rows.length + ' lignes', 'ok');
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  });
+}
+
+function parsePOCSV(text, filename) {
+  const lines = text.split('\n');
+  const headers = lines[0].split(',').map(h => h.trim().replace(/["\r]/g,''));  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    // Gestion des guillemets dans les valeurs CSV
+    const cols = [];
+    let inQ = false, cur = '';
+    for (const ch of line + ',') {
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+      else cur += ch;
+    }
+    if (cols.length < 5) continue;
+    const row = {};
+    headers.forEach((h, idx) => { row[h] = cols[idx] || ''; });
+    if (row['ASIN']) rows.push(row);
+  }
+  return { filename, rows };
+}
+
+function mergePOData(c, parsedResults) {
+  if (!c.poData) c.poData = {};
+  // Effacer l'ancien jeu de données PO (ce fichier fait foi)
+  c.poData = {};
+  c.poImportDate = new Date().toISOString();
+
+  const poByAsin = {};
+  for (const { rows } of parsedResults) {
+    for (const r of rows) {
+      const asin = r['ASIN'];
+      if (!asin || !asin.startsWith('B')) continue;
+      if (!poByAsin[asin]) {
+        poByAsin[asin] = {
+          asin,
+          title: r['Nom du produit'] || '',
+          totalAsked: 0, totalAccepted: 0, totalCancelled: 0, totalRemaining: 0,
+          refusCount: 0, lastCancelReason: '', lastCancelDate: '',
+          isDiscontinued: false, isPermanentOOS: false, hasInfoError: false,
+          orders: []
+        };
+      }
+      const d = poByAsin[asin];
+      const asked    = parseFloat(r['Quantité demandée']    || '0') || 0;
+      const accepted = parseFloat(r['Quantité acceptée']   || '0') || 0;
+      const cancelled= parseFloat(r['Quantité annulée']    || '0') || 0;
+      const remaining= parseFloat(r['Quantité restante']  || '0') || 0;
+      const dispo    = r['Disponibilité'] || '';
+      const date     = r['Date de la commande'] || '';
+      d.totalAsked     += asked;
+      d.totalAccepted  += accepted;
+      d.totalCancelled += cancelled;
+      d.totalRemaining += remaining;
+      if (accepted === 0 && asked > 0) {
+        d.refusCount++;
+        d.lastCancelReason = dispo;
+        d.lastCancelDate   = date;
+      }
+      if (dispo.includes('CP')) d.isDiscontinued = true;
+      if (dispo.includes('CK')) d.isPermanentOOS = true;
+      if (dispo.includes('R2')) d.hasInfoError = true;
+      d.orders.push({ bdc: r['BdC'] || '', date, statut: r['Statut'] || '', asked, accepted, remaining, dispo, cout: r['Coût'] || '' });
+    }
+  }
+
+  for (const [asin, d] of Object.entries(poByAsin)) {
+    d.fillRate = d.totalAsked > 0 ? Math.round((d.totalAccepted / d.totalAsked) * 100) : 100;
+    c.poData[asin] = d;
+  }
+
+  const total = Object.keys(poByAsin).length;
+  const lowFill = Object.values(poByAsin).filter(d => d.fillRate < 80).length;
+  const discontinued = Object.values(poByAsin).filter(d => d.isDiscontinued).length;
+  log('✓ PO importé : ' + total + ' ASINs | ' + lowFill + ' fill rate < 80% | ' + discontinued + ' fin de série', 'ok');
+}
+
+function getPOData(c, asin) {
+  return c && c.poData && c.poData[asin] ? c.poData[asin] : null;
+}
+
+function formatFillRate(fillRate) {
+  if (fillRate === null || fillRate === undefined) return null;
+  if (fillRate >= 90) return { label: fillRate + '%', cls: 'g' };
+  if (fillRate >= 70) return { label: fillRate + '%', cls: 'a' };
+  return { label: fillRate + '%', cls: 'r' };
+}
+
 function handleHistCSVImport(input) {
   // Import historique depuis l'écran Import (client déjà créé)
   // IMPORTANT : attendre que TOUS les fichiers soient parsés avant de merger
@@ -9962,7 +10106,12 @@ function initDragDrop() {
         // Drop sur la zone historique
         const input = document.getElementById('hist-files-import');
         if (input) { input.files = dt.files; handleHistCSVImport(input); }
-      } else {
+    } else if (screen === 'import' && e.target.closest('#po-drop-zone')) {
+      const dt2 = new DataTransfer();
+      files.forEach(f => dt2.items.add(f));
+      const poInput = document.getElementById('po-file-input');
+      if (poInput) { poInput.files = dt2.files; handlePOImport(poInput.files); }
+    } else {
         // Drop sur la zone hebdomadaire (ou ailleurs dans l'écran)
         const input = document.getElementById('csv-files');
         if (input) { input.files = dt.files; handleMultiCSV(input); }
