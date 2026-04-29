@@ -447,7 +447,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.48';
+const APP_VERSION = '3.1.50';
 let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
 let activeId = null;
@@ -488,6 +488,7 @@ const NAV = [
   { id: 'agent',     icon: '🤖', label: 'Agent Import' },
   { id: 'asins',     icon: '📦', label: 'Analyse ASINs' },
   { id: 'pompier',   icon: '🚨', label: 'Diagnostic CA' },
+  { id: 'buybox',    icon: '🏆', label: 'Buy Box', badgeFn: function(c) { return c ? calcBuyBoxAlerts(c).critical.length : 0; } },
   { id: 'potentiel', icon: '🚀', label: 'ASINs Potentiel' },
   { id: 'appros',    icon: '🚢', label: 'Appros' },
   { id: 'forecast',   icon: '📅', label: 'Prévisionnel' },
@@ -2442,6 +2443,9 @@ function render() {
 function renderNav() {
   const c = cl();
   const alertCount = c ? c.asins?.filter(a => (a.revenue || 0) > 0 && parseNum(a.revenueDelta) < -15).length : 0;
+  // Badge Buy Box : ASINs avec Retail% en baisse ou critique
+  const _bbAlerts = c ? calcBuyBoxAlerts(c) : { critical: [], warning: [], suppressed: [] };
+  const bbBadgeCount = _bbAlerts.critical.length + _bbAlerts.suppressed.length;
   // Badge backup sur Config si pas de backup depuis >7 jours
   const lastExportISO = localStorage.getItem('ap-last-export');
   const backupDays = lastExportISO ? Math.floor((Date.now() - new Date(lastExportISO)) / 86400000) : 999;
@@ -2501,7 +2505,7 @@ function renderContent() {
   const map = {
     welcome: renderWelcome, onboarding: renderOnboarding, import: renderImport,
     dashboard: renderDashboard, fiche: renderFiche, asins: renderAsins,
-    pompier: renderPompier, config: renderConfig, weekly: renderWeeklyReview,
+    pompier: renderPompier, buybox: renderBuyBox, config: renderConfig, weekly: renderWeeklyReview,
     appros: renderAppros, forecast: renderApprosForecast, agent: renderAgent, potentiel: renderPotentiel,
     seo: renderSEOScreen
   };
@@ -3074,6 +3078,320 @@ function renderImport() {
   h += `</div>`;
   return h;
 }
+
+// ══════════════════════════════════════════════════════════════════
+// MODULE BUY BOX — Surveillance & Plan d'action
+// ══════════════════════════════════════════════════════════════════
+
+function calcBuyBoxAlerts(c) {
+  if (!c?.asins?.length) return { critical: [], warning: [], suppressed: [] };
+  const critical   = []; // Retail% < 80%
+  const warning    = []; // Retail% < 100% ou en baisse vs S-1
+  const suppressed = []; // Retail% = 0% sur ≥2 semaines consécutives
+
+  for (const a of c.asins) {
+    if (!(a.revenue > 0) && !(a.retailPct)) continue;
+    const rPct = parseNum(a.retailPct);
+    if (!rPct && rPct !== 0) continue;
+
+    // Vérifier historique pour détecter baisse vs S-1 et 0% chronique
+    const hist = a.history || [];
+    const prevRetail = hist.length >= 1 ? parseNum(hist[hist.length - 1].retailPct) : null;
+    const zeroWeeks = hist.filter(h => parseNum(h.retailPct) === 0).length + (rPct === 0 ? 1 : 0);
+
+    const delta = prevRetail !== null ? rPct - prevRetail : null;
+    const isDown = delta !== null && delta < 0;
+    const isCritical = rPct < 80 && rPct > 0;
+    const isSuppressed = rPct === 0 && zeroWeeks >= 2;
+
+    // Cause probable (arbre de décision)
+    const stockOk = a.sellableUnits == null || a.sellableUnits >= (a.units || 0);
+    const cause = isSuppressed   ? 'suppression'
+                : !stockOk       ? 'stock'
+                : isCritical     ? 'prix_3p'
+                : isDown         ? 'surveillance'
+                :                  'ok';
+
+    const entry = { asin: a.asin, title: a.title, brand: a.brand, rPct, prevRetail, delta, cause, zeroWeeks, revenue: a.revenue, segment: calcSegment(a, c.asins.reduce((s,x)=>s+(x.revenue||0),0)), sellableUnits: a.sellableUnits };
+
+    if (isSuppressed)                          suppressed.push(entry);
+    else if (isCritical)                       critical.push(entry);
+    else if (isDown || (rPct > 0 && rPct < 100)) warning.push(entry);
+  }
+
+  // Trier par impact CA décroissant
+  const byCA = (a, b) => (b.revenue || 0) - (a.revenue || 0);
+  critical.sort(byCA); warning.sort(byCA); suppressed.sort(byCA);
+  return { critical, warning, suppressed };
+}
+
+function renderBuyBox() {
+  const c = cl();
+  if (!c) return renderWelcome();
+  if (!c.asins?.length) return `<div class="alr alr-a">Importez d'abord des données CSV.</div>`;
+
+  const { critical, warning, suppressed } = calcBuyBoxAlerts(c);
+  const total = critical.length + warning.length + suppressed.length;
+
+  // Filtre actif
+  const bbFilter = window._bbFilter || 'all';
+
+  let h = `<div style="max-width:960px">`;
+
+  // ── En-tête ────────────────────────────────────────────────────
+  h += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+    <div>
+      <h2 style="font-size:18px;font-weight:700;margin:0">🏆 Surveillance Buy Box</h2>
+      <p style="color:var(--tx2);font-size:12px;margin:4px 0 0">Détection hebdomadaire via Retail% — mise à jour à chaque import CSV</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm${bbFilter==='all'?' btn-p':''}" onclick="window._bbFilter='all';render()">Tous (${total})</button>
+      <button class="btn btn-sm${bbFilter==='critical'?' btn-r':''}" style="${critical.length?'':'opacity:.5'}" onclick="window._bbFilter='critical';render()">🔴 Critique (${critical.length})</button>
+      <button class="btn btn-sm${bbFilter==='warning'?' btn-a':''}" style="${warning.length?'':'opacity:.5'}" onclick="window._bbFilter='warning';render()">🟡 Surveillance (${warning.length})</button>
+      <button class="btn btn-sm${bbFilter==='suppressed'?'':''}${suppressed.length?' btn-r':''}" style="${suppressed.length?'':'opacity:.5'}" onclick="window._bbFilter='suppressed';render()">💀 Fiche à risque (${suppressed.length})</button>
+    </div>
+  </div>`;
+
+  if (total === 0) {
+    h += `<div class="alr alr-g" style="font-size:14px">✅ Aucun problème Buy Box détecté cette semaine — toutes les Featured Offers sont stables.</div>`;
+    h += `</div>`;
+    return h;
+  }
+
+  // ── Encart pédagogique ─────────────────────────────────────────
+  h += `<div class="alr alr-b" style="margin-bottom:16px;font-size:12px">
+    <b>Comment lire ce tableau</b> · Retail% = part des Glance Views où Amazon détenait la Featured Offer.
+    <b>🔴 Critique</b> = Retail% &lt; 80% (vendeur 3P probablement plus compétitif).
+    <b>🟡 Surveillance</b> = baisse détectée vs semaine précédente.
+    <b>💀 Fiche à risque</b> = Retail% = 0% depuis ≥2 semaines (éligibilité perdue ?).
+    Cause probable calculée depuis stock + historique — confirmez via bouton "Analyser sur Amazon".
+  </div>`;
+
+  // ── Tableau ────────────────────────────────────────────────────
+  const toShow = bbFilter === 'critical' ? critical
+               : bbFilter === 'warning'  ? warning
+               : bbFilter === 'suppressed' ? suppressed
+               : [...suppressed, ...critical, ...warning];
+
+  h += `<div class="cd" style="padding:0;overflow:hidden">`;
+  h += `<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead>
+      <tr style="background:var(--s2);border-bottom:1px solid var(--bd)">
+        <th style="padding:10px 12px;text-align:left;font-weight:600">Produit</th>
+        <th style="padding:10px 8px;text-align:center;font-weight:600">Retail% S</th>
+        <th style="padding:10px 8px;text-align:center;font-weight:600">Retail% S-1</th>
+        <th style="padding:10px 8px;text-align:center;font-weight:600">Δ</th>
+        <th style="padding:10px 8px;text-align:center;font-weight:600">Cause probable</th>
+        <th style="padding:10px 8px;text-align:center;font-weight:600">Stock</th>
+        <th style="padding:10px 8px;text-align:left;font-weight:600">CA semaine</th>
+        <th style="padding:10px 8px;text-align:center;font-weight:600">Action</th>
+      </tr>
+    </thead><tbody>`;
+
+  for (const e of toShow) {
+    const statusColor = suppressed.includes(e) ? 'var(--r)' : critical.includes(e) ? 'var(--r)' : 'var(--or)';
+    const statusIcon  = suppressed.includes(e) ? '💀' : critical.includes(e) ? '🔴' : '🟡';
+    const deltaStr    = e.delta !== null ? (e.delta > 0 ? '+' : '') + e.delta.toFixed(0) + 'pts' : '—';
+    const deltaColor  = e.delta === null ? 'var(--tx3)' : e.delta < 0 ? 'var(--r)' : 'var(--g)';
+    const causeLabel  = { stock: '📦 Stock faible', prix_3p: '🏷️ Prix / 3P concurrent', surveillance: '👁 À surveiller', suppression: '💀 Éligibilité perdue', ok: '✅ OK' }[e.cause] || '—';
+    const shortTitle  = (e.title || e.asin).slice(0, 45) + ((e.title || '').length > 45 ? '…' : '');
+    const mkt = c.mainMarket || '.fr';
+
+    h += `<tr style="border-bottom:1px solid var(--bd);cursor:pointer" onclick="renderBuyBoxDetail('${esc(e.asin)}')">
+      <td style="padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:14px">${statusIcon}</span>
+          <div>
+            <div style="font-weight:600;font-size:11px">${esc(shortTitle)}</div>
+            <div style="color:var(--tx3);font-size:10px">${e.asin} · Seg. ${e.segment}</div>
+          </div>
+        </div>
+      </td>
+      <td style="padding:10px 8px;text-align:center;font-weight:700;color:${statusColor}">${e.rPct.toFixed(0)}%</td>
+      <td style="padding:10px 8px;text-align:center;color:var(--tx2)">${e.prevRetail !== null ? e.prevRetail.toFixed(0) + '%' : '—'}</td>
+      <td style="padding:10px 8px;text-align:center;font-weight:600;color:${deltaColor}">${deltaStr}</td>
+      <td style="padding:10px 8px;text-align:center">${causeLabel}</td>
+      <td style="padding:10px 8px;text-align:center">
+        ${e.couvertureSem !== null && e.couvertureSem !== '—'
+          ? `<span style="font-size:11px;font-weight:600;color:${e.stockUrgent?'var(--r)':Number(e.couvertureSem)<6?'var(--or)':'var(--g)'}">${Number(e.couvertureSem).toFixed(1)}sem</span>`
+          : '<span style="color:var(--tx3);font-size:10px">—</span>'}
+      </td>
+      <td style="padding:10px 8px;font-weight:600">${fmtEur(e.revenue || 0)}</td>
+      <td style="padding:10px 8px;text-align:center">
+        <button class="btn btn-sm" onclick="event.stopPropagation();openAmazonProduct('${e.asin}','${mkt}')" title="Analyser sur Amazon">🔍</button>
+      </td>
+    </tr>`;
+  }
+
+  h += `</tbody></table></div>`;
+
+  // ── Panneau plan d'action (si ASIN sélectionné) ────────────────
+  h += `<div id="bb-detail-panel"></div>`;
+
+  h += `</div>`;
+  return h;
+}
+
+function renderBuyBoxDetail(asin) {
+  const c = cl();
+  if (!c) return;
+  const a = c.asins.find(x => x.asin === asin);
+  if (!a) return;
+  const { critical, warning, suppressed } = calcBuyBoxAlerts(c);
+  const allEntries = [...suppressed, ...critical, ...warning];
+  const e = allEntries.find(x => x.asin === asin);
+  if (!e) return;
+
+  const mkt = c.mainMarket || '.fr';
+  const productUrl = getAmazonProductUrl(asin, mkt);
+
+  // Plan d'action selon cause
+  const plans = {
+    stock: {
+      title: '📦 Cause probable : Stock faible ou rupture',
+      steps: [
+        '1. Vérifier le stock vendable dans Vendor Central (Inventory Health)',
+        '2. Passer une commande de réapprovisionnement si stock < 21 jours',
+        '3. Aller dans <b>Appros</b> pour voir la couverture prévisionnelle',
+        '4. Contacter Amazon pour accélérer un PO en attente si existant',
+      ],
+      email: 'stock'
+    },
+    prix_3p: {
+      title: '🏷️ Cause probable : Vendeur 3P concurrent plus compétitif',
+      steps: [
+        '1. Ouvrir la fiche sur Amazon et identifier qui détient la Buy Box',
+        '2. Comparer le prix total livré (prix + frais port) avec le concurrent',
+        '3. Vérifier <b>Pricing Health</b> dans Vendor Central → Competitive External Price',
+        '4. Si prix Amazon > prix 3P : négocier le Prix Net Facturé ou lancer coupon',
+        '5. Si 3P parasite : vérifier les droits de distribution — Brand Registry',
+      ],
+      email: 'buybox'
+    },
+    suppression: {
+      title: '💀 Alerte : Fiche possiblement supprimée ou éligibilité perdue',
+      steps: [
+        '1. Ouvrir la fiche sur Amazon — vérifier si le produit est encore visible',
+        '2. Vérifier dans Vendor Central > Catalogue > Gérer le catalogue',
+        '3. Contrôler <b>Account Health</b> pour toute violation de politique',
+        '4. Vérifier <b>Pricing Health</b> : prix trop haut ou trop bas ?',
+        '5. Si le produit est invisible : ouvrir un cas Vendor Support en URGENCE',
+      ],
+      email: 'suppress'
+    },
+    surveillance: {
+      title: '👁 Surveillance : Baisse Retail% détectée — cause non déterminée',
+      steps: [
+        '1. Surveiller l’évolution la semaine prochaine avant action',
+        '2. Ouvrir la fiche sur Amazon pour vérifier l’offre visible',
+        '3. Contrôler le stock disponible',
+        '4. Vérifier s’il y a un nouveau concurrent 3P sur cette fiche',
+      ],
+      email: 'buybox'
+    }
+  };
+
+  const plan = plans[e.cause] || plans['surveillance'];
+
+  // Graphique sparkline inline SVG
+  const maxR = Math.max(...chartData.map(d => d.rPct), 100);
+  const svgW = 320, svgH = 60, pad = 4;
+  const xStep = chartData.length > 1 ? (svgW - 2*pad) / (chartData.length - 1) : 0;
+  const yScale = v => svgH - pad - (v / maxR) * (svgH - 2*pad);
+  const pts = chartData.map((d, i) => `${pad + i * xStep},${yScale(d.rPct)}`).join(' ');
+  const sparkline = chartData.length >= 2
+    ? `<svg width="${svgW}" height="${svgH}" style="overflow:visible">
+        <polyline points="${pts}" fill="none" stroke="var(--b)" stroke-width="2" stroke-linejoin="round"/>
+        ${chartData.map((d, i) => `<circle cx="${pad + i * xStep}" cy="${yScale(d.rPct)}" r="3" fill="${d.rPct < 80 ? 'var(--r)' : d.rPct < 95 ? 'var(--or)' : 'var(--g)'}"/>`).join('')}
+        <line x1="0" y1="${yScale(95)}" x2="${svgW}" y2="${yScale(95)}" stroke="var(--g)" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>
+        <text x="${svgW+2}" y="${yScale(95)+4}" font-size="9" fill="var(--g)" opacity="0.7">95%</text>
+      </svg>`
+    : '<span style="color:var(--tx3);font-size:11px">Historique insuffisant</span>';
+
+  // Bloc lien Appros si cause = stock
+  const approsLink = (e.cause === 'stock' || e.stockUrgent)
+    ? `<div class="alr alr-r" style="margin-bottom:12px;font-size:12px">
+        🔗 <b>Lien Buy Box ↔ Approvisionnement</b> — ${
+          e.couvertureSem !== null && e.couvertureSem !== '—'
+            ? `Couverture Amazon : <b>${Number(e.couvertureSem).toFixed(1)} semaines</b>${e.stockUrgent ? ' ⚠️ RUPTURE IMMINENTE' : ''}`
+            : 'Couverture non calculée — importez le stock'
+        }${e.joursAvantLimite !== null ? ` · Limite commande dans <b>${e.joursAvantLimite}j</b>` : ''}
+        <br><button class="btn btn-r btn-sm" style="margin-top:6px" onclick="window._approsAsin='${asin}';go('appros')">🚢 Voir Appros pour cet ASIN →</button>
+      </div>`
+    : '';
+
+  // Corrélation
+  const correlationBlock = correlation
+    ? `<div style="font-size:11px;color:var(--tx2);margin-top:6px">
+        📊 Corrélation calculée sur ${correlation.n} semaines :
+        chaque point de Retail% perdu = environ <b>${fmtEur(Math.abs(correlation.slope))}</b> de CA hebdomadaire
+        ${correlation.slope > 0 ? '(impact confirmé)' : '(corrélation faible)'}
+      </div>`
+    : '';
+
+  let h = `<div class="cd" style="margin-top:16px">
+    <div class="cd-t space">
+      <span>Plan d'action — ${esc((a.title||asin).slice(0,50))}${(a.title||'').length>50?'…':''}</span>
+      <span style="font-size:11px;color:var(--tx3)">${asin} · Retail% ${e.rPct.toFixed(0)}%${e.delta!==null?' ('+( e.delta>0?'+':'')+e.delta.toFixed(0)+'pts vs S-1)':''}</span>
+    </div>
+
+    <div class="alr ${e.cause==='suppression'?'alr-r':e.cause==='prix_3p'?'alr-r':e.cause==='stock'?'alr-a':'alr-b'}" style="margin-bottom:12px">
+      <b>${plan.title}</b>
+    </div>
+
+    ${approsLink}
+
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Évolution Retail% — ${chartData.length} dernières semaines</div>
+      <div style="padding:8px;background:var(--s2);border-radius:var(--rd);overflow:hidden">
+        ${sparkline}
+        ${correlationBlock}
+      </div>
+    </div>
+
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Checklist d'actions</div>
+      ${plan.steps.map(s => `<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd);font-size:12px">
+        <input type="checkbox" style="margin-top:2px;flex-shrink:0">
+        <span>${s}</span>
+      </div>`).join('')}
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-p btn-sm" onclick="openAmazonProduct('${asin}','${mkt}')">🔍 Analyser sur Amazon</button>
+      <button class="btn btn-sm" onclick="copyBuyBoxChromePrompt('${asin}','${mkt}')">📋 Prompt Claude in Chrome</button>
+      <button class="btn btn-sm" onclick="openCaseModal('${asin}','${plan.email}')">✉️ Email Vendor Central</button>
+      <button class="btn btn-sm" onclick="window._approsAsin='${asin}';go('appros')">🚢 Voir Appros</button>
+    </div>
+  </div>`;
+
+  document.getElementById('bb-detail-panel').innerHTML = h;
+  document.getElementById('bb-detail-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function copyBuyBoxChromePrompt(asin, market) {
+  const prompt = `Tu es un expert Amazon. Analyse la page produit de cet ASIN : ${asin} (${getAmazonProductUrl(asin, market)})
+
+Réponds précisément à ces questions :
+1. Qui détient la Featured Offer (Buy Box) en ce moment ? Amazon ou un vendeur tiers ?
+2. Si c'est un vendeur tiers : quel est son nom ? Quel est son prix total livré ?
+3. Y a-t-il d'autres offres visibles ("Voir toutes les offres") ? Combien ? À quel prix ?
+4. Le produit est-il "Expédié et vendu par Amazon" ou pas ?
+5. Y a-t-il des signes de rupture de stock (délai anormal, "stock limité") ?
+6. Le produit est-il bien visible dans les résultats de recherche ? (note : non vérifiable depuis cette page)
+
+Synthèse : quelle est selon toi la cause principale de la perte de Buy Box sur cet ASIN ?`;
+
+  navigator.clipboard.writeText(prompt).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = prompt;
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+  });
+  showToast('Prompt Claude in Chrome copié — ouvrez Amazon puis collez dans Claude', 'alr-g');
+}
+
+
 function renderWeeklyReview() {
   const c = cl();
   if (!c) return renderWelcome();
@@ -3091,6 +3409,10 @@ function renderWeeklyReview() {
   const declining = asins.filter(a => (a.revenue || 0) > 0 && parseNum(a.revenueDelta) < -10);
   const lowStock = asins.filter(a => a.sellableUnits > 0 && a.sellableUnits < 30 && (a.revenue || 0) > 50);
   const growing = asins.filter(a => (a.revenue || 0) > 50 && parseNum(a.revenueDelta) > 20);
+
+  // ── Section Buy Box dans la Revue Hebdo ──────────────────────
+  const { critical: bbCritical, warning: bbWarning, suppressed: bbSuppressed } = calcBuyBoxAlerts(c);
+  const bbTotal = bbCritical.length + bbWarning.length + bbSuppressed.length;
 
   if (!c.weeklyActions?.length) { c.weeklyActions = generateWeeklyActions(c); save(); }
 
@@ -3218,7 +3540,37 @@ function renderWeeklyReview() {
       <span>📅 Routine Mensuelle — ${monthLabel}</span>
       <button class="btn btn-sm" onclick="c_monthlyActions=generateMonthlyActions(cl());save();render()">🔄</button>
     </div>`;
-    h += `<div class="action-list">`;
+    // ── Section Buy Box dans la Revue Hebdo ─────────────────────────────────
+  if (bbTotal > 0) {
+    h += `<div class="cd" style="margin-bottom:16px;border-left:3px solid ${bbSuppressed.length ? 'var(--r)' : bbCritical.length ? 'var(--r)' : 'var(--or)'}">
+      <div class="cd-t space">
+        <span>🏆 Buy Box — ${bbTotal} ASIN${bbTotal>1?'s':''} à surveiller</span>
+        <button class="btn btn-sm btn-p" onclick="go('buybox')">Voir le détail →</button>
+      </div>`;
+    if (bbSuppressed.length) {
+      h += `<div class="alr alr-r" style="margin-bottom:8px;font-size:12px">
+        💀 <b>${bbSuppressed.length} fiche${bbSuppressed.length>1?'s':''} à risque de suppression</b> (Retail% = 0% depuis ≥2 semaines) :
+        ${bbSuppressed.slice(0,3).map(e => `<b>${e.asin}</b>`).join(', ')}${bbSuppressed.length>3?' …':''}
+      </div>`;
+    }
+    if (bbCritical.length) {
+      const critWithStockUrgent = bbCritical.filter(e => e.stockUrgent);
+      h += `<div class="alr alr-r" style="margin-bottom:8px;font-size:12px">
+        🔴 <b>${bbCritical.length} Buy Box critique${bbCritical.length>1?'s':''}</b> (Retail% &lt; 80%) :
+        ${bbCritical.slice(0,3).map(e => `${esc((e.title||e.asin).slice(0,30))} → <b>${e.rPct.toFixed(0)}%</b>`).join(' · ')}${bbCritical.length>3?' …':''}
+        ${critWithStockUrgent.length ? `<br>⚠️ <b>${critWithStockUrgent.length} ASIN${critWithStockUrgent.length>1?'s':''} avec Buy Box perdue ET stock critique</b> — double urgence Appros + Buy Box` : ''}
+      </div>`;
+    }
+    if (bbWarning.length) {
+      h += `<div class="alr alr-a" style="font-size:12px">
+        🟡 <b>${bbWarning.length} ASIN${bbWarning.length>1?'s':''} en baisse</b> (Retail% en recul vs S-1) :
+        ${bbWarning.slice(0,3).map(e => `${esc((e.title||e.asin).slice(0,25))} (${e.delta!==null?(e.delta>0?'+':'')+e.delta.toFixed(0)+'pts':'—'})`).join(' · ')}${bbWarning.length>3?' …':''}
+      </div>`;
+    }
+    h += `</div>`;
+  }
+
+  h += `<div class="action-list">`;
     ['Lundi', 'Mercredi', 'Vendredi'].forEach(day => {
       const dayActs = c.monthlyActions.filter(a => a.day === day);
       if (dayActs.length) {
@@ -6372,13 +6724,27 @@ function calcPotential(a, c) {
     }
   }
 
-  // ── Signal 4 : Stock suffisant pour absorber la croissance (0-20 pts) ──
-  const stockOk = a.sellableUnits != null && a.sellableUnits > (a.units || 0) * 3;
+  // ── Signal 4 : Buy Box (priorité sur stock — cause racine différente) ─────
+  const retailPctNum = parseNum(a.retailPct);
+  const hasBuyBoxLoss = a.retailPct && retailPctNum > 0 && retailPctNum < 95;
+  if (hasBuyBoxLoss) {
+    const severity = retailPctNum < 50 ? 'perdue' : 'partielle';
+    signals.push({ icon:'🏆', label:'Buy Box ' + severity + ' — Retail% ' + retailPctNum.toFixed(0) + '% (vendeur 3P concurrent)', cls:'r', pts: 0 });
+  } else if (a.retailPct && retailPctNum >= 95) {
+    signals.push({ icon:'🏆', label:'Buy Box stable — Retail% ' + retailPctNum.toFixed(0) + '%', cls:'g', pts: 10 });
+    score += 10;
+  }
+
+  // ── Signal 5 : Stock suffisant pour absorber la croissance (0-20 pts) ──
+  // Note : si Buy Box perdue, le stock n'est PAS la cause racine à traiter
+  const stockOk = !hasBuyBoxLoss && a.sellableUnits != null && a.sellableUnits > (a.units || 0) * 3;
   if (stockOk) {
     score += 20;
     signals.push({ icon:'📦', label:'Stock suffisant (' + a.sellableUnits + 'u)', cls:'g', pts: 20 });
-  } else if (a.sellableUnits != null && a.sellableUnits < (a.units || 0)) {
+  } else if (!hasBuyBoxLoss && a.sellableUnits != null && a.sellableUnits < (a.units || 0)) {
     signals.push({ icon:'📦', label:'Stock insuffisant — frein à la croissance', cls:'r', pts: 0 });
+  } else if (hasBuyBoxLoss && a.sellableUnits != null && a.sellableUnits < (a.units || 0)) {
+    signals.push({ icon:'📦', label:'Stock faible — mais Buy Box à traiter en priorité', cls:'a', pts: 0 });
   }
 
   // ── Signal 5 : Conversion stable ou en hausse (0-15 pts) ──
@@ -8230,7 +8596,7 @@ function buildSEOPrompt(a, c, lang, isBackendKW) {
       + 'Génère UNIQUEMENT les backend keywords en ' + langName + '.\n'
       + 'RÈGLES STRICTES :\n'
       + '- Séparateur : espace uniquement (jamais de virgule)\n'
-      + '- Maximum 250 BYTES (les accents comptent double en FR/ES/IT — sois économe)\n'
+      + '- Maximum 500 BYTES (limite Vendor Central — les accents comptent double en FR/ES/IT, sois économe)\n'
       + '- Zéro répétition — les mots déjà dans le titre sont déjà indexés, ne pas les répéter\n'
       + '- Zéro nom de marque concurrente\n'
       + '- Zéro superlatif (meilleur, top, n°1)\n'
@@ -8268,8 +8634,10 @@ function buildSEOPrompt(a, c, lang, isBackendKW) {
     + '━━━━━━━━━━━━━━━━━━\n'
     + 'GÉNÈRE EXACTEMENT dans cet ordre :\n\n'
     + 'NOM_TYPE_PRODUIT: [en ' + langName + ', minuscules, sans marque, précis, sans underscore — ex: tenaille russe / cric rouleur hydraulique]\n\n'
-    + 'TITRE: [80-150 caractères recommandés, 200 max — structure : Marque + Référence - Type produit + Taille - Matériau/Attribut clé - Usage principal]\n'
+    + 'TITRE: [Viser 150-200 caractères — 200 max — plus le titre est long et informatif, mieux il performe]\n'
+    + 'STRUCTURE OBLIGATOIRE : [Marque] [Référence interne] - [Type produit exact] [Taille/Format] - [Matériau/Attribut clé] - [Usage principal] - [Contexte/Compatibilité si pertinent]\n'
     + 'RÈGLES TITRE STRICTES :\n'
+    + '- La RÉFÉRENCE INTERNE doit figurer IMMÉDIATEMENT après la marque — obligatoire pour PO et gestion catalogue\n'
     + '- Séparateurs : tirets - uniquement (JAMAIS de | / ! ? *)\n'
     + '- Mot-clé principal dans les 30 premiers caractères\n'
     + '- Un même mot maximum 2 fois\n'
@@ -8295,7 +8663,7 @@ function buildSEOPrompt(a, c, lang, isBackendKW) {
     + '- Mélanger : bénéfice client + usage concret + mot-clé secondaire + réassurance\n'
     + '- Pas de HTML, pas de prix, pas de référence interne\n\n'
     + 'DESCRIPTION: [HTML pédagogique UNIQUEMENT — utiliser <b>, <br>, <ul><li> — structure : pour qui / dans quel contexte / pourquoi choisir ce produit / quelles limites éventuelles / liste technique lisible — INTERDIT de mélanger description et synthèse stratégique — la description est un texte vendeur pour le CLIENT, pas pour le consultant]\n\n'
-    + 'BACKEND_KEYWORDS: [espaces uniquement, max 250 bytes, zéro répétition, zéro concurrent, histoire sémantique cohérente — synonymes + fautes courantes + termes métier + longue traîne]\n\n'
+    + 'BACKEND_KEYWORDS: [espaces uniquement, max 500 bytes (limite Vendor Central) — les accents comptent double, sois économe — zéro répétition de mots déjà dans le titre — zéro concurrent — partir du TYPE de produit et de ses USAGES RÉELS pour trouver : synonymes du métier, fautes courantes de recherche, variantes de taille, longue traîne qualifiée, termes techniques spécifiques — PAS une liste générique de mots vagues]\n\n'
     + '━━━━━━━━━━━━━━━━━━\n'
     + 'ÉTAPE 4 — SYNTHÈSE STRATÉGIQUE\n'
     + '━━━━━━━━━━━━━━━━━━\n'
