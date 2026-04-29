@@ -447,7 +447,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.51';
+const APP_VERSION = '3.1.52';
 let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
 let activeId = null;
@@ -3349,9 +3349,10 @@ function renderBuyBoxCase(c, asin) {
 }
 
 function renderBBPlan(c, cas, e, asin, mkt) {
-  // Sparkline historique
-  const hist = (c.asins.find(x=>x.asin===asin)?.history || []).slice(-10)
-    .filter(h => parseNum(h.retailPct) > 0 || (h.revenue||0) > 0);
+  const a = c.asins.find(x => x.asin === asin) || {};
+
+  // ── Sparkline ─────────────────────────────────────────────────
+  const hist = (a.history || []).slice(-10).filter(h => parseNum(h.retailPct) > 0 || (h.revenue||0) > 0);
   const svgW = 300, svgH = 50, pad = 4;
   const pts = hist.map((d,i) => {
     const x = hist.length > 1 ? pad + i*(svgW-2*pad)/(hist.length-1) : svgW/2;
@@ -3364,121 +3365,226 @@ function renderBBPlan(c, cas, e, asin, mkt) {
         <polyline points="${pts}" fill="none" stroke="#378add" stroke-width="1.5" stroke-linejoin="round"/>
         ${hist.map((d,i)=>{const x=hist.length>1?pad+i*(svgW-2*pad)/(hist.length-1):svgW/2;const rp=parseNum(d.retailPct)||0;const y=svgH-pad-(Math.min(rp,100)/100)*(svgH-2*pad);return `<circle cx="${x}" cy="${y}" r="3" fill="${rp<80?'#e24b4a':rp<95?'#ef9f27':'#639922'}"/>`;}).join('')}
       </svg>`
-    : `<p style="font-size:11px;color:var(--tx3);margin:0">Historique insuffisant — données disponibles après plusieurs imports</p>`;
+    : `<p style="font-size:11px;color:var(--tx3);margin:0">Pas encore d\u2019historique — visible après plusieurs imports hebdomadaires</p>`;
 
-  // Corrélation CA/retailPct
+  // ── Corrélation CA/retailPct ───────────────────────────────────
   const histFull = hist.filter(h => parseNum(h.retailPct) > 0 && (h.revenue||0) > 0);
   let corrBlock = '';
   if (histFull.length >= 4) {
-    const n = histFull.length;
-    const sumX = histFull.reduce((s,h)=>s+parseNum(h.retailPct),0);
-    const sumY = histFull.reduce((s,h)=>s+(h.revenue||0),0);
-    const sumXY = histFull.reduce((s,h)=>s+parseNum(h.retailPct)*(h.revenue||0),0);
-    const sumX2 = histFull.reduce((s,h)=>s+Math.pow(parseNum(h.retailPct),2),0);
-    const denom = n*sumX2 - sumX*sumX;
+    const n = histFull.length, sumX = histFull.reduce((s,h)=>s+parseNum(h.retailPct),0),
+      sumY = histFull.reduce((s,h)=>s+(h.revenue||0),0),
+      sumXY = histFull.reduce((s,h)=>s+parseNum(h.retailPct)*(h.revenue||0),0),
+      sumX2 = histFull.reduce((s,h)=>s+Math.pow(parseNum(h.retailPct),2),0),
+      denom = n*sumX2 - sumX*sumX;
     if (denom !== 0) {
       const slope = Math.round((n*sumXY - sumX*sumY)/denom);
-      if (slope > 0) corrBlock = `<div style="font-size:11px;color:var(--tx2);margin-top:6px;padding:6px 8px;background:var(--b-l,#e6f1fb);border-radius:var(--rd)">Chaque point de Featured Offer perdu ≈ <strong>${fmtEur(Math.abs(slope))}</strong> de CA hebdomadaire (${n} semaines)</div>`;
+      if (slope > 0) corrBlock = `<div style="font-size:11px;color:var(--tx2);margin-top:6px;padding:6px 8px;background:var(--b-l,#e6f1fb);border-radius:var(--rd)">Chaque point de Featured Offer perdu ≈ <strong>${fmtEur(Math.abs(slope))}</strong>/semaine (${n} sem.)</div>`;
     }
   }
 
-  // Suggestion bbKnowledge
+  // ── Suggestion bbKnowledge ─────────────────────────────────────
   const suggestion = bbKnowledgeSuggestion(c, e.cause);
   const suggBlock = suggestion
-    ? `<div style="padding:10px 12px;background:var(--g-bg,#eaf3de);border-left:3px solid #639922;border-radius:0 var(--rd) var(--rd) 0;font-size:12px;margin-bottom:12px">
-        <strong>Suggestion basée sur vos cas précédents (${suggestion.total} cas similaires) :</strong><br>
-        L'action "<em>${suggestion.action}</em>" a fonctionné dans ${suggestion.successRate}% des cas · résolution en ~${suggestion.avgWeeks} semaines
-      </div>`
-    : '';
+    ? `<div style="padding:8px 12px;background:#eaf3de;border-left:3px solid #639922;border-radius:0 var(--rd) var(--rd) 0;font-size:12px;margin-bottom:12px">
+        Sur ${suggestion.total} cas similaires, "<em>${suggestion.action}</em>" a réussi ${suggestion.successRate}% du temps (~${suggestion.avgWeeks} sem.)
+      </div>` : '';
 
-  // Alerte stock+buybox
+  // ── Alerte double urgence stock ────────────────────────────────
   const stockAlert = (e.cause === 'stock' || e.stockUrgent)
-    ? `<div class="alr alr-r" style="margin-bottom:12px;font-size:12px">
-        🔗 <strong>Double urgence</strong> — Buy Box perdue + stock critique : ${e.couvertureSem !== null && e.couvertureSem !== '—' ? `<strong>${Number(e.couvertureSem).toFixed(1)} semaines</strong> de couverture` : 'couverture non calculée'}
+    ? `<div class="alr alr-r" style="margin-bottom:10px;font-size:12px">
+        🔗 <strong>Double urgence</strong> — Buy Box + stock critique : ${e.couvertureSem !== null ? `<strong>${Number(e.couvertureSem).toFixed(1)} semaines</strong>` : 'couverture inconnue'}
         <button class="btn btn-sm" style="background:#e24b4a;color:#fff;border-color:#e24b4a;margin-left:8px" onclick="window._approsAsin='${asin}';go('appros')">Voir Appros →</button>
-      </div>`
-    : '';
+      </div>` : '';
 
-  // Cause et plan
-  const causeLabel = {prix_3p:'Vendeur 3P concurrent plus compétitif',stock:'Stock faible ou rupture',suppression:'Éligibilité Featured Offer perdue',surveillance:'Baisse détectée — cause à confirmer'}[e.cause]||'—';
-  const steps = {
-    prix_3p:[
-      {t:'Analyser la fiche sur Amazon',d:'Identifier qui détient la Buy Box et à quel prix'},
-      {t:'Comparer le prix total livré',d:'Votre prix vs concurrent (produit + port)'},
-      {t:'Vérifier Pricing Health dans VC',d:'Onglet Tarification → Competitive External Price'},
-      {t:'Ajuster le prix ou lancer un coupon',d:'Coupon temporaire recommandé avant de baisser le catalogue'},
-      {t:'Vérifier Brand Registry si 3P non autorisé',d:'Signaler un distributeur non-agréé'},
-    ],
-    stock:[
-      {t:'Passer une commande de réappro',d:'Stock < 3 semaines = urgence Vendor Central'},
-      {t:'Vérifier les PO en attente',d:'Un PO non confirmé peut créer une rupture invisible'},
-      {t:'Activer le stock tampon si disponible',d:'Éviter le zéro stock FBA'},
-      {t:'Surveiller la Buy Box après réappro',d:'La Featured Offer revient en général sous 48-72h'},
-    ],
-    suppression:[
-      {t:'Ouvrir la fiche sur Amazon',d:'Vérifier si le produit est encore visible'},
-      {t:'Vérifier Catalogue VC → Gérer le catalogue',d:'Statut de la fiche et des variations'},
-      {t:'Contrôler Account Health',d:'Toute violation peut entraîner une suspension de Featured Offer'},
-      {t:'Vérifier Pricing Health',d:'Prix trop haut ou trop bas peut supprimer l\u2019éligibilité'},
-      {t:'Ouvrir un cas Vendor Support',d:'Si fiche invisible malgré tout conforme'},
-    ],
-    surveillance:[
-      {t:'Surveiller l\u2019évolution la semaine prochaine',d:'Avant toute action — confirmer la tendance'},
-      {t:'Vérifier la fiche Amazon',d:'Identifier si un nouveau 3P est apparu'},
-      {t:'Contrôler le stock disponible',d:'Un stock bas peut déclencher une perte progressive'},
-    ],
-  }[e.cause] || [];
-
-  const actions = ['Coupon temporaire (test sans baisser le catalogue)','Baisse de prix catalogue','Signalement Brand Registry','Email Vendor Central','Commande réappro urgente','Vérification Pricing Health','Autre'];
-  const currentAction = cas.action || '';
+  // ── Résultat IA éventuel déjà stocké ──────────────────────────
+  const iaResult = cas.iaResult || null;
   const currentNote = (cas.note || '').replace(/"/g, '&quot;');
+  const currentAction = cas.action || '';
+  const actions = ['Coupon temporaire (recommandé — sans baisser le catalogue)','Baisse de prix catalogue','Signalement Brand Registry','Email Vendor Central','Commande réappro urgente','Autre'];
 
-  let h = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start">`;
+  // ── Liens Vendor Central directs ──────────────────────────────
+  const vcBase = 'https://vendor.amazon.fr';
+  const vcLinks = {
+    pricing:  vcBase + '/pricing/health',
+    catalog:  vcBase + '/catalog',
+    coupons:  vcBase + '/promotions/coupons',
+    registry: 'https://brandregistry.amazon.fr',
+    support:  vcBase + '/support',
+    orders:   vcBase + '/orders/purchaseOrders',
+  };
+  const amazonUrl = `https://www.amazon${mkt||'.fr'}/dp/${asin}`;
 
-  // Colonne gauche : sparkline + cause + suggestion
+  // ── Définition des steps ACTIONNABLES ─────────────────────────
+  // Structure : {id, t, d, ctas:[{label,url?,onclick?,primary?}], iaField?}
+  const stepsMap = {
+    prix_3p: [
+      { id:0,
+        t: 'Qui a pris ma Featured Offer ?',
+        d: 'L\u2019IA analyse la fiche Amazon en direct et vous dit immédiatement qui détient la Buy Box et à quel prix.',
+        ctas: [
+          { label: 'Analyser avec l\u2019IA', onclick: `copyBuyBoxChromePrompt('${asin}','${mkt||".fr"}');window.open('${amazonUrl}','_blank')`, primary: true },
+          { label: 'Voir la fiche Amazon', url: amazonUrl },
+        ],
+        iaField: 'concurrent',
+      },
+      { id:1,
+        t: 'Quel est l\u2019écart de prix ?',
+        d: iaResult?.prixConcurrent
+          ? `Concurrent : <strong>${esc(iaResult.prixConcurrent)}</strong> · Votre prix : <strong>${fmtEur(parseNum(a.price||0)||0)}</strong>`
+          : 'Rempli automatiquement après l\u2019analyse IA — ou saisissez manuellement.',
+        ctas: [],
+        iaField: 'prixConcurrent',
+        input: true,
+        inputPlaceholder: 'Ex: concurrent à 11,90 €, votre prix 14,50 €…',
+        inputKey: 'prixConcurrent',
+      },
+      { id:2,
+        t: 'Vérifier Pricing Health dans Vendor Central',
+        d: 'Amazon signale ici les ASINs avec un prix jugé non compétitif (Competitive External Price).',
+        ctas: [
+          { label: 'Ouvrir Pricing Health VC', url: vcLinks.pricing, primary: true },
+        ],
+      },
+      { id:3,
+        t: 'Ajuster le prix ou lancer un coupon',
+        d: 'Commencez par un coupon temporaire — vous testez l\u2019impact sans baisser définitivement votre prix catalogue.',
+        ctas: [
+          { label: 'Créer un coupon dans VC', url: vcLinks.coupons, primary: true },
+          { label: 'Gérer les prix VC', url: vcLinks.pricing },
+        ],
+      },
+      { id:4,
+        t: 'Le 3P est-il un distributeur non autorisé ?',
+        d: 'Si le vendeur tiers n\u2019est pas agréé pour distribuer votre marque, vous pouvez le signaler via Brand Registry.',
+        ctas: [
+          { label: 'Ouvrir Brand Registry', url: vcLinks.registry },
+        ],
+      },
+    ],
+    stock: [
+      { id:0,
+        t: 'Passer une commande de réappro en urgence',
+        d: 'Le stock est insuffisant — Amazon retire la Featured Offer des produits à risque de rupture.',
+        ctas: [
+          { label: 'Voir mes Appros pour cet ASIN', onclick: `window._approsAsin='${asin}';go('appros')`, primary: true },
+          { label: 'POs en cours dans VC', url: vcLinks.orders },
+        ],
+      },
+      { id:1, t: 'Vérifier les POs en attente de confirmation', d: 'Un PO non confirmé bloque le réappro sans alerte visible.',
+        ctas: [{ label: 'POs en attente VC', url: vcLinks.orders, primary: true }] },
+      { id:2, t: 'Activer le stock de sécurité si disponible', d: 'Éviter le stock à zéro en FBA pendant l\u2019attente du réappro.',
+        ctas: [] },
+      { id:3, t: 'Surveiller la Buy Box après réappro', d: 'La Featured Offer revient généralement sous 48-72h après reconstitution du stock.',
+        ctas: [] },
+    ],
+    suppression: [
+      { id:0, t: 'Vérifier que la fiche est encore visible sur Amazon', d: 'Si le produit n\u2019apparaît plus, c\u2019est une suppression active.',
+        ctas: [{ label: 'Ouvrir la fiche Amazon', url: amazonUrl, primary: true }] },
+      { id:1, t: 'Contrôler le catalogue dans VC', d: 'Statut de la fiche, variations, suppressions partielles.',
+        ctas: [{ label: 'Catalogue VC', url: vcLinks.catalog, primary: true }] },
+      { id:2, t: 'Vérifier Pricing Health et Account Health', d: 'Prix trop haut ou trop bas peut suspendre l\u2019éligibilité.',
+        ctas: [{ label: 'Pricing Health VC', url: vcLinks.pricing, primary: true }] },
+      { id:3, t: 'Ouvrir un cas Vendor Support en urgence', d: 'Si tout est conforme et la fiche reste invisible.',
+        ctas: [{ label: 'Ouvrir un cas Support VC', url: vcLinks.support, primary: true }] },
+    ],
+    surveillance: [
+      { id:0, t: 'Ouvrir la fiche Amazon et observer', d: 'Y a-t-il un nouveau vendeur tiers ? Le prix est-il toujours compétitif ?',
+        ctas: [{ label: 'Voir la fiche Amazon', url: amazonUrl, primary: true }] },
+      { id:1, t: 'Contrôler le stock disponible', d: 'Un stock bas peut déclencher une perte progressive de Featured Offer.',
+        ctas: [{ label: 'Voir mes Appros', onclick: `window._approsAsin='${asin}';go('appros')` }] },
+      { id:2, t: 'Attendre l\u2019import de la semaine prochaine', d: 'Si c\u2019est une baisse ponctuelle, elle peut se corriger seule.',
+        ctas: [] },
+    ],
+  };
+
+  const steps = stepsMap[e.cause] || stepsMap['surveillance'];
+
+  // ── RENDU ─────────────────────────────────────────────────────
+  let h = `<div style="display:grid;grid-template-columns:1fr 1.3fr;gap:16px;align-items:start">`;
+
+  // ── Colonne gauche : sparkline + note ─────────────────────────
   h += `<div>
     <div class="cd" style="margin-bottom:12px">
       <div class="cd-t">Évolution Featured Offer</div>
       <div style="padding:8px 0">${sparkline}${corrBlock}</div>
-    </div>
-    <div class="cd">
-      <div class="cd-t">Diagnostic</div>
-      <div style="font-size:12px;padding:8px 0;border-bottom:0.5px solid var(--bd);margin-bottom:10px">
-        <strong>Cause probable :</strong> ${causeLabel}
-      </div>
-      ${suggBlock}
-      ${stockAlert}
-      <div style="margin-bottom:8px">
-        <div style="font-size:11px;color:var(--tx2);margin-bottom:5px;font-weight:500">Action choisie</div>
-        <select onchange="bbGetCase(cl(),'${asin}').action=this.value;save()" style="width:100%;font-size:11px;padding:5px 8px;border-radius:var(--rd);border:0.5px solid var(--bd);background:var(--bg);color:var(--tx)">
-          <option value="">— Choisir une action —</option>
-          ${actions.map(a=>`<option value="${esc(a)}"${currentAction===a?' selected':''}>${esc(a)}</option>`).join('')}
-        </select>
-      </div>
-      <div>
-        <div style="font-size:11px;color:var(--tx2);margin-bottom:5px;font-weight:500">Note libre</div>
-        <textarea onchange="bbGetCase(cl(),'${asin}').note=this.value;save()" placeholder="Ex: concurrent identifié = X, prix cible = Y€..." style="width:100%;font-size:11px;padding:6px 8px;border-radius:var(--rd);border:0.5px solid var(--bd);background:var(--bg);color:var(--tx);resize:vertical;min-height:60px">${currentNote}</textarea>
-      </div>
-      <button class="btn btn-p" style="width:100%;margin-top:10px;font-size:12px" onclick="window._bbSubPhase='suivi';render()">Valider le plan → passer au suivi</button>
-    </div>
-  </div>`;
+    </div>`;
 
-  // Colonne droite : checklist
+  if (suggBlock) h += suggBlock;
+  if (stockAlert) h += stockAlert;
+
+  // Résultat IA si disponible
+  if (iaResult) {
+    h += `<div class="cd" style="margin-bottom:12px;border-left:3px solid #e24b4a;border-radius:0 var(--rd) var(--rd) 0">
+      <div class="cd-t">Résultat analyse IA</div>
+      <div style="font-size:12px;line-height:1.6;padding:6px 0">
+        ${iaResult.concurrent ? `<div><strong>Featured Offer :</strong> ${esc(iaResult.concurrent)}</div>` : ''}
+        ${iaResult.prixConcurrent ? `<div><strong>Prix concurrent :</strong> ${esc(iaResult.prixConcurrent)}</div>` : ''}
+        ${iaResult.diagnostic ? `<div style="margin-top:4px;color:var(--tx2)">${esc(iaResult.diagnostic)}</div>` : ''}
+      </div>
+    </div>`;
+  }
+
+  // Action choisie + note
   h += `<div class="cd">
-    <div class="cd-t">Checklist d'actions</div>
-    ${steps.map((s,i)=>{
-      const done = cas.steps && cas.steps[i];
-      return `<div style="display:flex;gap:8px;align-items:flex-start;padding:9px 0;border-bottom:0.5px solid var(--bd)">
-        <input type="checkbox" ${done?'checked':''} style="margin-top:2px;flex-shrink:0" onchange="if(!bbGetCase(cl(),'${asin}').steps)bbGetCase(cl(),'${asin}').steps={};bbGetCase(cl(),'${asin}').steps[${i}]=this.checked;save()">
-        <div>
-          <div style="font-size:12px;font-weight:500">${esc(s.t)}</div>
-          <div style="font-size:11px;color:var(--tx2);margin-top:1px">${esc(s.d)}</div>
-        </div>
-      </div>`;
-    }).join('')}
+    <div class="cd-t">Votre décision</div>
+    <div style="margin-bottom:10px">
+      <div style="font-size:11px;color:var(--tx2);margin-bottom:5px">Action choisie</div>
+      <select onchange="bbGetCase(cl(),'${asin}').action=this.value;save()" style="width:100%;font-size:12px;padding:7px 8px;border-radius:var(--rd);border:0.5px solid var(--bd);background:var(--bg);color:var(--tx)">
+        <option value="">— Sélectionner une action —</option>
+        ${actions.map(act=>`<option value="${esc(act)}"${currentAction===act?' selected':''}>${esc(act)}</option>`).join('')}
+      </select>
+    </div>
+    <div>
+      <div style="font-size:11px;color:var(--tx2);margin-bottom:5px">Note (concurrent identifié, prix cible…)</div>
+      <textarea onchange="bbGetCase(cl(),'${asin}').note=this.value;save()" placeholder="Ex: Pièces Auto Discount à 11,90 €, prix cible 12,50 €" style="width:100%;font-size:12px;padding:7px 8px;border-radius:var(--rd);border:0.5px solid var(--bd);background:var(--bg);color:var(--tx);resize:vertical;min-height:56px">${currentNote}</textarea>
+    </div>
+    <button class="btn btn-p" style="width:100%;margin-top:10px;font-size:12px" onclick="window._bbSubPhase='suivi';render()">Valider → passer au suivi</button>
   </div>`;
 
   h += `</div>`;
+
+  // ── Colonne droite : steps actionnables ───────────────────────
+  h += `<div class="cd">
+    <div class="cd-t">Que faire maintenant — étape par étape</div>`;
+
+  for (const s of steps) {
+    const done = cas.steps && cas.steps[s.id];
+    const hasCtas = s.ctas && s.ctas.length > 0;
+    h += `<div style="padding:12px 0;border-bottom:0.5px solid var(--bd)">
+      <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:${hasCtas?'8':'0'}px">
+        <input type="checkbox" ${done?'checked':''} style="margin-top:2px;flex-shrink:0;width:15px;height:15px;cursor:pointer"
+          onchange="if(!bbGetCase(cl(),'${asin}').steps)bbGetCase(cl(),'${asin}').steps={};bbGetCase(cl(),'${asin}').steps[${s.id}]=this.checked;save()">
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:600;${done?'text-decoration:line-through;color:var(--tx3)':''}">${esc(s.t)}</div>
+          <div style="font-size:11px;color:var(--tx2);margin-top:2px;line-height:1.4">${s.d}</div>
+          ${s.input ? `<input type="text" placeholder="${esc(s.inputPlaceholder||'')}"
+            value="${esc((cas[s.inputKey]||'').replace(/"/g,'&quot;'))}"
+            onchange="bbGetCase(cl(),'${asin}')['${s.inputKey||'note'}']=this.value;save()"
+            style="width:100%;margin-top:6px;font-size:11px;padding:5px 8px;border-radius:var(--rd);border:0.5px solid var(--bd);background:var(--bg);color:var(--tx)">` : ''}
+        </div>
+      </div>`;
+
+    if (hasCtas) {
+      h += `<div style="display:flex;gap:6px;flex-wrap:wrap;padding-left:25px">`;
+      for (const cta of s.ctas) {
+        if (cta.url) {
+          h += `<a href="${cta.url}" target="_blank"
+            onclick="if(!bbGetCase(cl(),'${asin}').steps)bbGetCase(cl(),'${asin}').steps={};bbGetCase(cl(),'${asin}').steps[${s.id}]=true;save();render()"
+            style="display:inline-block;font-size:11px;font-weight:500;padding:5px 12px;border-radius:var(--rd);text-decoration:none;
+            ${cta.primary?'background:#e24b4a;color:#fff;border:0.5px solid #e24b4a':'background:var(--s2);color:var(--tx);border:0.5px solid var(--bd)'}">${esc(cta.label)} →</a>`;
+        } else if (cta.onclick) {
+          h += `<button onclick="${cta.onclick};if(!bbGetCase(cl(),'${asin}').steps)bbGetCase(cl(),'${asin}').steps={};bbGetCase(cl(),'${asin}').steps[${s.id}]=true;save();render()"
+            style="font-size:11px;font-weight:500;padding:5px 12px;border-radius:var(--rd);cursor:pointer;
+            ${cta.primary?'background:#e24b4a;color:#fff;border:0.5px solid #e24b4a':'background:var(--s2);color:var(--tx);border:0.5px solid var(--bd)'}">${esc(cta.label)} →</button>`;
+        }
+      }
+      h += `</div>`;
+    }
+
+    h += `</div>`;
+  }
+
+  h += `</div></div>`;
   return h;
 }
 
