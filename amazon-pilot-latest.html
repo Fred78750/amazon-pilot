@@ -447,7 +447,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.50';
+const APP_VERSION = '3.1.51';
 let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
 let activeId = null;
@@ -3112,7 +3112,14 @@ function calcBuyBoxAlerts(c) {
                 : isDown         ? 'surveillance'
                 :                  'ok';
 
-    const entry = { asin: a.asin, title: a.title, brand: a.brand, rPct, prevRetail, delta, cause, zeroWeeks, revenue: a.revenue, segment: calcSegment(a, c.asins.reduce((s,x)=>s+(x.revenue||0),0)), sellableUnits: a.sellableUnits };
+    // Couverture stock via calcAppro (NaN-safe)
+    const _apro = calcAppro(a, c, null, null);
+    const _cov = _apro?.couvertureAmazon;
+    const couvertureSem = (_cov != null && !isNaN(Number(_cov))) ? Number(_cov) : null;
+    const joursAvantLimite = _apro?.joursAvantLimite ?? null;
+    const stockUrgent = couvertureSem !== null && couvertureSem < 3;
+
+    const entry = { asin: a.asin, title: a.title, brand: a.brand, rPct, prevRetail, delta, cause, zeroWeeks, revenue: a.revenue, segment: calcSegment(a, c.asins.reduce((s,x)=>s+(x.revenue||0),0)), sellableUnits: a.sellableUnits, couvertureSem, joursAvantLimite, stockUrgent };
 
     if (isSuppressed)                          suppressed.push(entry);
     else if (isCritical)                       critical.push(entry);
@@ -3125,270 +3132,496 @@ function calcBuyBoxAlerts(c) {
   return { critical, warning, suppressed };
 }
 
+// ══════════════════════════════════════════════════════════════════
+// BUY BOX — Cycle complet 4 phases
+// ══════════════════════════════════════════════════════════════════
+
+// ── Initialisation bbCases et bbKnowledge ─────────────────────────
+function bbGetCases(c) {
+  if (!c.bbCases) c.bbCases = [];
+  return c.bbCases;
+}
+function bbGetKnowledge(c) {
+  if (!c.bbKnowledge) c.bbKnowledge = [];
+  return c.bbKnowledge;
+}
+function bbGetCase(c, asin) {
+  return bbGetCases(c).find(x => x.asin === asin && x.status !== 'closed') || null;
+}
+function bbOpenCase(c, asin, cause) {
+  const existing = bbGetCase(c, asin);
+  if (existing) return existing;
+  const week = getISOWeek(new Date());
+  const cas = { asin, cause, action: null, note: '', status: 'open',
+    weeks: [{ week, rPct: null, event: 'Détection', ts: new Date().toISOString() }],
+    openedAt: new Date().toISOString(), resolvedAt: null, success: null };
+  bbGetCases(c).push(cas);
+  save();
+  return cas;
+}
+function bbCloseCase(c, asin, success) {
+  const cas = bbGetCase(c, asin);
+  if (!cas) return;
+  cas.status = 'closed';
+  cas.resolvedAt = new Date().toISOString();
+  cas.success = success;
+  // Ajouter à la base de connaissance
+  if (cas.action && cas.cause) {
+    const weeks = cas.weeks.length;
+    bbGetKnowledge(c).push({ cause: cas.cause, action: cas.action, weeks, success, ts: new Date().toISOString() });
+    // Limiter à 50 cas
+    if (c.bbKnowledge.length > 50) c.bbKnowledge = c.bbKnowledge.slice(-50);
+  }
+  save();
+}
+function bbKnowledgeSuggestion(c, cause) {
+  const kb = bbGetKnowledge(c).filter(k => k.cause === cause);
+  if (kb.length < 2) return null;
+  // Compter succès par action
+  const byAction = {};
+  for (const k of kb) {
+    if (!byAction[k.action]) byAction[k.action] = { ok: 0, total: 0, weeks: [] };
+    byAction[k.action].total++;
+    if (k.success) byAction[k.action].ok++;
+    byAction[k.action].weeks.push(k.weeks);
+  }
+  // Trouver la meilleure action
+  let best = null, bestScore = -1;
+  for (const [action, stats] of Object.entries(byAction)) {
+    const score = stats.ok / stats.total;
+    if (score > bestScore) { bestScore = score; best = { action, ...stats }; }
+  }
+  if (!best) return null;
+  const avgWeeks = Math.round(best.weeks.reduce((a,b)=>a+b,0) / best.weeks.length);
+  return { action: best.action, successRate: Math.round(bestScore * 100), avgWeeks, total: kb.length };
+}
+
 function renderBuyBox() {
   const c = cl();
   if (!c) return renderWelcome();
   if (!c.asins?.length) return `<div class="alr alr-a">Importez d'abord des données CSV.</div>`;
 
   const { critical, warning, suppressed } = calcBuyBoxAlerts(c);
-  const total = critical.length + warning.length + suppressed.length;
-
-  // Filtre actif
-  const bbFilter = window._bbFilter || 'all';
+  const allProblems = [...suppressed, ...critical, ...warning];
+  const phase = window._bbPhase || 'list';
+  const selectedAsin = window._bbSelectedAsin || null;
 
   let h = `<div style="max-width:960px">`;
 
-  // ── En-tête ────────────────────────────────────────────────────
-  h += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
-    <div>
-      <h2 style="font-size:18px;font-weight:700;margin:0">🏆 Surveillance Buy Box</h2>
-      <p style="color:var(--tx2);font-size:12px;margin:4px 0 0">Détection hebdomadaire via Retail% — mise à jour à chaque import CSV</p>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-sm${bbFilter==='all'?' btn-p':''}" onclick="window._bbFilter='all';render()">Tous (${total})</button>
-      <button class="btn btn-sm${bbFilter==='critical'?' btn-r':''}" style="${critical.length?'':'opacity:.5'}" onclick="window._bbFilter='critical';render()">🔴 Critique (${critical.length})</button>
-      <button class="btn btn-sm${bbFilter==='warning'?' btn-a':''}" style="${warning.length?'':'opacity:.5'}" onclick="window._bbFilter='warning';render()">🟡 Surveillance (${warning.length})</button>
-      <button class="btn btn-sm${bbFilter==='suppressed'?'':''}${suppressed.length?' btn-r':''}" style="${suppressed.length?'':'opacity:.5'}" onclick="window._bbFilter='suppressed';render()">💀 Fiche à risque (${suppressed.length})</button>
-    </div>
-  </div>`;
+  if (phase === 'list') {
+    // ── PHASE 1 : Vue d'ensemble ─────────────────────────────────
 
-  if (total === 0) {
-    h += `<div class="alr alr-g" style="font-size:14px">✅ Aucun problème Buy Box détecté cette semaine — toutes les Featured Offers sont stables.</div>`;
+    // Cartes urgence
+    const openCases = bbGetCases(c).filter(x => x.status !== 'closed');
+    h += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <div>
+        <h2 style="font-size:18px;font-weight:700;margin:0">🏆 Surveillance Buy Box</h2>
+        <p style="color:var(--tx2);font-size:12px;margin:4px 0 0">Mise à jour à chaque import CSV · ${allProblems.length} ASIN${allProblems.length>1?'s':''} avec Featured Offer dégradée</p>
+      </div>
+      ${openCases.length ? `<span style="font-size:12px;padding:5px 12px;background:var(--b-l,#e6f1fb);color:var(--b,#185fa5);border-radius:20px;font-weight:500">${openCases.length} dossier${openCases.length>1?'s':''} en cours</span>` : ''}
+    </div>`;
+
+    // 3 cartes urgence
+    h += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">`;
+    h += `<div style="padding:14px 16px;border-radius:var(--rd);border:0.5px solid #f09595;background:#fcebeb;cursor:pointer" onclick="window._bbFilter='critical';render()">
+      <div style="font-size:26px;font-weight:700;color:#a32d2d">${critical.length}</div>
+      <div style="font-size:12px;font-weight:500;color:#a32d2d;margin-top:2px">ASINs à traiter<br>cette semaine</div>
+      <div style="font-size:11px;color:#993c1d;margin-top:6px">Featured Offer &lt; 80%<br>CA combiné : ${fmtEur(critical.reduce((s,e)=>s+(e.revenue||0),0))}</div>
+    </div>`;
+    h += `<div style="padding:14px 16px;border-radius:var(--rd);border:0.5px solid #fac775;background:#faeeda;cursor:pointer" onclick="window._bbFilter='warning';render()">
+      <div style="font-size:26px;font-weight:700;color:#854f0b">${warning.length}</div>
+      <div style="font-size:12px;font-weight:500;color:#854f0b;margin-top:2px">ASINs en recul<br>à surveiller</div>
+      <div style="font-size:11px;color:#854f0b;opacity:.8;margin-top:6px">Featured Offer en baisse<br>vs semaine précédente</div>
+    </div>`;
+    h += `<div style="padding:14px 16px;border-radius:var(--rd);border:0.5px solid var(--bd);background:var(--s2)">
+      <div style="font-size:26px;font-weight:700;color:var(--tx2)">${suppressed.length}</div>
+      <div style="font-size:12px;font-weight:500;color:var(--tx2);margin-top:2px">Fiches à vérifier<br>en urgence</div>
+      <div style="font-size:11px;color:var(--tx3);margin-top:6px">Featured Offer à 0%<br>depuis ≥2 semaines</div>
+    </div>`;
     h += `</div>`;
-    return h;
-  }
 
-  // ── Encart pédagogique ─────────────────────────────────────────
-  h += `<div class="alr alr-b" style="margin-bottom:16px;font-size:12px">
-    <b>Comment lire ce tableau</b> · Retail% = part des Glance Views où Amazon détenait la Featured Offer.
-    <b>🔴 Critique</b> = Retail% &lt; 80% (vendeur 3P probablement plus compétitif).
-    <b>🟡 Surveillance</b> = baisse détectée vs semaine précédente.
-    <b>💀 Fiche à risque</b> = Retail% = 0% depuis ≥2 semaines (éligibilité perdue ?).
-    Cause probable calculée depuis stock + historique — confirmez via bouton "Analyser sur Amazon".
-  </div>`;
-
-  // ── Tableau ────────────────────────────────────────────────────
-  const toShow = bbFilter === 'critical' ? critical
-               : bbFilter === 'warning'  ? warning
-               : bbFilter === 'suppressed' ? suppressed
-               : [...suppressed, ...critical, ...warning];
-
-  h += `<div class="cd" style="padding:0;overflow:hidden">`;
-  h += `<table style="width:100%;border-collapse:collapse;font-size:12px">
-    <thead>
-      <tr style="background:var(--s2);border-bottom:1px solid var(--bd)">
-        <th style="padding:10px 12px;text-align:left;font-weight:600">Produit</th>
-        <th style="padding:10px 8px;text-align:center;font-weight:600">Retail% S</th>
-        <th style="padding:10px 8px;text-align:center;font-weight:600">Retail% S-1</th>
-        <th style="padding:10px 8px;text-align:center;font-weight:600">Δ</th>
-        <th style="padding:10px 8px;text-align:center;font-weight:600">Cause probable</th>
-        <th style="padding:10px 8px;text-align:center;font-weight:600">Stock</th>
-        <th style="padding:10px 8px;text-align:left;font-weight:600">CA semaine</th>
-        <th style="padding:10px 8px;text-align:center;font-weight:600">Action</th>
-      </tr>
-    </thead><tbody>`;
-
-  for (const e of toShow) {
-    const statusColor = suppressed.includes(e) ? 'var(--r)' : critical.includes(e) ? 'var(--r)' : 'var(--or)';
-    const statusIcon  = suppressed.includes(e) ? '💀' : critical.includes(e) ? '🔴' : '🟡';
-    const deltaStr    = e.delta !== null ? (e.delta > 0 ? '+' : '') + e.delta.toFixed(0) + 'pts' : '—';
-    const deltaColor  = e.delta === null ? 'var(--tx3)' : e.delta < 0 ? 'var(--r)' : 'var(--g)';
-    const causeLabel  = { stock: '📦 Stock faible', prix_3p: '🏷️ Prix / 3P concurrent', surveillance: '👁 À surveiller', suppression: '💀 Éligibilité perdue', ok: '✅ OK' }[e.cause] || '—';
-    const shortTitle  = (e.title || e.asin).slice(0, 45) + ((e.title || '').length > 45 ? '…' : '');
+    // Tableau simplifié
+    const bbFilter = window._bbFilter || 'all';
+    const toShow = bbFilter === 'critical' ? critical : bbFilter === 'warning' ? warning : bbFilter === 'suppressed' ? suppressed : [...suppressed, ...critical, ...warning];
     const mkt = c.mainMarket || '.fr';
 
-    h += `<tr style="border-bottom:1px solid var(--bd);cursor:pointer" onclick="renderBuyBoxDetail('${esc(e.asin)}')">
-      <td style="padding:10px 12px">
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:14px">${statusIcon}</span>
-          <div>
-            <div style="font-weight:600;font-size:11px">${esc(shortTitle)}</div>
-            <div style="color:var(--tx3);font-size:10px">${e.asin} · Seg. ${e.segment}</div>
-          </div>
+    h += `<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+      ${[['all','Tous',allProblems.length,'var(--tx2)'],['critical','À traiter',critical.length,'#a32d2d'],['warning','À surveiller',warning.length,'#854f0b'],['suppressed','Fiches à vérifier',suppressed.length,'var(--tx2)']].map(([v,l,n,col]) =>
+        `<button class="btn btn-sm${bbFilter===v?' btn-p':''}" onclick="window._bbFilter='${v}';render()" style="${bbFilter===v?'':'color:'+col}">${l} (${n})</button>`
+      ).join('')}
+    </div>`;
+
+    h += `<div class="cd" style="padding:0;overflow:hidden">`;
+    for (const e of toShow) {
+      const existingCase = bbGetCase(c, e.asin);
+      const statusLabel = existingCase ? `<span style="font-size:10px;padding:2px 7px;background:var(--b-l,#e6f1fb);color:var(--b,#185fa5);border-radius:10px">Dossier ouvert</span>` : '';
+      const isSuppressed = suppressed.includes(e);
+      const isCritical = critical.includes(e);
+      const dotColor = isSuppressed ? '#888' : isCritical ? '#e24b4a' : '#ef9f27';
+
+      // Bouton d'action contextuel selon cause
+      let actionBtn = '';
+      if (e.cause === 'stock' || e.stockUrgent)
+        actionBtn = `<button class="btn btn-sm" style="background:#ef9f27;color:#fff;border-color:#ef9f27" onclick="event.stopPropagation();window._approsAsin='${e.asin}';go('appros')">Voir Appros →</button>`;
+      else if (e.cause === 'suppression')
+        actionBtn = `<button class="btn btn-sm" style="background:#888;color:#fff;border-color:#888" onclick="event.stopPropagation();window._bbPhase='action';window._bbSelectedAsin='${esc(e.asin)}';render()">Ouvrir le dossier</button>`;
+      else
+        actionBtn = `<button class="btn btn-sm" style="background:#e24b4a;color:#fff;border-color:#e24b4a" onclick="event.stopPropagation();window._bbPhase='action';window._bbSelectedAsin='${esc(e.asin)}';bbOpenCase(cl(),'${esc(e.asin)}','${e.cause}');render()">Traiter →</button>`;
+
+      const shortTitle = esc((e.title || e.asin).slice(0, 42)) + ((e.title||'').length > 42 ? '…' : '');
+      const deltaStr = e.delta !== null ? (e.delta > 0 ? '+' : '') + e.delta.toFixed(0) + 'pts' : '—';
+      const stockStr = e.couvertureSem !== null && e.couvertureSem !== '—'
+        ? `<span style="font-size:10px;padding:2px 6px;border-radius:8px;background:${e.stockUrgent?'#fcebeb':'#eaf3de'};color:${e.stockUrgent?'#a32d2d':'#3b6d11'}">${Number(e.couvertureSem).toFixed(1)}sem</span>`
+        : '';
+
+      h += `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:0.5px solid var(--bd);cursor:pointer" onclick="window._bbPhase='action';window._bbSelectedAsin='${esc(e.asin)}';bbOpenCase(cl(),'${esc(e.asin)}','${e.cause}');render()">
+        <div style="width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0"></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${shortTitle}</div>
+          <div style="font-size:11px;color:var(--tx2);margin-top:1px">${e.asin} · ${e.cause==='prix_3p'?'Vendeur 3P concurrent':e.cause==='stock'?'Stock faible':e.cause==='suppression'?'Éligibilité perdue':'En surveillance'} ${stockStr}</div>
         </div>
-      </td>
-      <td style="padding:10px 8px;text-align:center;font-weight:700;color:${statusColor}">${e.rPct.toFixed(0)}%</td>
-      <td style="padding:10px 8px;text-align:center;color:var(--tx2)">${e.prevRetail !== null ? e.prevRetail.toFixed(0) + '%' : '—'}</td>
-      <td style="padding:10px 8px;text-align:center;font-weight:600;color:${deltaColor}">${deltaStr}</td>
-      <td style="padding:10px 8px;text-align:center">${causeLabel}</td>
-      <td style="padding:10px 8px;text-align:center">
-        ${e.couvertureSem !== null && e.couvertureSem !== '—'
-          ? `<span style="font-size:11px;font-weight:600;color:${e.stockUrgent?'var(--r)':Number(e.couvertureSem)<6?'var(--or)':'var(--g)'}">${Number(e.couvertureSem).toFixed(1)}sem</span>`
-          : '<span style="color:var(--tx3);font-size:10px">—</span>'}
-      </td>
-      <td style="padding:10px 8px;font-weight:600">${fmtEur(e.revenue || 0)}</td>
-      <td style="padding:10px 8px;text-align:center">
-        <button class="btn btn-sm" onclick="event.stopPropagation();openAmazonProduct('${e.asin}','${mkt}')" title="Analyser sur Amazon">🔍</button>
-      </td>
-    </tr>`;
+        ${statusLabel}
+        <div style="text-align:center;flex-shrink:0;width:52px">
+          <div style="font-size:13px;font-weight:700;color:${isCritical||isSuppressed?'#a32d2d':'#854f0b'}">${e.rPct.toFixed(0)}%</div>
+          <div style="font-size:10px;color:${e.delta!==null&&e.delta<0?'#a32d2d':e.delta>0?'#3b6d11':'var(--tx3)'}">${deltaStr}</div>
+        </div>
+        <div style="font-size:12px;font-weight:500;flex-shrink:0;width:70px;text-align:right">${fmtEur(e.revenue||0)}</div>
+        ${actionBtn}
+      </div>`;
+    }
+    h += `</div>`;
+
+  } else if (phase === 'action' && selectedAsin) {
+    // ── PHASES 2-4 : Dossier ASIN ────────────────────────────────
+    h += renderBuyBoxCase(c, selectedAsin);
   }
-
-  h += `</tbody></table></div>`;
-
-  // ── Panneau plan d'action (si ASIN sélectionné) ────────────────
-  h += `<div id="bb-detail-panel"></div>`;
 
   h += `</div>`;
   return h;
 }
 
-function renderBuyBoxDetail(asin) {
-  const c = cl();
-  if (!c) return;
+function renderBuyBoxCase(c, asin) {
   const a = c.asins.find(x => x.asin === asin);
-  if (!a) return;
   const { critical, warning, suppressed } = calcBuyBoxAlerts(c);
-  const allEntries = [...suppressed, ...critical, ...warning];
-  const e = allEntries.find(x => x.asin === asin);
-  if (!e) return;
+  const allE = [...suppressed, ...critical, ...warning];
+  const e = allE.find(x => x.asin === asin);
+  if (!a || !e) return `<div class="alr alr-a">ASIN introuvable.</div>`;
 
+  let cas = bbGetCase(c, asin);
+  if (!cas) { cas = bbOpenCase(c, asin, e.cause); }
+
+  const subPhase = window._bbSubPhase || 'plan';
   const mkt = c.mainMarket || '.fr';
-  const productUrl = getAmazonProductUrl(asin, mkt);
 
-  // Plan d'action selon cause
-  const plans = {
-    stock: {
-      title: '📦 Cause probable : Stock faible ou rupture',
-      steps: [
-        '1. Vérifier le stock vendable dans Vendor Central (Inventory Health)',
-        '2. Passer une commande de réapprovisionnement si stock < 21 jours',
-        '3. Aller dans <b>Appros</b> pour voir la couverture prévisionnelle',
-        '4. Contacter Amazon pour accélérer un PO en attente si existant',
-      ],
-      email: 'stock'
-    },
-    prix_3p: {
-      title: '🏷️ Cause probable : Vendeur 3P concurrent plus compétitif',
-      steps: [
-        '1. Ouvrir la fiche sur Amazon et identifier qui détient la Buy Box',
-        '2. Comparer le prix total livré (prix + frais port) avec le concurrent',
-        '3. Vérifier <b>Pricing Health</b> dans Vendor Central → Competitive External Price',
-        '4. Si prix Amazon > prix 3P : négocier le Prix Net Facturé ou lancer coupon',
-        '5. Si 3P parasite : vérifier les droits de distribution — Brand Registry',
-      ],
-      email: 'buybox'
-    },
-    suppression: {
-      title: '💀 Alerte : Fiche possiblement supprimée ou éligibilité perdue',
-      steps: [
-        '1. Ouvrir la fiche sur Amazon — vérifier si le produit est encore visible',
-        '2. Vérifier dans Vendor Central > Catalogue > Gérer le catalogue',
-        '3. Contrôler <b>Account Health</b> pour toute violation de politique',
-        '4. Vérifier <b>Pricing Health</b> : prix trop haut ou trop bas ?',
-        '5. Si le produit est invisible : ouvrir un cas Vendor Support en URGENCE',
-      ],
-      email: 'suppress'
-    },
-    surveillance: {
-      title: '👁 Surveillance : Baisse Retail% détectée — cause non déterminée',
-      steps: [
-        '1. Surveiller l’évolution la semaine prochaine avant action',
-        '2. Ouvrir la fiche sur Amazon pour vérifier l’offre visible',
-        '3. Contrôler le stock disponible',
-        '4. Vérifier s’il y a un nouveau concurrent 3P sur cette fiche',
-      ],
-      email: 'buybox'
-    }
-  };
+  // Navigation retour + onglets phases
+  let h = `<button class="btn btn-sm" onclick="window._bbPhase='list';window._bbSubPhase='plan';render()" style="margin-bottom:14px">← Retour</button>`;
 
-  const plan = plans[e.cause] || plans['surveillance'];
-
-  // Graphique sparkline inline SVG
-  const maxR = Math.max(...chartData.map(d => d.rPct), 100);
-  const svgW = 320, svgH = 60, pad = 4;
-  const xStep = chartData.length > 1 ? (svgW - 2*pad) / (chartData.length - 1) : 0;
-  const yScale = v => svgH - pad - (v / maxR) * (svgH - 2*pad);
-  const pts = chartData.map((d, i) => `${pad + i * xStep},${yScale(d.rPct)}`).join(' ');
-  const sparkline = chartData.length >= 2
-    ? `<svg width="${svgW}" height="${svgH}" style="overflow:visible">
-        <polyline points="${pts}" fill="none" stroke="var(--b)" stroke-width="2" stroke-linejoin="round"/>
-        ${chartData.map((d, i) => `<circle cx="${pad + i * xStep}" cy="${yScale(d.rPct)}" r="3" fill="${d.rPct < 80 ? 'var(--r)' : d.rPct < 95 ? 'var(--or)' : 'var(--g)'}"/>`).join('')}
-        <line x1="0" y1="${yScale(95)}" x2="${svgW}" y2="${yScale(95)}" stroke="var(--g)" stroke-width="1" stroke-dasharray="3,3" opacity="0.5"/>
-        <text x="${svgW+2}" y="${yScale(95)+4}" font-size="9" fill="var(--g)" opacity="0.7">95%</text>
-      </svg>`
-    : '<span style="color:var(--tx3);font-size:11px">Historique insuffisant</span>';
-
-  // Bloc lien Appros si cause = stock
-  const approsLink = (e.cause === 'stock' || e.stockUrgent)
-    ? `<div class="alr alr-r" style="margin-bottom:12px;font-size:12px">
-        🔗 <b>Lien Buy Box ↔ Approvisionnement</b> — ${
-          e.couvertureSem !== null && e.couvertureSem !== '—'
-            ? `Couverture Amazon : <b>${Number(e.couvertureSem).toFixed(1)} semaines</b>${e.stockUrgent ? ' ⚠️ RUPTURE IMMINENTE' : ''}`
-            : 'Couverture non calculée — importez le stock'
-        }${e.joursAvantLimite !== null ? ` · Limite commande dans <b>${e.joursAvantLimite}j</b>` : ''}
-        <br><button class="btn btn-r btn-sm" style="margin-top:6px" onclick="window._approsAsin='${asin}';go('appros')">🚢 Voir Appros pour cet ASIN →</button>
-      </div>`
-    : '';
-
-  // Corrélation
-  const correlationBlock = correlation
-    ? `<div style="font-size:11px;color:var(--tx2);margin-top:6px">
-        📊 Corrélation calculée sur ${correlation.n} semaines :
-        chaque point de Retail% perdu = environ <b>${fmtEur(Math.abs(correlation.slope))}</b> de CA hebdomadaire
-        ${correlation.slope > 0 ? '(impact confirmé)' : '(corrélation faible)'}
-      </div>`
-    : '';
-
-  let h = `<div class="cd" style="margin-top:16px">
-    <div class="cd-t space">
-      <span>Plan d'action — ${esc((a.title||asin).slice(0,50))}${(a.title||'').length>50?'…':''}</span>
-      <span style="font-size:11px;color:var(--tx3)">${asin} · Retail% ${e.rPct.toFixed(0)}%${e.delta!==null?' ('+( e.delta>0?'+':'')+e.delta.toFixed(0)+'pts vs S-1)':''}</span>
+  // En-tête ASIN
+  h += `<div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:16px;padding:14px;background:var(--s2);border-radius:var(--rd)">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700;margin-bottom:3px">${esc((a.title||asin).slice(0,60))}${(a.title||'').length>60?'…':''}</div>
+      <div style="font-size:11px;color:var(--tx2)">${asin} · Featured Offer actuelle : <strong style="color:${e.rPct<80?'#a32d2d':'#854f0b'}">${e.rPct.toFixed(0)}%</strong>${e.delta!==null?` (${(e.delta>0?'+':'')+e.delta.toFixed(0)}pts vs S-1)`:''}</div>
     </div>
-
-    <div class="alr ${e.cause==='suppression'?'alr-r':e.cause==='prix_3p'?'alr-r':e.cause==='stock'?'alr-a':'alr-b'}" style="margin-bottom:12px">
-      <b>${plan.title}</b>
-    </div>
-
-    ${approsLink}
-
-    <div style="margin-bottom:16px">
-      <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Évolution Retail% — ${chartData.length} dernières semaines</div>
-      <div style="padding:8px;background:var(--s2);border-radius:var(--rd);overflow:hidden">
-        ${sparkline}
-        ${correlationBlock}
-      </div>
-    </div>
-
-    <div style="margin-bottom:16px">
-      <div style="font-size:11px;font-weight:600;color:var(--tx2);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Checklist d'actions</div>
-      ${plan.steps.map(s => `<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--bd);font-size:12px">
-        <input type="checkbox" style="margin-top:2px;flex-shrink:0">
-        <span>${s}</span>
-      </div>`).join('')}
-    </div>
-
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-p btn-sm" onclick="openAmazonProduct('${asin}','${mkt}')">🔍 Analyser sur Amazon</button>
-      <button class="btn btn-sm" onclick="copyBuyBoxChromePrompt('${asin}','${mkt}')">📋 Prompt Claude in Chrome</button>
-      <button class="btn btn-sm" onclick="openCaseModal('${asin}','${plan.email}')">✉️ Email Vendor Central</button>
-      <button class="btn btn-sm" onclick="window._approsAsin='${asin}';go('appros')">🚢 Voir Appros</button>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button class="btn btn-sm" onclick="openAmazonProduct('${asin}','${mkt}')">Voir sur Amazon</button>
+      <button class="btn btn-sm" onclick="copyBuyBoxChromePrompt('${asin}','${mkt}')">Prompt IA</button>
     </div>
   </div>`;
 
-  document.getElementById('bb-detail-panel').innerHTML = h;
-  document.getElementById('bb-detail-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Onglets 2-3-4
+  const tabs = [['plan','2 — Plan d\u2019action'],['suivi','3 — Suivi'],['bilan','4 — Bilan']];
+  h += `<div style="display:flex;gap:0;border-bottom:0.5px solid var(--bd);margin-bottom:16px">`;
+  for (const [id, label] of tabs) {
+    const on = subPhase === id;
+    h += `<button onclick="window._bbSubPhase='${id}';render()" style="padding:8px 16px;font-size:12px;font-weight:${on?'600':'400'};border:none;background:none;cursor:pointer;color:${on?'var(--tx)':'var(--tx2)'};border-bottom:2px solid ${on?'var(--b,#378add)':'transparent'}">${label}</button>`;
+  }
+  h += `</div>`;
+
+  if (subPhase === 'plan') {
+    h += renderBBPlan(c, cas, e, asin, mkt);
+  } else if (subPhase === 'suivi') {
+    h += renderBBSuivi(c, cas, e, asin);
+  } else if (subPhase === 'bilan') {
+    h += renderBBBilan(c, cas, e, asin);
+  }
+
+  return h;
+}
+
+function renderBBPlan(c, cas, e, asin, mkt) {
+  // Sparkline historique
+  const hist = (c.asins.find(x=>x.asin===asin)?.history || []).slice(-10)
+    .filter(h => parseNum(h.retailPct) > 0 || (h.revenue||0) > 0);
+  const svgW = 300, svgH = 50, pad = 4;
+  const pts = hist.map((d,i) => {
+    const x = hist.length > 1 ? pad + i*(svgW-2*pad)/(hist.length-1) : svgW/2;
+    const y = svgH - pad - (Math.min(parseNum(d.retailPct)||0,100)/100)*(svgH-2*pad);
+    return `${x},${y}`;
+  }).join(' ');
+  const sparkline = hist.length >= 2
+    ? `<svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;height:44px;display:block">
+        <line x1="0" y1="${svgH-pad-(95/100)*(svgH-2*pad)}" x2="${svgW}" y2="${svgH-pad-(95/100)*(svgH-2*pad)}" stroke="#3b6d11" stroke-width="1" stroke-dasharray="3,3" opacity=".4"/>
+        <polyline points="${pts}" fill="none" stroke="#378add" stroke-width="1.5" stroke-linejoin="round"/>
+        ${hist.map((d,i)=>{const x=hist.length>1?pad+i*(svgW-2*pad)/(hist.length-1):svgW/2;const rp=parseNum(d.retailPct)||0;const y=svgH-pad-(Math.min(rp,100)/100)*(svgH-2*pad);return `<circle cx="${x}" cy="${y}" r="3" fill="${rp<80?'#e24b4a':rp<95?'#ef9f27':'#639922'}"/>`;}).join('')}
+      </svg>`
+    : `<p style="font-size:11px;color:var(--tx3);margin:0">Historique insuffisant — données disponibles après plusieurs imports</p>`;
+
+  // Corrélation CA/retailPct
+  const histFull = hist.filter(h => parseNum(h.retailPct) > 0 && (h.revenue||0) > 0);
+  let corrBlock = '';
+  if (histFull.length >= 4) {
+    const n = histFull.length;
+    const sumX = histFull.reduce((s,h)=>s+parseNum(h.retailPct),0);
+    const sumY = histFull.reduce((s,h)=>s+(h.revenue||0),0);
+    const sumXY = histFull.reduce((s,h)=>s+parseNum(h.retailPct)*(h.revenue||0),0);
+    const sumX2 = histFull.reduce((s,h)=>s+Math.pow(parseNum(h.retailPct),2),0);
+    const denom = n*sumX2 - sumX*sumX;
+    if (denom !== 0) {
+      const slope = Math.round((n*sumXY - sumX*sumY)/denom);
+      if (slope > 0) corrBlock = `<div style="font-size:11px;color:var(--tx2);margin-top:6px;padding:6px 8px;background:var(--b-l,#e6f1fb);border-radius:var(--rd)">Chaque point de Featured Offer perdu ≈ <strong>${fmtEur(Math.abs(slope))}</strong> de CA hebdomadaire (${n} semaines)</div>`;
+    }
+  }
+
+  // Suggestion bbKnowledge
+  const suggestion = bbKnowledgeSuggestion(c, e.cause);
+  const suggBlock = suggestion
+    ? `<div style="padding:10px 12px;background:var(--g-bg,#eaf3de);border-left:3px solid #639922;border-radius:0 var(--rd) var(--rd) 0;font-size:12px;margin-bottom:12px">
+        <strong>Suggestion basée sur vos cas précédents (${suggestion.total} cas similaires) :</strong><br>
+        L'action "<em>${suggestion.action}</em>" a fonctionné dans ${suggestion.successRate}% des cas · résolution en ~${suggestion.avgWeeks} semaines
+      </div>`
+    : '';
+
+  // Alerte stock+buybox
+  const stockAlert = (e.cause === 'stock' || e.stockUrgent)
+    ? `<div class="alr alr-r" style="margin-bottom:12px;font-size:12px">
+        🔗 <strong>Double urgence</strong> — Buy Box perdue + stock critique : ${e.couvertureSem !== null && e.couvertureSem !== '—' ? `<strong>${Number(e.couvertureSem).toFixed(1)} semaines</strong> de couverture` : 'couverture non calculée'}
+        <button class="btn btn-sm" style="background:#e24b4a;color:#fff;border-color:#e24b4a;margin-left:8px" onclick="window._approsAsin='${asin}';go('appros')">Voir Appros →</button>
+      </div>`
+    : '';
+
+  // Cause et plan
+  const causeLabel = {prix_3p:'Vendeur 3P concurrent plus compétitif',stock:'Stock faible ou rupture',suppression:'Éligibilité Featured Offer perdue',surveillance:'Baisse détectée — cause à confirmer'}[e.cause]||'—';
+  const steps = {
+    prix_3p:[
+      {t:'Analyser la fiche sur Amazon',d:'Identifier qui détient la Buy Box et à quel prix'},
+      {t:'Comparer le prix total livré',d:'Votre prix vs concurrent (produit + port)'},
+      {t:'Vérifier Pricing Health dans VC',d:'Onglet Tarification → Competitive External Price'},
+      {t:'Ajuster le prix ou lancer un coupon',d:'Coupon temporaire recommandé avant de baisser le catalogue'},
+      {t:'Vérifier Brand Registry si 3P non autorisé',d:'Signaler un distributeur non-agréé'},
+    ],
+    stock:[
+      {t:'Passer une commande de réappro',d:'Stock < 3 semaines = urgence Vendor Central'},
+      {t:'Vérifier les PO en attente',d:'Un PO non confirmé peut créer une rupture invisible'},
+      {t:'Activer le stock tampon si disponible',d:'Éviter le zéro stock FBA'},
+      {t:'Surveiller la Buy Box après réappro',d:'La Featured Offer revient en général sous 48-72h'},
+    ],
+    suppression:[
+      {t:'Ouvrir la fiche sur Amazon',d:'Vérifier si le produit est encore visible'},
+      {t:'Vérifier Catalogue VC → Gérer le catalogue',d:'Statut de la fiche et des variations'},
+      {t:'Contrôler Account Health',d:'Toute violation peut entraîner une suspension de Featured Offer'},
+      {t:'Vérifier Pricing Health',d:'Prix trop haut ou trop bas peut supprimer l\u2019éligibilité'},
+      {t:'Ouvrir un cas Vendor Support',d:'Si fiche invisible malgré tout conforme'},
+    ],
+    surveillance:[
+      {t:'Surveiller l\u2019évolution la semaine prochaine',d:'Avant toute action — confirmer la tendance'},
+      {t:'Vérifier la fiche Amazon',d:'Identifier si un nouveau 3P est apparu'},
+      {t:'Contrôler le stock disponible',d:'Un stock bas peut déclencher une perte progressive'},
+    ],
+  }[e.cause] || [];
+
+  const actions = ['Coupon temporaire (test sans baisser le catalogue)','Baisse de prix catalogue','Signalement Brand Registry','Email Vendor Central','Commande réappro urgente','Vérification Pricing Health','Autre'];
+  const currentAction = cas.action || '';
+  const currentNote = (cas.note || '').replace(/"/g, '&quot;');
+
+  let h = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start">`;
+
+  // Colonne gauche : sparkline + cause + suggestion
+  h += `<div>
+    <div class="cd" style="margin-bottom:12px">
+      <div class="cd-t">Évolution Featured Offer</div>
+      <div style="padding:8px 0">${sparkline}${corrBlock}</div>
+    </div>
+    <div class="cd">
+      <div class="cd-t">Diagnostic</div>
+      <div style="font-size:12px;padding:8px 0;border-bottom:0.5px solid var(--bd);margin-bottom:10px">
+        <strong>Cause probable :</strong> ${causeLabel}
+      </div>
+      ${suggBlock}
+      ${stockAlert}
+      <div style="margin-bottom:8px">
+        <div style="font-size:11px;color:var(--tx2);margin-bottom:5px;font-weight:500">Action choisie</div>
+        <select onchange="bbGetCase(cl(),'${asin}').action=this.value;save()" style="width:100%;font-size:11px;padding:5px 8px;border-radius:var(--rd);border:0.5px solid var(--bd);background:var(--bg);color:var(--tx)">
+          <option value="">— Choisir une action —</option>
+          ${actions.map(a=>`<option value="${esc(a)}"${currentAction===a?' selected':''}>${esc(a)}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--tx2);margin-bottom:5px;font-weight:500">Note libre</div>
+        <textarea onchange="bbGetCase(cl(),'${asin}').note=this.value;save()" placeholder="Ex: concurrent identifié = X, prix cible = Y€..." style="width:100%;font-size:11px;padding:6px 8px;border-radius:var(--rd);border:0.5px solid var(--bd);background:var(--bg);color:var(--tx);resize:vertical;min-height:60px">${currentNote}</textarea>
+      </div>
+      <button class="btn btn-p" style="width:100%;margin-top:10px;font-size:12px" onclick="window._bbSubPhase='suivi';render()">Valider le plan → passer au suivi</button>
+    </div>
+  </div>`;
+
+  // Colonne droite : checklist
+  h += `<div class="cd">
+    <div class="cd-t">Checklist d'actions</div>
+    ${steps.map((s,i)=>{
+      const done = cas.steps && cas.steps[i];
+      return `<div style="display:flex;gap:8px;align-items:flex-start;padding:9px 0;border-bottom:0.5px solid var(--bd)">
+        <input type="checkbox" ${done?'checked':''} style="margin-top:2px;flex-shrink:0" onchange="if(!bbGetCase(cl(),'${asin}').steps)bbGetCase(cl(),'${asin}').steps={};bbGetCase(cl(),'${asin}').steps[${i}]=this.checked;save()">
+        <div>
+          <div style="font-size:12px;font-weight:500">${esc(s.t)}</div>
+          <div style="font-size:11px;color:var(--tx2);margin-top:1px">${esc(s.d)}</div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+
+  h += `</div>`;
+  return h;
+}
+
+function renderBBSuivi(c, cas, e, asin) {
+  const weeks = cas.weeks || [];
+  // Mettre à jour la semaine courante avec le retailPct actuel
+  const currentWeek = getISOWeek(new Date());
+
+  let h = `<div class="cd" style="margin-bottom:14px">
+    <div class="cd-t space">
+      <span>Timeline du dossier</span>
+      <button class="btn btn-sm" onclick="
+        const cas=bbGetCase(cl(),'${asin}');
+        const w=getISOWeek(new Date());
+        const rp=${e.rPct.toFixed(1)};
+        if(!cas.weeks.find(x=>x.week===w)){cas.weeks.push({week:w,rPct:rp,event:'Import S'+w,ts:new Date().toISOString()});}
+        save();render()">+ Enregistrer la semaine courante (S${currentWeek} · ${e.rPct.toFixed(0)}%)</button>
+    </div>`;
+
+  if (weeks.length === 0) {
+    h += `<div style="padding:16px;text-align:center;color:var(--tx3);font-size:12px">Aucune entrée — cliquez sur le bouton pour enregistrer la semaine courante</div>`;
+  } else {
+    h += `<div style="padding:8px 0">`;
+    for (let i = 0; i < weeks.length; i++) {
+      const w = weeks[i];
+      const isLast = i === weeks.length - 1;
+      const rp = w.rPct !== null ? parseFloat(w.rPct) : null;
+      const dotColor = rp === null ? 'var(--tx3)' : rp >= 95 ? '#639922' : rp >= 80 ? '#ef9f27' : '#e24b4a';
+      const prev = i > 0 && weeks[i-1].rPct !== null ? parseFloat(weeks[i-1].rPct) : null;
+      const delta = rp !== null && prev !== null ? (rp - prev).toFixed(0) : null;
+      h += `<div style="display:flex;gap:12px;padding:10px 0;${!isLast?'border-bottom:0.5px solid var(--bd)':''}">
+        <div style="display:flex;flex-direction:column;align-items:center;width:40px;flex-shrink:0">
+          <div style="width:10px;height:10px;border-radius:50%;background:${dotColor};flex-shrink:0"></div>
+          ${!isLast?`<div style="width:1px;flex:1;background:var(--bd);margin-top:3px"></div>`:''}
+        </div>
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:500">S${w.week} — ${w.event}</div>
+          <div style="font-size:11px;color:var(--tx2);margin-top:2px">
+            ${rp!==null?`Featured Offer : <strong>${rp.toFixed(0)}%</strong>`:'Pas de données Retail%'}
+            ${delta!==null?`<span style="color:${delta>0?'#3b6d11':delta<0?'#a32d2d':'var(--tx3)'};margin-left:6px">${delta>0?'+':''}${delta}pts</span>`:''}
+          </div>
+          ${w.note?`<div style="font-size:11px;color:var(--tx3);margin-top:2px">${esc(w.note)}</div>`:''}
+        </div>
+      </div>`;
+    }
+    h += `</div>`;
+  }
+  h += `</div>`;
+
+  h += `<div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn btn-sm" style="background:#639922;color:#fff;border-color:#639922" onclick="window._bbSubPhase='bilan';render()">Featured Offer récupérée → Clôturer</button>
+    <button class="btn btn-sm" onclick="window._bbPhase='list';window._bbSubPhase='plan';render()">Retour au tableau</button>
+  </div>`;
+
+  return h;
+}
+
+function renderBBBilan(c, cas, e, asin) {
+  const isClosed = cas.status === 'closed';
+  const durée = cas.weeks.length;
+
+  let h = '';
+
+  if (!isClosed) {
+    h += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <button class="btn" style="padding:14px;font-size:12px;text-align:center;background:#eaf3de;border-color:#c0dd97;color:#3b6d11" onclick="bbCloseCase(cl(),'${asin}',true);render()">
+        <div style="font-size:20px;margin-bottom:4px">✅</div>
+        <div style="font-weight:500">Résolu — ça a fonctionné</div>
+        <div style="font-size:11px;opacity:.8;margin-top:2px">Featured Offer récupérée</div>
+      </button>
+      <button class="btn" style="padding:14px;font-size:12px;text-align:center;background:#fcebeb;border-color:#f09595;color:#a32d2d" onclick="bbCloseCase(cl(),'${asin}',false);render()">
+        <div style="font-size:20px;margin-bottom:4px">❌</div>
+        <div style="font-weight:500">Résolu — ça n\u2019a pas fonctionné</div>
+        <div style="font-size:11px;opacity:.8;margin-top:2px">Action inefficace — à documenter</div>
+      </button>
+    </div>`;
+  }
+
+  if (isClosed) {
+    const success = cas.success;
+    h += `<div style="padding:12px 14px;border-radius:var(--rd);border:0.5px solid ${success?'#c0dd97':'#f09595'};background:${success?'#eaf3de':'#fcebeb'};margin-bottom:14px;font-size:12px">
+      <strong>${success ? '✅ Dossier clôturé — résolution confirmée' : '❌ Dossier clôturé — action inefficace'}</strong><br>
+      Action utilisée : <em>${esc(cas.action || '—')}</em> · Durée : ${durée} semaine${durée>1?'s':''}
+      ${cas.note?`<br>Note : ${esc(cas.note)}`:''}
+    </div>`;
+
+    // Règle apprise
+    const suggestion = bbKnowledgeSuggestion(c, e.cause);
+    if (suggestion) {
+      h += `<div style="padding:10px 12px;background:var(--g-bg,#eaf3de);border-left:3px solid #639922;border-radius:0 var(--rd) var(--rd) 0;font-size:12px;margin-bottom:14px">
+        <strong>Règle apprise (${suggestion.total} cas) :</strong><br>
+        Sur ce profil (${e.cause==='prix_3p'?'3P concurrent':e.cause==='stock'?'stock faible':'autre'}), l'action "<em>${suggestion.action}</em>" fonctionne dans ${suggestion.successRate}% des cas en ~${suggestion.avgWeeks} semaines.
+        Cette règle sera suggérée automatiquement pour les cas similaires.
+      </div>`;
+    }
+  }
+
+  // KPIs globaux
+  const allClosed = bbGetCases(c).filter(x => x.status === 'closed');
+  const resolved = allClosed.filter(x => x.success);
+  const avgWeeks = allClosed.length ? Math.round(allClosed.reduce((s,x)=>s+x.weeks.length,0)/allClosed.length) : 0;
+
+  h += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+    <div style="background:var(--s2);border-radius:var(--rd);padding:12px;text-align:center">
+      <div style="font-size:22px;font-weight:500;color:${resolved.length>0?'#3b6d11':'var(--tx2)'}">${allClosed.length ? Math.round(resolved.length/allClosed.length*100) : '—'}${allClosed.length?'%':''}</div>
+      <div style="font-size:10px;color:var(--tx2);margin-top:3px">Taux de résolution</div>
+    </div>
+    <div style="background:var(--s2);border-radius:var(--rd);padding:12px;text-align:center">
+      <div style="font-size:22px;font-weight:500;color:var(--b,#185fa5)">${avgWeeks || '—'}${avgWeeks?'sem':''}</div>
+      <div style="font-size:10px;color:var(--tx2);margin-top:3px">Durée moy. résolution</div>
+    </div>
+    <div style="background:var(--s2);border-radius:var(--rd);padding:12px;text-align:center">
+      <div style="font-size:22px;font-weight:500;color:#3b6d11">${allClosed.length}</div>
+      <div style="font-size:10px;color:var(--tx2);margin-top:3px">Cas clôturés</div>
+    </div>
+  </div>`;
+
+  if (isClosed) {
+    h += `<button class="btn btn-sm" style="margin-top:14px" onclick="window._bbPhase='list';window._bbSubPhase='plan';render()">← Retour au tableau</button>`;
+  }
+
+  return h;
 }
 
 function copyBuyBoxChromePrompt(asin, market) {
-  const prompt = `Tu es un expert Amazon. Analyse la page produit de cet ASIN : ${asin} (${getAmazonProductUrl(asin, market)})
+  const prompt = `Tu es un expert Amazon Vendor Central. Analyse la fiche produit ASIN ${asin} sur amazon${market||'.fr'} (https://www.amazon${market||'.fr'}/dp/${asin}).
 
-Réponds précisément à ces questions :
-1. Qui détient la Featured Offer (Buy Box) en ce moment ? Amazon ou un vendeur tiers ?
-2. Si c'est un vendeur tiers : quel est son nom ? Quel est son prix total livré ?
-3. Y a-t-il d'autres offres visibles ("Voir toutes les offres") ? Combien ? À quel prix ?
-4. Le produit est-il "Expédié et vendu par Amazon" ou pas ?
-5. Y a-t-il des signes de rupture de stock (délai anormal, "stock limité") ?
-6. Le produit est-il bien visible dans les résultats de recherche ? (note : non vérifiable depuis cette page)
+Réponds précisément :
+1. Qui détient la Featured Offer (Buy Box) ? Amazon ou un vendeur tiers ?
+2. Si vendeur tiers : nom, prix total livré (produit + port), badge Prime ?
+3. Autres offres visibles ("Voir toutes les offres") : combien, fourchette de prix ?
+4. Le produit est-il "Expédié et vendu par Amazon" ?
+5. Signes de rupture de stock (délai anormal, "En stock le...") ?
+6. Y a-t-il des promotions ou coupons actifs sur la fiche ?
 
-Synthèse : quelle est selon toi la cause principale de la perte de Buy Box sur cet ASIN ?`;
+Synthèse : cause principale probable de la perte de Featured Offer, et action recommandée en 1 phrase.`;
 
   navigator.clipboard.writeText(prompt).catch(() => {
     const ta = document.createElement('textarea');
-    ta.value = prompt;
-    document.body.appendChild(ta); ta.select();
-    document.execCommand('copy'); document.body.removeChild(ta);
+    ta.value = prompt; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
   });
-  showToast('Prompt Claude in Chrome copié — ouvrez Amazon puis collez dans Claude', 'alr-g');
+  showToast('Prompt copié — ouvrez Amazon puis collez dans Claude in Chrome', 'alr-g');
 }
 
 
