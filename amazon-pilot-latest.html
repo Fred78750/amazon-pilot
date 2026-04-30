@@ -451,7 +451,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.65';
+const APP_VERSION = '3.1.66';
 
 const SMOKE_REF = {
   ca2024:  { val: 1703110, tol: 0.01, expiry: '2026-12-31', label: 'CA 2024' },
@@ -5646,18 +5646,44 @@ function calcAppro(a, client, catalogueEntry, erpEntry) {
     nbPeriodes = recent.length;
     // Poids : 1, 1.2, 1.4 ... 2× (linéaire)
     let sumW = 0, sumWV = 0;
+    // Calculer le prix unitaire moyen pour fallback revenue→units
+    const allRevs = recent.filter(h => (h.revenue||0) > 0);
+    const allUnits = recent.filter(h => (h.units||0) > 0);
+    const prixMoyen = (allRevs.length && allUnits.length)
+      ? allRevs.reduce((s,h)=>s+(h.revenue||0),0) / allUnits.reduce((s,h)=>s+(h.units||0),0)
+      : (a.revenue && a.units) ? a.revenue / a.units : 0;
+
     recent.forEach(function(h, i) {
       const w = 1 + (i / Math.max(nbPeriodes - 1, 1));
       sumW  += w;
-      sumWV += w * (h.units || 0);
+      // Priorité : units réelles, fallback : revenue / prix moyen
+      const u = (h.units || 0) > 0
+        ? h.units
+        : (prixMoyen > 0 && (h.revenue||0) > 0) ? Math.round(h.revenue / prixMoyen) : 0;
+      sumWV += w * u;
     });
     velociteBase = sumWV / sumW;
     velociteSource = nbPeriodes + ' sem.';
+    if (velociteBase <= 0 && prixMoyen > 0 && (a.revenue||0) > 0) {
+      // Dernier recours : vélocité depuis le revenue total de l'ASIN / prix
+      velociteBase = a.revenue / prixMoyen / Math.max(nbPeriodes, 1);
+      velociteSource = 'est. rev. ⚠';
+      velociteWarning = true;
+    }
   } else if ((a.units || 0) > 0) {
     velociteBase = a.units;
     velociteWarning = true;
     velociteSource = '1 sem. ⚠';
     nbPeriodes = 1;
+  } else if ((a.revenue || 0) > 0) {
+    // Fallback : estimer depuis le revenue de la semaine courante
+    const prixEst = (a.sellableUnits > 0 && a.revenue > 0) ? a.revenue / Math.max(a.units||1, 1) : 0;
+    if (prixEst > 0) {
+      velociteBase = a.revenue / prixEst;
+      velociteWarning = true;
+      velociteSource = 'est. rev. ⚠';
+      nbPeriodes = 1;
+    }
   }
   if (velociteBase <= 0) return null;
 
