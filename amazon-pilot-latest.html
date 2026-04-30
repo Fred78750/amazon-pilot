@@ -451,7 +451,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.64';
+const APP_VERSION = '3.1.65';
 
 const SMOKE_REF = {
   ca2024:  { val: 1703110, tol: 0.01, expiry: '2026-12-31', label: 'CA 2024' },
@@ -7640,60 +7640,104 @@ function handleErpStock(input) {
   reader.onload = function(e) {
     try {
       const wb = XLSX.read(e.target.result, { type: 'array' });
-      // Chercher l'onglet "Stock dispo réel" (insensible à la casse/accents)
+
+      // Chercher l'onglet pertinent (insensible à la casse/accents)
       const sheetName = wb.SheetNames.find(function(n) {
         return n.toLowerCase().replace(/\s/g,'').includes('stockdispo');
-      }) || wb.SheetNames[1] || wb.SheetNames[0];
+      }) || wb.SheetNames[0];
       const ws = wb.Sheets[sheetName];
       const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
-      if (!rows.length) { alert('Onglet "Stock dispo réel" introuvable ou vide.'); return; }
+      if (!rows.length) { alert('Onglet introuvable ou vide.'); return; }
 
-      // Colonnes attendues
-      const COL_SKU    = 'N° Article';
-      const COL_EAN    = 'Art. Gencod Référence';
-      const COL_LABEL  = 'Article';
-      const COL_MARQUE = 'Art. Marque Commerciale';
-      const COL_S0     = 'Stock dispo réel à date';
-      const COL_S15    = 'Stock dispo réel à date +15 Jours';
-      const COL_S1M    = 'Stock dispo réel à date +1 mois';
-      const COL_S2M    = 'Stock dispo réel à date +2 mois';
-      const COL_S3M    = 'Stock dispo réel à date +3 mois';
+      // Détection du format :
+      // Format A (ancien) : colonnes "N° Article", "Stock dispo réel à date"...
+      // Format B (nouveau ERP Cogex) : colonnes "N°", "Stock physique", "Stock dispo sur 6 mois"...
+      const firstRow = rows[0];
+      const isFormatB = firstRow.hasOwnProperty('N°') && firstRow.hasOwnProperty('Stock physique');
 
-      // Dédoublonnage : garder l'année la plus récente par N° Article
       const bysku = {};
-      rows.forEach(function(row) {
-        const sku = row[COL_SKU] != null ? String(row[COL_SKU]).trim() : null;
-        if (!sku) return;
-        const annee = row['Année'] || 0;
-        if (!bysku[sku] || annee > bysku[sku]._annee) {
-          bysku[sku] = {
-            _annee:   annee,
-            ean:      row[COL_EAN] != null ? String(row[COL_EAN]).trim() : '',
-            label:    row[COL_LABEL] || '',
-            marque:   row[COL_MARQUE] || '',
-            s0:       parseFloat(row[COL_S0])  || 0,
-            s15:      parseFloat(row[COL_S15]) || 0,
-            s1m:      parseFloat(row[COL_S1M]) || 0,
-            s2m:      parseFloat(row[COL_S2M]) || 0,
-            s3m:      parseFloat(row[COL_S3M]) || 0
-          };
-        }
-      });
 
-      // Supprimer la clé interne _annee
-      Object.keys(bysku).forEach(function(k) { delete bysku[k]._annee; });
+      if (isFormatB) {
+        // ── Format B — Export ERP Cogex ─────────────────────────────
+        // Colonnes : N°, Désignation, Code vie, Gencod,
+        //            Stock physique, Stock dispo sur 6 mois,
+        //            Date prochain arrivage, Qté prochain arrivage
+        rows.forEach(function(row) {
+          const skuRaw = row['N°'] != null ? String(row['N°']).trim() : null;
+          if (!skuRaw) return;
+          // Normaliser en 6 chiffres (080017 au lieu de 80017)
+          const sku = skuRaw.padStart(6, '0');
+          const stockPhys = parseFloat(row['Stock physique']) || 0;
+          const stock6m   = parseFloat(row['Stock dispo sur 6 mois']) || 0;
+          // Date arrivage : peut être une date JS ou une chaîne
+          let dateArrivage = null;
+          const rawDate = row['Date prochain arrivage'];
+          if (rawDate) {
+            const d = new Date(rawDate);
+            if (!isNaN(d.getTime())) dateArrivage = d.toISOString().slice(0,10);
+          }
+          bysku[sku] = {
+            ean:           row['Gencod'] != null ? String(row['Gencod']).trim() : '',
+            label:         row['Désignation'] || '',
+            codeVie:       row['Code vie'] || '',
+            stockPhysique: Math.max(0, stockPhys),  // ignorer les négatifs
+            stock6m:       Math.max(0, stock6m),
+            dateArrivage:  dateArrivage,
+            qteArrivage:   parseInt(row['Qté prochain arrivage']) || 0,
+            // Compatibilité avec Format A pour calcAppro
+            s0:  Math.max(0, stockPhys),
+            s1m: Math.max(0, stock6m),
+            s3m: Math.max(0, stock6m),
+          };
+        });
+      } else {
+        // ── Format A (ancien) — Stock dispo réel par horizons ───────
+        const COL_SKU    = 'N° Article';
+        const COL_EAN    = 'Art. Gencod Référence';
+        const COL_LABEL  = 'Article';
+        const COL_MARQUE = 'Art. Marque Commerciale';
+        const COL_S0     = 'Stock dispo réel à date';
+        const COL_S15    = 'Stock dispo réel à date +15 Jours';
+        const COL_S1M    = 'Stock dispo réel à date +1 mois';
+        const COL_S2M    = 'Stock dispo réel à date +2 mois';
+        const COL_S3M    = 'Stock dispo réel à date +3 mois';
+
+        rows.forEach(function(row) {
+          const sku = row[COL_SKU] != null ? String(row[COL_SKU]).trim() : null;
+          if (!sku) return;
+          const annee = row['Année'] || 0;
+          if (!bysku[sku] || annee > bysku[sku]._annee) {
+            bysku[sku] = {
+              _annee:        annee,
+              ean:           row[COL_EAN] != null ? String(row[COL_EAN]).trim() : '',
+              label:         row[COL_LABEL] || '',
+              marque:        row[COL_MARQUE] || '',
+              stockPhysique: parseFloat(row[COL_S0]) || 0,
+              stock6m:       parseFloat(row[COL_S3M]) || 0,
+              s0:            parseFloat(row[COL_S0])  || 0,
+              s15:           parseFloat(row[COL_S15]) || 0,
+              s1m:           parseFloat(row[COL_S1M]) || 0,
+              s2m:           parseFloat(row[COL_S2M]) || 0,
+              s3m:           parseFloat(row[COL_S3M]) || 0,
+            };
+          }
+        });
+        Object.keys(bysku).forEach(function(k) { delete bysku[k]._annee; });
+      }
 
       const c = cl();
       if (!c) return;
       c.erpStock = bysku;
       c.erpStockDate = new Date().toISOString().slice(0,10);
+      c.erpStockFormat = isFormatB ? 'B' : 'A';
       save();
       const count = Object.keys(bysku).length;
-      log('✓ Stock ERP importé : ' + count + ' références (onglet : ' + sheetName + ')', 'ok');
+      const fmt = isFormatB ? 'Format B (stock + arrivages)' : 'Format A (horizons dispo)';
+      log('✓ Stock ERP importé : ' + count + ' références — ' + fmt, 'ok');
       render();
       const toast = document.createElement('div');
       toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:14px 18px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:999;display:flex;align-items:center;gap:12px';
-      toast.innerHTML = '<span style="font-size:20px">📦</span><div><strong>' + count + ' références</strong> chargées (stock ERP)<br><span style="font-size:11px;color:#6B7280">Onglet : ' + sheetName + ' — MAJ ' + (c.erpStockDate||'') + '</span></div>';
+      toast.innerHTML = '<span style="font-size:20px">📦</span><div><strong>' + count + ' références</strong> chargées (stock ERP)<br><span style="font-size:11px;color:#6B7280">' + fmt + ' — MAJ ' + (c.erpStockDate||'') + '</span></div>';
       document.body.appendChild(toast);
       setTimeout(function() { toast.remove(); }, 4000);
     } catch(err) {
