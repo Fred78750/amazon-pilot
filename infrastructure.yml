@@ -1,0 +1,182 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Amazon Pilot API — DynamoDB + Lambda + API Gateway
+
+Parameters:
+  CognitoUserPoolId:
+    Type: String
+    Description: ID du User Pool Cognito
+    Default: ''
+  CognitoClientId:
+    Type: String
+    Description: Client ID de l'app Cognito
+    Default: ''
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [prod, staging]
+
+# ── DynamoDB ─────────────────────────────────────────────────────
+Resources:
+
+  # Table clients
+  TableClients:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'ap-clients-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: clientId, AttributeType: S }
+        - { AttributeName: sk,       AttributeType: S }
+      KeySchema:
+        - { AttributeName: clientId, KeyType: HASH  }
+        - { AttributeName: sk,       KeyType: RANGE }
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  # Table données (weekly, annual, seo, po, etc.)
+  TableData:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'ap-data-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: clientId, AttributeType: S }
+        - { AttributeName: sk,       AttributeType: S }
+      KeySchema:
+        - { AttributeName: clientId, KeyType: HASH  }
+        - { AttributeName: sk,       KeyType: RANGE }
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  # Table users + droits
+  TableUsers:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'ap-users-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: userId,   AttributeType: S }
+        - { AttributeName: sk,       AttributeType: S }
+        - { AttributeName: clientId, AttributeType: S }
+      KeySchema:
+        - { AttributeName: userId, KeyType: HASH  }
+        - { AttributeName: sk,     KeyType: RANGE }
+      GlobalSecondaryIndexes:
+        - IndexName: clientId-index
+          KeySchema:
+            - { AttributeName: clientId, KeyType: HASH }
+          Projection: { ProjectionType: ALL }
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  # Table usage tokens IA par client/mois
+  TableUsage:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'ap-usage-${Environment}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: clientId, AttributeType: S }
+        - { AttributeName: sk,       AttributeType: S }
+      KeySchema:
+        - { AttributeName: clientId, KeyType: HASH  }
+        - { AttributeName: sk,       KeyType: RANGE }
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
+  # ── IAM Role Lambda ────────────────────────────────────────────
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'amazon-pilot-api-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !GetAtt TableClients.Arn
+                  - !GetAtt TableData.Arn
+                  - !GetAtt TableUsers.Arn
+                  - !GetAtt TableUsage.Arn
+                  - !Sub '${TableUsers.Arn}/index/*'
+                  - !Sub '${TableData.Arn}/index/*'
+
+  # ── Lambda ────────────────────────────────────────────────────
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'amazon-pilot-api-${Environment}'
+      Runtime: nodejs22.x
+      Handler: handler.handler
+      Role: !GetAtt LambdaRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          NODE_ENV:                !Ref Environment
+          TABLE_CLIENTS:           !Ref TableClients
+          TABLE_DATA:              !Ref TableData
+          TABLE_USERS:             !Ref TableUsers
+          TABLE_USAGE:             !Ref TableUsage
+          ANTHROPIC_API_KEY:       '{{ANTHROPIC_API_KEY}}'
+          COGNITO_USER_POOL_ID:    !Ref CognitoUserPoolId
+          COGNITO_CLIENT_ID:       !Ref CognitoClientId
+      Code:
+        ZipFile: |
+          // Placeholder — déployé via CI/CD
+          exports.handler = async () => ({ statusCode: 200, body: 'ok' });
+
+  # ── URL Lambda (HTTPS direct sans API Gateway) ─────────────────
+  LambdaUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !Ref LambdaFunction
+      AuthType: NONE
+      Cors:
+        AllowOrigins: ['*']
+        AllowMethods: ['GET', 'PUT', 'POST', 'DELETE', 'OPTIONS']
+        AllowHeaders: ['Authorization', 'Content-Type']
+
+  LambdaUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref LambdaFunction
+      Action: lambda:InvokeFunctionUrl
+      Principal: '*'
+      FunctionUrlAuthType: NONE
+
+# ── Outputs ───────────────────────────────────────────────────────
+Outputs:
+  ApiUrl:
+    Description: URL de l'API Lambda
+    Value: !GetAtt LambdaUrl.FunctionUrl
+    Export:
+      Name: !Sub 'amazon-pilot-api-url-${Environment}'
+
+  TableClientsName:
+    Value: !Ref TableClients
+  TableDataName:
+    Value: !Ref TableData
+  TableUsersName:
+    Value: !Ref TableUsers
+  TableUsageName:
+    Value: !Ref TableUsage
