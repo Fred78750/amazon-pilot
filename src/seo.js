@@ -1,0 +1,837 @@
+// Amazon Pilot — Module Agent SEO
+// Extrait automatiquement — ne pas éditer directement
+
+function seoGetPendingVerifications() {
+  var c = cl();
+  if (!c || !c.ficheOptimisee) return [];
+  var now = new Date();
+  var pending = [];
+  Object.entries(c.ficheOptimisee).forEach(function(entry) {
+    var asin = entry[0]; var fiche = entry[1];
+    (fiche.actions || []).forEach(function(action) {
+      if (action.verified === null && action.verificationDue && new Date(action.verificationDue) < now) {
+        pending.push({ asin: asin, action: action });
+      }
+    });
+  });
+  return pending;
+}
+
+
+// ── Fonctions SEO utilitaires ──────────────────────────────────
+function seoGetStatus(asin, c) {
+  var fiche = c.ficheOptimisee && c.ficheOptimisee[asin];
+  if (!fiche) return 'none';
+  var actions = fiche.actions || [];
+  if (!actions.length) return 'generated';
+  var last = actions[actions.length - 1];
+  if (last.verified === true) return 'verified';
+  if (last.verified === false) return 'failed';
+  if (last.verificationDue && new Date(last.verificationDue) < new Date()) return 'overdue';
+  if (last.submittedAt) return 'submitted';
+  return 'generated';
+}
+
+function seoStatusLabel(status) {
+  var map = {
+    none:      { label: 'Non optimisé',          color: 'var(--tx3)', icon: '' },
+    generated: { label: 'Fiche générée',          color: 'var(--accent)', icon: '✍️' },
+    submitted: { label: 'Soumis VC',              color: '#2196F3', icon: '📤' },
+    overdue:   { label: 'Vérification en attente', color: 'var(--or)', icon: '⏰' },
+    verified:  { label: 'Conforme',               color: 'var(--g)', icon: '✅' },
+    failed:    { label: 'Non conforme',           color: 'var(--r)', icon: '❌' }
+  };
+  return map[status] || map.none;
+}
+
+function seoRecordAction(asin, route, supplierCodes, markets) {
+  var c = cl();
+  if (!c) return;
+  if (!c.ficheOptimisee) c.ficheOptimisee = {};
+  if (!c.ficheOptimisee[asin]) c.ficheOptimisee[asin] = {};
+  if (!c.ficheOptimisee[asin].actions) c.ficheOptimisee[asin].actions = [];
+  var now = new Date();
+  var verDue = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  c.ficheOptimisee[asin].actions.push({
+    route: route,
+    supplierCodes: supplierCodes || [],
+    markets: markets || [],
+    submittedAt: now.toISOString(),
+    verificationDue: verDue.toISOString(),
+    verifiedAt: null,
+    verified: null,
+    diff: null,
+    caseId: null,
+    caseStatus: null
+  });
+  save();
+  showToast('Action enregistrée — vérification prévue dans 24h', 'alr-b');
+  render();
+}
+
+function seoGetScriptModify(asin, supplierCode, market, fiche) {
+  var mkt = fiche[market] || fiche['.fr'] || {};
+  var bullets = mkt.bullets || ['', '', '', '', ''];
+  var lines = [
+    'Tu es l\'agent SEO Amazon Pilot.',
+    'ASIN : ' + asin,
+    'Supplier Code : ' + supplierCode,
+    'Marche : ' + market,
+    '',
+    'Donnees a appliquer :',
+    'Titre : ' + (mkt.titre || ''),
+    'Bullet 1 : ' + (bullets[0] || ''),
+    'Bullet 2 : ' + (bullets[1] || ''),
+    'Bullet 3 : ' + (bullets[2] || ''),
+    'Bullet 4 : ' + (bullets[3] || ''),
+    'Bullet 5 : ' + (bullets[4] || ''),
+    'Description : ' + (mkt.description || ''),
+    'Backend Keywords : ' + (fiche.backendKW || ''),
+    '',
+    'Instructions :',
+    '1. Ouvre Vendor Central > Catalogue > Gerer le catalogue',
+    '2. Recherche l\'ASIN ' + asin + ' sous le supplier code ' + supplierCode,
+    '3. Ouvre la fiche en mode edition',
+    '4. Remplace le titre, les 5 bullets, la description et les backend keywords',
+    '5. Confirme la soumission',
+    '6. Rapporte : succes ou erreur'
+  ];
+  return lines.join('\n');
+}
+function seoGetScriptVerify(asin, market, fiche) {
+  var mkt = fiche[market] || fiche['.fr'] || {};
+  var bullets = mkt.bullets || [];
+  var lines = [
+    'Tu es l\'agent de verification SEO.',
+    'ASIN : ' + asin,
+    'Marche : amazon' + market,
+    '',
+    'Instructions :',
+    '1. Ouvre https://www.amazon' + market + '/dp/' + asin,
+    '2. Lis le titre actuel et les 5 bullets',
+    '3. Compare avec les valeurs attendues ci-dessous',
+    '4. Rapporte : CONFORME ou NON CONFORME avec les differences',
+    '',
+    'Titre attendu : ' + (mkt.titre || ''),
+    'Bullet 1 attendu : ' + (bullets[0] || ''),
+    'Bullet 2 attendu : ' + (bullets[1] || ''),
+    'Bullet 3 attendu : ' + (bullets[2] || ''),
+    'Bullet 4 attendu : ' + (bullets[3] || ''),
+    'Bullet 5 attendu : ' + (bullets[4] || '')
+  ];
+  return lines.join('\n');
+}
+function seoLaunchModify(asin) {
+  var c = cl();
+  if (!c) return;
+  var fiche = c.ficheOptimisee && c.ficheOptimisee[asin];
+  if (!fiche) { showToast('Générez d\'abord la fiche SEO', 'alr-r'); return; }
+  var markets = c.markets && c.markets.length ? c.markets : [c.mainMarket || '.fr'];
+  var supplierCodes = [...new Set(c.asins.filter(function(x) { return x.asin === asin && x.vendorCode; }).map(function(x) { return x.vendorCode; }))];
+  if (!supplierCodes.length) supplierCodes.push('(supplier code non détecté)');
+  var script = seoGetScriptModify(asin, supplierCodes.join(' + '), markets[0], fiche);
+  navigator.clipboard.writeText(script).then(function() {
+    showToast('Script Route B copié — collez dans Claude in Chrome sur Vendor Central', 'alr-g');
+    seoRecordAction(asin, 'update', supplierCodes, markets);
+  });
+}
+
+
+function seoLaunchCreate(asin) {
+  var c = cl();
+  if (!c) return;
+  var fiche = c.ficheOptimisee && c.ficheOptimisee[asin];
+  if (!fiche) { showToast('Générez d\'abord la fiche SEO', 'alr-r'); return; }
+  var mkt = fiche['.fr'] || {};
+  var bullets = mkt.bullets || ['', '', '', '', ''];
+  var lines = [
+    'Tu es l\'agent SEO Amazon Pilot.',
+    'Nouvelle référence à créer dans Vendor Central.',
+    '',
+    'Données produit :',
+    'Titre : ' + (mkt.titre || ''),
+    'Type produit : ' + (mkt.nomType || ''),
+    'Bullet 1 : ' + (bullets[0] || ''),
+    'Bullet 2 : ' + (bullets[1] || ''),
+    'Bullet 3 : ' + (bullets[2] || ''),
+    'Bullet 4 : ' + (bullets[3] || ''),
+    'Bullet 5 : ' + (bullets[4] || ''),
+    'Description : ' + (mkt.description || ''),
+    '',
+    'Instructions :',
+    '1. Ouvre Vendor Central > Catalogue > Ajouter un produit',
+    '2. Sélectionne la catégorie : ' + (mkt.nomType || ''),
+    '3. Remplis tous les champs avec les données ci-dessus',
+    '4. Soumets la création',
+    '5. Rapporte l\'ASIN créé ou l\'erreur'
+  ];
+  var script = lines.join('\n');
+  navigator.clipboard.writeText(script).then(function() {
+    showToast('Script Route A copié — collez dans Claude in Chrome sur Vendor Central', 'alr-g');
+    seoRecordAction(asin, 'create', [], c.markets || [c.mainMarket || '.fr']);
+  });
+}
+function seoLaunchVerify(asin) {
+  var c = cl();
+  if (!c) return;
+  var fiche = c.ficheOptimisee && c.ficheOptimisee[asin];
+  if (!fiche) return;
+  var market = c.mainMarket || '.fr';
+  var script = seoGetScriptVerify(asin, market, fiche);
+  navigator.clipboard.writeText(script).then(function() {
+    showToast('Script vérification copié — collez dans Claude in Chrome sur Amazon', 'alr-g');
+  });
+}
+
+function seoOpenCase(asin) {
+  var c = cl();
+  if (!c) return;
+  var fiche = c.ficheOptimisee && c.ficheOptimisee[asin];
+  if (!fiche) return;
+  var lastAction = fiche.actions && fiche.actions.length ? fiche.actions[fiche.actions.length-1] : null;
+  var lines = [
+    'DEMANDE DE CAS SUPPORT AMAZON',
+    '',
+    'ASIN : ' + asin,
+    'Supplier Codes : ' + (lastAction && lastAction.supplierCodes ? lastAction.supplierCodes.join(', ') : 'N/D'),
+    'Date de soumission : ' + (lastAction && lastAction.submittedAt ? new Date(lastAction.submittedAt).toLocaleDateString('fr-FR') : 'N/D'),
+    '',
+    'PROBLEME :',
+    'Les modifications soumises via Vendor Central n\'ont pas été appliquées après 24h.',
+    '',
+    'MODIFICATIONS SOUMISES :',
+    'Titre : ' + ((fiche['.fr'] && fiche['.fr'].titre) || ''),
+    '',
+    'ACTION DEMANDEE :',
+    'Merci d\'appliquer les modifications ou d\'indiquer la raison du blocage.'
+  ];
+  navigator.clipboard.writeText(lines.join('\n')).then(function() {
+    showToast('Dossier cas support copié', 'alr-g');
+  });
+}
+function copySEOField(asin, mkt, field) {
+  var res = seoResults[asin] || {};
+  var text = '';
+  if (field === 'backendKW') {
+    text = res.backendKW || (res[mkt] && res[mkt].backendKW) || '';
+  } else if (field === 'all') {
+    var r = res[mkt] || {};
+    var parts = [];
+    if (r.titre) parts.push('TITRE:\n' + r.titre);
+    if (r.bullets && r.bullets.length) parts.push('BULLETS:\n' + r.bullets.filter(Boolean).join('\n'));
+    if (r.description) parts.push('DESCRIPTION:\n' + r.description);
+    if (res.backendKW) parts.push('BACKEND KW:\n' + res.backendKW);
+    text = parts.join('\n\n');
+  } else if (res[mkt]) {
+    if (field === 'titre') text = res[mkt].titre || '';
+    else if (field === 'description') text = res[mkt].description || '';
+    else if (field.startsWith('bullet')) {
+      var idx = parseInt(field.replace('bullet', '')) - 1;
+      text = (res[mkt].bullets || [])[idx] || '';
+    }
+  }
+  if (!text) { showToast('Rien à copier', 'alr-r'); return; }
+  navigator.clipboard.writeText(text).then(function() {
+    showToast('Copié !', 'alr-g');
+  });
+}
+
+// ── Score SEO défaillant ────────────────────────────────────────
+function calcSEODefaillance(a, c) {
+  const asins = c.asins || [];
+  const totalCA = asins.reduce(function(s,x){ return s+(x.revenue||0); }, 0);
+  const seg = calcSegment(a, totalCA);
+  const gvList = asins.map(function(x){ return x.glanceViews||0; }).filter(function(v){ return v>0; }).sort(function(a,b){return a-b;});
+  const medGV = gvList.length ? gvList[Math.floor(gvList.length/2)] : 0;
+  const units = a.units || 0;
+  const gv = a.glanceViews || 0;
+  const convRate = (gv > 0) ? units/gv : 0;
+  const convList = asins.map(function(x){ return (x.glanceViews&&x.units) ? x.units/x.glanceViews : 0; }).filter(function(v){return v>0;}).sort(function(a,b){return a-b;});
+  const medConv = convList.length ? convList[Math.floor(convList.length/2)] : 0;
+  const revDelta = parseNum(a.revenueDelta) || 0;
+  const gvDelta  = parseNum(a.gvDelta)     || 0;
+  const retailPct = parseNum(a.retailPct)  || 100;
+  const sellable = a.sellableUnits != null ? a.sellableUnits : 999;
+  const hasFiche = !!(c.ficheOptimisee && c.ficheOptimisee[a.asin]);
+
+  var score = 0;
+  if (gv > 0 && gv < medGV * 0.6)                score += 2; // trafic très faible vs catalogue
+  if (revDelta <= -10 && gvDelta <= -10)           score += 2; // perte organique
+  if (!hasFiche)                                   score += 1; // jamais traité
+  if (retailPct < 50)                              score += 1; // Amazon ne met pas en avant
+  if (seg === 'A' || seg === 'B')                  score += 1; // priorité commerciale
+  if (sellable < 10)                               score -= 2; // exclure : rupture stock
+  if (convRate > medConv * 1.2)                    score -= 1; // produit convertit bien, SEO ok
+  if (a.revenue === 0 || a.revenue == null)        score -= 1; // pas de ventes = hors scope
+
+  if (score >= 4) return 'critical';   // 🔴
+  if (score >= 2) return 'watch';      // 🟡
+  return 'ok';                          // ⚪
+}
+
+// ── Drawer SEO ──────────────────────────────────────────────────
+function openSEODrawer(asin) {
+  seoLoading = false; // reset au cas où état corrompu
+  seoDrawerAsin = asin;
+  var c = cl();
+  if (!c) return;
+  // Si fiche déjà en mémoire, l'utiliser
+  if (!seoResults[asin] && c.ficheOptimisee && c.ficheOptimisee[asin]) {
+    seoResults[asin] = c.ficheOptimisee[asin];
+  }
+  var hasFiche = !!seoResults[asin];
+  renderSEODrawer();
+  if (!hasFiche) runSEOFiche(asin);
+}
+
+function closeSEODrawer() {
+  seoDrawerAsin = null;
+  seoLoading = false;
+  var d = document.getElementById('seo-drawer');
+  if (d) {
+    d.style.transform = 'translateX(100%)';
+    setTimeout(function(){ if(d.parentNode) d.parentNode.removeChild(d); }, 280);
+  }
+}
+
+function renderSEODrawer() {
+  var existing = document.getElementById('seo-drawer');
+  if (existing) existing.parentNode.removeChild(existing);
+
+  var asin = seoDrawerAsin;
+  if (!asin) return;
+  var c = cl();
+  if (!c) return;
+  var a = c.asins.find(function(x){ return x.asin === asin; });
+  if (!a) return;
+
+  var drawer = document.createElement('div');
+  drawer.id = 'seo-drawer';
+  drawer.style.cssText = 'position:fixed;top:0;right:0;width:520px;max-width:95vw;height:100vh;background:var(--s1);border-left:1px solid var(--bd2);box-shadow:-4px 0 24px rgba(0,0,0,.15);z-index:250;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1)';
+  document.body.appendChild(drawer);
+  setTimeout(function(){ drawer.style.transform = 'translateX(0)'; }, 10);
+
+  refreshSEODrawer();
+}
+
+function refreshSEODrawer() {
+  var drawer = document.getElementById('seo-drawer');
+  if (!drawer) return;
+  var asin = seoDrawerAsin;
+  if (!asin) return;
+  var c = cl();
+  if (!c) return;
+  var a = c.asins.find(function(x){ return x.asin === asin; });
+  if (!a) return;
+
+  var markets = c.markets && c.markets.length ? c.markets : [c.mainMarket || '.fr'];
+  var seenLangs = new Set();
+  var mtp = markets.filter(function(mkt) {
+    var ml = MARKET_LANG[mkt];
+    if (!ml) return false;
+    var key = ml.lang + (mkt === '.be' ? '-be' : '');
+    if (seenLangs.has(key)) return false;
+    seenLangs.add(key);
+    return true;
+  });
+
+  var res = seoResults[asin] || {};
+  var activeMkt = seoActiveTab || mtp[0];
+  var r = res[activeMkt];
+  var status = seoGetStatus(asin, c);
+  var shortTitle = (a.title || asin).substring(0, 50) + ((a.title||'').length > 50 ? '…' : '');
+  var asinJ = "'" + asin + "'";
+
+  var h = '';
+
+  // ── Header ──
+  h += '<div style="padding:14px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px;flex-shrink:0">';
+  h += '<button onclick="closeSEODrawer()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--tx3);padding:0;line-height:1">✕</button>';
+  h += '<div style="flex:1;min-width:0">';
+  h += '<div style="font-size:13px;font-weight:700;color:var(--tx1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(shortTitle) + '</div>';
+  h += '<div style="font-size:10px;color:var(--tx3);font-family:var(--mono)">' + esc(asin) + '</div>';
+  h += '</div>';
+  h += '<a href="https://www.amazon' + esc(c.mainMarket||'.fr') + '/dp/' + esc(asin) + '" target="_blank" class="btn btn-xs">🔗</a>';
+  h += '</div>';
+
+  // ── Body scrollable ──
+  h += '<div style="flex:1;overflow-y:auto;padding:16px">';
+
+  if (seoLoading && seoDrawerAsin === asin) {
+    // Onglets marchés avec progression
+    if (mtp.length > 1) {
+      h += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:14px">';
+      mtp.forEach(function(mkt) {
+        var ml = MARKET_LANG[mkt];
+        var done = !!(res[mkt] && !res[mkt].error);
+        h += '<div style="padding:4px 10px;border-radius:20px;font-size:11px;background:' + (done?'var(--g)':'var(--bd2)') + ';color:' + (done?'#fff':'var(--tx3)') + '">' + (ml?ml.flag+' '+ml.label:mkt) + (done?' ✓':' ⏳') + '</div>';
+      });
+      h += '</div>';
+    }
+    var doneCnt = mtp.filter(function(m){ return !!(res[m]&&!res[m].error); }).length;
+    h += '<div style="text-align:center;padding:48px 20px">';
+    h += '<div style="font-size:40px;margin-bottom:14px"><span class="spin">⏳</span></div>';
+    h += '<div style="font-size:14px;font-weight:600;margin-bottom:6px">Génération en cours...</div>';
+    h += '<div style="font-size:12px;color:var(--tx3)">' + doneCnt + ' / ' + mtp.length + ' marché(s) terminé(s)</div>';
+    if (doneCnt > 0 && r && !r.error) {
+      h += '</div>';
+      h += drawSEOContent(asin, activeMkt, res, mtp, true);
+    } else {
+      h += '</div>';
+    }
+  } else if (!r) {
+    h += '<div class="alr alr-b">Aucune fiche générée. Cliquez sur Générer.</div>';
+  } else if (r.error) {
+    h += '<div class="alr alr-r">Erreur : ' + esc(String(r.error)) + '</div>';
+  } else {
+    // Onglets marchés
+    if (mtp.length > 1) {
+      h += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:14px">';
+      mtp.forEach(function(mkt) {
+        var ml = MARKET_LANG[mkt];
+        var done = !!(res[mkt] && !res[mkt].error);
+        var isAct = activeMkt === mkt;
+        h += '<button class="btn btn-sm' + (isAct?' btn-p':'') + '" onclick="seoActiveTab=' + JSON.stringify(mkt) + ';refreshSEODrawer()">' + (ml?ml.flag+' '+ml.label:mkt) + (done?' ✓':'') + '</button>';
+      });
+      h += '</div>';
+    }
+    h += drawSEOContent(asin, activeMkt, res, mtp, false);
+  }
+
+  // Historique actions
+  var ficheActions = (c.ficheOptimisee&&c.ficheOptimisee[asin]&&c.ficheOptimisee[asin].actions) ? c.ficheOptimisee[asin].actions : [];
+  if (ficheActions.length > 0) {
+    h += '<div style="margin-top:16px"><div style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Historique des actions</div>';
+    ficheActions.slice().reverse().forEach(function(action, revIdx) {
+      var idx = ficheActions.length - 1 - revIdx;
+      var iv = action.verified===true; var iF = action.verified===false;
+      var iO = action.verified===null && action.verificationDue && new Date(action.verificationDue)<new Date();
+      var sc = iv?'var(--g)':iF?'var(--r)':iO?'var(--or)':'#2196F3';
+      var si = iv?'✅':iF?'❌':iO?'⏰':'📤';
+      var sl = iv?'Conforme':iF?'Non conforme':iO?'Vérif. en attente':'Soumis VC';
+      var sd = action.submittedAt ? new Date(action.submittedAt).toLocaleDateString('fr-FR') : '';
+      h += '<div style="padding:8px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd);margin-bottom:6px">';
+      h += '<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:11px;font-weight:600">' + (action.route==='create'?'Route A':'Route B') + '</span><span style="font-size:11px;color:'+sc+';font-weight:600">'+si+' '+sl+'</span></div>';
+      h += '<div style="font-size:10px;color:var(--tx3)">' + sd + (action.supplierCodes&&action.supplierCodes.length?' · '+action.supplierCodes.join(', '):'') + '</div>';
+      if (action.verified === null) {
+        h += '<div style="display:flex;gap:4px;margin-top:6px">';
+        h += '<button class="btn btn-xs" style="background:var(--g);color:#fff;border-color:var(--g)" onclick="seoMarkVerified('+asinJ+','+idx+',true)">✅ Conforme</button>';
+        h += '<button class="btn btn-xs" style="background:var(--r);color:#fff;border-color:var(--r)" onclick="seoMarkVerified('+asinJ+','+idx+',false)">❌ Non conforme</button>';
+        h += '</div>';
+      }
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+
+  h += '</div>';
+
+  // ── Footer actions ──
+  if (!seoLoading && r && !r.error) {
+    h += '<div style="padding:12px 16px;border-top:1px solid var(--bd);display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">';
+    h += '<button class="btn btn-sm btn-p" onclick="copySEOTitreMkt('+asinJ+','+JSON.stringify(activeMkt)+')">📋 Tout copier</button>';
+    h += '<button class="btn btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)" onclick="seoLaunchModify('+asinJ+')">📤 Modifier VC</button>';
+    if (status==='submitted'||status==='overdue') {
+      h += '<button class="btn btn-sm" style="background:var(--or);color:#fff;border-color:var(--or)" onclick="seoLaunchVerify('+asinJ+')">🔍 Vérifier</button>';
+    }
+    if (status==='failed') {
+      h += '<button class="btn btn-sm" style="background:var(--r);color:#fff;border-color:var(--r)" onclick="seoOpenCase('+asinJ+')">🆘 Cas support</button>';
+    }
+    h += '<button class="btn btn-sm" onclick="runSEOFiche('+asinJ+')">🔄 Regénérer</button>';
+    h += '</div>';
+  } else if (!seoLoading) {
+    h += '<div style="padding:12px 16px;border-top:1px solid var(--bd)">';
+    h += '<button class="btn btn-p" onclick="runSEOFiche('+asinJ+')" style="width:100%">✍️ Générer la fiche</button>';
+    h += '</div>';
+  }
+
+  drawer.innerHTML = h;
+}
+
+function drawSEOContent(asin, activeMkt, res, mtp, compact) {
+  var r = res[activeMkt];
+  if (!r || r.error) return '';
+  var h = '';
+  var asinJ = "'" + asin + "'";
+  var mktJ  = JSON.stringify(activeMkt);
+
+  // Nom type produit
+  if (r.nomType) {
+    h += '<div style="margin-bottom:10px;padding:6px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd)">';
+    h += '<div style="font-size:9px;font-weight:700;color:var(--tx3);margin-bottom:2px">TYPE PRODUIT</div>';
+    h += '<div style="font-size:12px;font-weight:600">' + esc(r.nomType) + '</div>';
+    h += '</div>';
+  }
+
+  // Titre
+  var tl = r.titre ? r.titre.length : 0;
+  var tc = tl > 200 ? 'var(--r)' : tl >= 80 ? 'var(--g)' : 'var(--or)';
+  h += '<div style="margin-bottom:10px">';
+  h += '<div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:4px"><span>TITRE</span><span style="color:'+tc+'">'+tl+' car. '+(tl>200?'⚠':'✓')+'</span></div>';
+  h += '<div style="padding:8px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd);font-size:12px;line-height:1.5">' + esc(r.titre||'') + '</div>';
+  h += '<button class="btn btn-xs" style="margin-top:3px" onclick="copySEOTitreMkt('+asinJ+','+mktJ+')">📋 Copier titre</button>';
+  h += '</div>';
+
+  if (!compact) {
+    // Bullets
+    h += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:6px">BULLET POINTS</div>';
+    (r.bullets||[]).forEach(function(b,i) {
+      if (!b) return;
+      var bf = JSON.stringify('bullet'+(i+1));
+      h += '<div style="margin-bottom:5px;padding:7px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd)">';
+      h += '<div style="font-size:9px;font-weight:700;color:var(--or);margin-bottom:2px">• '+(i+1)+'</div>';
+      h += '<div style="font-size:11px;line-height:1.5">' + esc(b) + '</div>';
+      h += '<button class="btn btn-xs" style="margin-top:3px" onclick="copySEOField('+asinJ+','+mktJ+','+bf+')">📋</button>';
+      h += '</div>';
+    });
+    h += '</div>';
+
+    if (r.description) {
+      h += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:4px">DESCRIPTION HTML</div>';
+      h += '<div style="padding:8px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd);font-size:10px;font-family:var(--fm);line-height:1.5;max-height:100px;overflow-y:auto">' + esc(r.description) + '</div>';
+      h += '<button class="btn btn-xs" style="margin-top:3px" onclick="copySEODescMkt('+asinJ+','+mktJ+')">📋 Copier</button>';
+      h += '</div>';
+    }
+
+    if (res.backendKW) {
+      h += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:4px">BACKEND KEYWORDS</div>';
+      h += '<div style="padding:7px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd);font-size:10px;color:var(--tx2);line-height:1.5">' + esc(res.backendKW) + '</div>';
+      h += '<button class="btn btn-xs" style="margin-top:3px" onclick="copySEOBkwMkt('+asinJ+')">📋 Copier</button>';
+      h += '</div>';
+    }
+
+    if (r.positionnement||r.leviers||r.erreurs||r.opportunite) {
+      h += '<div style="margin-bottom:10px;padding:8px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd)">';
+      h += '<div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:6px">SYNTHÈSE STRATÉGIQUE</div>';
+      if (r.positionnement) h += '<div style="margin-bottom:4px"><span style="font-size:9px;font-weight:700;color:var(--tx3)">POSITIONNEMENT</span><div style="font-size:11px">' + esc(r.positionnement) + '</div></div>';
+      if (r.leviers)        h += '<div style="margin-bottom:4px"><span style="font-size:9px;font-weight:700;color:var(--g)">LEVIERS</span><div style="font-size:11px">' + esc(r.leviers) + '</div></div>';
+      if (r.erreurs)        h += '<div style="margin-bottom:4px"><span style="font-size:9px;font-weight:700;color:var(--r)">ERREURS</span><div style="font-size:11px">' + esc(r.erreurs) + '</div></div>';
+      if (r.opportunite)    h += '<div><span style="font-size:9px;font-weight:700;color:var(--b)">OPPORTUNITÉ</span><div style="font-size:11px">' + esc(r.opportunite) + '</div></div>';
+      h += '</div>';
+    }
+  }
+  return h;
+}
+
+function copySEOTitreMkt(asin, mkt) { copySEOField(asin, mkt, 'all'); }
+function copySEODescMkt(asin, mkt)  { copySEOField(asin, mkt, 'description'); }
+function copySEOBkwMkt(asin)        { copySEOField(asin, null, 'backendKW'); }
+
+function seoMarkVerified(asin, actionIndex, isVerified) {
+  var c = cl();
+  if (!c || !c.ficheOptimisee || !c.ficheOptimisee[asin]) return;
+  var actions = c.ficheOptimisee[asin].actions;
+  if (!actions || actions[actionIndex] === undefined) return;
+  actions[actionIndex].verified = isVerified;
+  actions[actionIndex].verifiedAt = new Date().toISOString();
+  save();
+  showToast(isVerified ? '✅ Marqué conforme' : '❌ Marqué non conforme', isVerified ? 'alr-g' : 'alr-r');
+  refreshSEODrawer();
+}
+
+// ── renderSEOScreen — nouvelle UX ──────────────────────────────
+function renderSEOScreen() {
+  var c = cl();
+  if (!c) return '<div class="alr alr-r">Aucun client sélectionné.</div>';
+
+  var asins = c.asins || [];
+  var totalCA = asins.reduce(function(s,x){ return s+(x.revenue||0); }, 0);
+  var pendingVerif = seoGetPendingVerifications();
+  var markets = c.markets && c.markets.length ? c.markets : [c.mainMarket || '.fr'];
+
+  var h = '<div style="padding:20px 24px;max-width:960px">';
+
+  // ── Titre ──
+  h += '<div style="margin-bottom:20px">';
+  h += '<h2 style="font-size:20px;font-weight:700;margin:0 0 4px 0">✍️ Agent SEO — ' + esc(c.name) + '</h2>';
+  h += '<div style="font-size:12px;color:var(--tx3)">' + markets.join(' · ') + '</div>';
+  h += '</div>';
+
+  if (pendingVerif.length > 0) {
+    h += '<div class="alr alr-r" style="margin-bottom:16px">⏰ ' + pendingVerif.length + ' vérification' + (pendingVerif.length > 1 ? 's' : '') + ' en attente — modifications soumises il y a plus de 24h.</div>';
+  }
+
+  // ── Zone 1 : Saisie ASIN ou création ──
+  h += '<div class="cd" style="margin-bottom:16px">';
+  h += '<div style="font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Travailler sur un ASIN</div>';
+  h += '<div style="display:flex;gap:8px;margin-bottom:8px">';
+  h += '<input id="seo-asin-input" type="text" placeholder="ASIN, référence interne ou titre..." style="flex:1;padding:9px 12px;border:1px solid var(--bd2);border-radius:var(--rd);background:var(--s2);color:var(--tx);font-size:13px;font-family:var(--fn)" oninput="seoSearchInput()" onkeydown="if(event.key===\'Enter\')seoSearchGo()">';
+  h += '<button class="btn btn-p" onclick="seoSearchGo()">✍️ Générer</button>';
+  h += '</div>';
+  h += '<div id="seo-search-results" style="margin-bottom:4px"></div>';
+  h += '<button class="btn btn-sm" style="border-style:dashed" onclick="seoLaunchNewRef()">➕ Créer une nouvelle référence dans VC</button>';
+  h += '</div>';
+
+  // ── Zone 2 : ASINs suggérés ──
+  var defaillants = asins.filter(function(a) {
+    var d = calcSEODefaillance(a, c);
+    return d === 'critical' || d === 'watch';
+  }).sort(function(a,b) {
+    var pa = calcSEODefaillance(a,c)==='critical'?1:0;
+    var pb = calcSEODefaillance(b,c)==='critical'?1:0;
+    if (pa !== pb) return pb - pa;
+    return (b.revenue||0) - (a.revenue||0);
+  }).slice(0, 10);
+
+  if (defaillants.length > 0) {
+    h += '<div class="cd" style="margin-bottom:16px">';
+    h += '<div style="font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">💡 ASINs suggérés pour optimisation SEO</div>';
+    defaillants.forEach(function(a) {
+      var d = calcSEODefaillance(a, c);
+      var seg = calcSegment(a, totalCA);
+      var segC = {A:'var(--g)',B:'var(--accent)',C:'var(--tx3)'}[seg]||'var(--tx3)';
+      var icon = d==='critical' ? '🔴' : '🟡';
+      var label = d==='critical' ? 'SEO défaillant' : 'À surveiller';
+      var short = (a.title||a.asin).substring(0,60)+((a.title||'').length>60?'…':'');
+      var asinJ = "'" + a.asin + "'";
+      h += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)">';
+      h += '<div style="flex-shrink:0;width:22px;height:22px;border-radius:50%;background:'+segC+';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff">'+seg+'</div>';
+      h += '<div style="flex:1;min-width:0">';
+      h += '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(short) + '</div>';
+      h += '<div style="font-size:10px;color:var(--tx3);font-family:var(--mono)">' + esc(a.asin) + ' · ' + fmtEur(a.revenue||0) + '</div>';
+      h += '</div>';
+      h += '<div style="flex-shrink:0;font-size:10px;color:var(--tx3)">' + icon + ' ' + label + '</div>';
+      h += '<button class="btn btn-xs btn-p" onclick="openSEODrawer('+asinJ+')">✍️ Générer</button>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+
+  // ── Zone 3 : Fiches en cours / non effectives ──
+  var inProgress = asins.filter(function(a) {
+    var s = seoGetStatus(a.asin, c);
+    return s === 'generated' || s === 'submitted' || s === 'overdue' || s === 'failed';
+  });
+
+  if (inProgress.length > 0) {
+    h += '<div class="cd">';
+    h += '<div style="font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">📋 Fiches en cours (' + inProgress.length + ')</div>';
+    inProgress.forEach(function(a) {
+      var status = seoGetStatus(a.asin, c);
+      var si = seoStatusLabel(status);
+      var fiche = c.ficheOptimisee && c.ficheOptimisee[a.asin];
+      var lastAction = fiche && fiche.actions && fiche.actions.length ? fiche.actions[fiche.actions.length-1] : null;
+      var short = (a.title||a.asin).substring(0,55)+((a.title||'').length>55?'…':'');
+      var asinJ = "'" + a.asin + "'";
+      h += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bd)">';
+      h += '<div style="flex:1;min-width:0">';
+      h += '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(short) + '</div>';
+      h += '<div style="font-size:10px;color:var(--tx3);font-family:var(--mono)">' + esc(a.asin) + (lastAction ? ' · ' + new Date(lastAction.submittedAt).toLocaleDateString('fr-FR') : '') + '</div>';
+      h += '</div>';
+      h += '<div style="flex-shrink:0;font-size:11px;font-weight:600;color:'+si.color+'">' + si.icon + ' ' + si.label + '</div>';
+      h += '<button class="btn btn-xs" onclick="openSEODrawer('+asinJ+')">👁 Voir</button>';
+      if (status==='submitted'||status==='overdue') {
+        h += '<button class="btn btn-xs" style="background:var(--or);color:#fff;border-color:var(--or)" onclick="seoLaunchVerify('+asinJ+')">🔍 Vérif.</button>';
+      }
+      if (status==='failed') {
+        h += '<button class="btn btn-xs" style="background:var(--r);color:#fff;border-color:var(--r)" onclick="seoOpenCase('+asinJ+')">🆘</button>';
+      }
+      h += '</div>';
+    });
+    h += '</div>';
+  } else {
+    h += '<div class="alr alr-g">✅ Aucune fiche en attente — tout est conforme ou non encore généré.</div>';
+  }
+
+  h += '</div>';
+  return h;
+}
+
+function seoSearchInput() {
+  var input = document.getElementById('seo-asin-input');
+  if (!input) return;
+  var q = input.value.trim().toUpperCase();
+  var results = document.getElementById('seo-search-results');
+  if (!results) return;
+  if (q.length < 3) { results.innerHTML = ''; return; }
+  var c = cl();
+  if (!c) return;
+  var matches = c.asins.filter(function(a) {
+    return a.asin.toUpperCase().includes(q) ||
+           (a.title||'').toUpperCase().includes(q) ||
+           (c.asins.some(function(x){ return x.asin===a.asin && x.vendorCode && x.vendorCode.toUpperCase().includes(q); }));
+  }).slice(0, 5);
+  if (!matches.length) { results.innerHTML = '<div style="font-size:11px;color:var(--tx3);padding:4px 0">Aucun résultat</div>'; return; }
+  var h = '';
+  matches.forEach(function(a) {
+    var short = (a.title||a.asin).substring(0,60);
+    h += '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer" onclick="document.getElementById(\'seo-asin-input\').value=\''+esc(a.asin)+'\';document.getElementById(\'seo-search-results\').innerHTML=\'\'">';
+    h += '<span style="font-family:var(--mono);font-size:11px;color:var(--accent)">'+esc(a.asin)+'</span>';
+    h += '<span style="font-size:11px;color:var(--tx2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(short)+'</span>';
+    h += '</div>';
+  });
+  results.innerHTML = h;
+}
+
+function seoSearchGo() {
+  var input = document.getElementById('seo-asin-input');
+  if (!input) return;
+  var q = input.value.trim().toUpperCase();
+  if (!q) return;
+  var c = cl();
+  if (!c) return;
+  var a = c.asins.find(function(x){ return x.asin.toUpperCase() === q; });
+  if (!a) {
+    // Cherche par titre ou ref
+    a = c.asins.find(function(x){ return (x.title||'').toUpperCase().includes(q); });
+  }
+  if (!a) { showToast('ASIN non trouvé dans le catalogue', 'alr-r'); return; }
+  openSEODrawer(a.asin);
+}
+
+function seoLaunchNewRef() {
+  showToast('Route A — Création nouvelle référence : fonctionnalité en préparation', 'alr-b');
+}
+
+function buildSEOPrompt(a, c, lang, isBackendKW) {
+  const langLabels = { fr:'français', de:'allemand', it:'italien', es:'espagnol',
+                       en:'anglais', nl:'néerlandais', sv:'suédois', pl:'polonais' };
+  const langName = langLabels[lang] || lang;
+  const ppm = (c.ppmData||{})[a.asin];
+  const niveau = ppm?.ppm >= 30 ? 'haut de gamme'
+               : ppm?.ppm >= 15 ? 'milieu de gamme'
+               : ppm?.ppm >= 5  ? 'entrée de gamme'
+               : 'niveau non déterminé';
+  const pot = calcPotential(a, c);
+  const trend = calcTrend(a);
+  const convRate = a.glanceViews > 0 && a.revenue > 0
+    ? (a.revenue / a.glanceViews * 100).toFixed(1) + '%' : 'N/D';
+  const totalCA = c.asins.reduce((s,x) => s+(x.revenue||0), 0);
+
+  const dataCtx = [
+    'Titre actuel : ' + (a.title || 'N/D'),
+    'ASIN : ' + a.asin + ' | Marque : ' + (a.brand || 'N/D'),
+    'CA semaine : ' + fmtEur(a.revenue || 0) + ' | Tendance : ' + (trend?.label || 'N/D'),
+    'Taux de conversion : ' + convRate,
+    'Retours : ' + (a.returns || 0) + ' | Retail % : ' + (a.retailPct || 'N/D'),
+    'Segment : ' + calcSegment(a, totalCA),
+    'Niveau de gamme estimé (PPM) : ' + niveau + (ppm?.ppm != null ? ' (' + ppm.ppm.toFixed(1) + '%)' : ''),
+    'Score potentiel : ' + pot.score + '/100',
+    pot.signals.filter(s => s.cls === 'r').length > 0
+      ? 'Alertes : ' + pot.signals.filter(s => s.cls === 'r').map(s => s.label).join(', ')
+      : '',
+  ].filter(Boolean).join('\n');
+
+  if (isBackendKW) {
+    return 'Tu es un expert Amazon SEO.\n'
+      + 'Génère UNIQUEMENT les backend keywords en ' + langName + '.\n'
+      + 'RÈGLES STRICTES :\n'
+      + '- Séparateur : espace uniquement (jamais de virgule)\n'
+      + '- MAXIMUM 250 BYTES ABSOLUS — 40 à 60 mots max — zéro mot générique sans valeur\n'
+      + '- Zéro répétition — les mots déjà dans le titre sont déjà indexés, ne pas les répéter\n'
+      + '- Zéro nom de marque concurrente\n'
+      + '- Zéro superlatif (meilleur, top, n°1)\n'
+      + '- Inclure : synonymes, fautes courantes, termes métier, variantes de taille, longue traîne\n'
+      + '- Les mots-clés doivent raconter une histoire sémantique cohérente — pas une liste disparate\n'
+      + 'Réponds UNIQUEMENT avec les mots clés, rien d\'autre.\n\n'
+      + dataCtx;
+  }
+
+  return 'Tu es un expert Amazon FR, spécialisé en SEO A10, conversion, merchandising marketplace, analyse concurrentielle et stratégie catalogue.\n'
+    + 'Tu travailles comme un consultant senior Amazon Vendor — pas comme un simple rédacteur.\n'
+    + 'Langue de rédaction exclusive : ' + langName.toUpperCase() + '\n\n'
+    + 'OBJECTIF : fiche produit Amazon capable de mieux se positionner, mieux convertir, mieux résister dans le temps.\n'
+    + 'Ta réponse DOIT être complète, détaillée, professionnelle — pas une ébauche.\n\n'
+    + 'DONNÉES PRODUIT :\n' + dataCtx + '\n\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
+    + 'ÉTAPE 1 — ANALYSE STRATÉGIQUE OBLIGATOIRE (à produire AVANT la fiche)\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
+    + 'Analyse et explicite :\n'
+    + '1. Positionnement : niveau ' + niveau + ' — usage principal, usage secondaire, bénéfice différenciant réel\n'
+    + '2. Concurrence Amazon : familles dominantes SERP, arguments surutilisés à éviter, opportunités sous-exploitées\n'
+    + '3. Risques : confusion dimensions/compatibilité/usage/pack/qualité — risque sur-promesse — risque avis négatifs\n'
+    + '4. Stratégie : ce qu\'il faut mettre en avant, angle marketing retenu, mot-clé prioritaire, 3 longues traînes\n\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
+    + 'ÉTAPE 2 — RÈGLES DE RÉDACTION IMPÉRATIVES\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
+    + '1. Toujours écrire en ' + langName + ' naturel, clair et vendeur\n'
+    + '2. Toujours rester crédible et exact — ne jamais inventer une caractéristique\n'
+    + '3. Ne jamais sur-promettre — adapter au vrai niveau du produit (' + niveau + ')\n'
+    + '4. Toujours raisonner en intention d\'achat\n'
+    + '5. Intégrer une logique "anti-déception" — filtrer les mauvais clients\n'
+    + '6. Penser comme Amazon : ce produit est-il la réponse exacte à cette recherche ?\n\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
+    + 'ÉTAPE 3 — CRÉATION DE LA FICHE EN ' + langName.toUpperCase() + '\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
+    + 'GÉNÈRE EXACTEMENT dans cet ordre :\n\n'
+    + 'NOM_TYPE_PRODUIT: [en ' + langName + ', minuscules, sans marque, précis, sans underscore — ex: tenaille russe / cric rouleur hydraulique]\n\n'
+    + 'TITRE: [Viser 150-200 caractères — 200 max — long, informatif ET lisible par un consommateur]\n'
+    + 'STRUCTURE OBLIGATOIRE : [Marque] [Référence interne] - [Type produit exact] [Taille/Format] - [Matériau/Attribut clé] - [Usage principal] - [Contexte/Compatibilité si pertinent]\n'
+    + 'RÈGLES TITRE STRICTES :\n'
+    + '- La RÉFÉRENCE INTERNE doit figurer IMMÉDIATEMENT après la marque — obligatoire pour PO et gestion catalogue\n'
+    + '- Séparateurs : tirets - uniquement (JAMAIS de | / ! ? *)\n'
+    + '- Mot-clé principal (type produit exact) dans les 40 premiers caractères — tester : un client comprendrait-il ce produit en lisant le titre ?\n'
+    + '- Un même mot maximum 2 fois\n'
+    + '- INTERDIT dans le titre : prix, promotions, "meilleur", "n°1", "gratuit"\n'
+    + '- Pas de répétition de la taille ou des specs\n'
+    + '- Majuscule à chaque mot sauf articles/prépositions\n\n'
+    + 'BULLET_1: [🔧 ou icône pertinente — BÉNÉFICE PRINCIPAL + mot-clé central + usage terrain spécifique]\n'
+    + 'BULLET_2: [💪 ou icône pertinente — MATÉRIAUX / QUALITÉ + specs techniques + différenciation vs concurrents]\n'
+    + 'BULLET_3: [🌱 ou icône pertinente — PROFIL CLIENT + cas d\'usage concrets + polyvalence]\n'
+    + 'BULLET_4: [📏 ou icône pertinente — DIMENSIONS / SPECS + ergonomie + compatibilité]\n'
+    + 'BULLET_5: [🛡️ ou icône pertinente — GARANTIE + marque/distributeur + réassurance achat]\n\n'
+    + 'RÈGLES BULLETS STRICTES :\n'
+    + '- Exactement 5 bullets — jamais 4, jamais 6\n'
+    + '- Bullet 1 : bénéfice principal + mot-clé central + usage terrain concret\n'
+    + '- Bullet 2 : différenciation + matériaux/qualité + specs techniques clés\n'
+    + '- Bullet 3 : réassurance technique + compatibilité + profil client ciblé\n'
+    + '- Bullet 4 : usage concret + projection client + polyvalence\n'
+    + '- Bullet 5 : sécurité / praticité / limite bien cadrée / garantie / marque\n'
+    + '- Une seule icône pertinente par bullet, en PREMIER — choisie au contexte réel\n'
+    + '- Icônes : 🔧 outil/bricolage ⚡ électricité 💧 étanchéité 🔒 sécurité 🚗 auto 🌱 jardin 🔥 barbecue 🧰 kit 📏 dimensions 💪 robustesse 🛡️ garantie\n'
+    + '- Interdit : ⭐ ✅ ❌ et répétition d\'icône\n'
+    + '- MINIMUM 200 caractères par bullet, idéalement 250-300 — style narratif : bénéfice + usage terrain + preuve — éviter les adjectifs creux, les prouver\n'
+    + '- Mélanger : bénéfice client + usage concret + mot-clé secondaire + réassurance\n'
+    + '- Pas de HTML, pas de prix, pas de référence interne\n\n'
+    + 'DESCRIPTION: [HTML pédagogique UNIQUEMENT — utiliser <b>, <br>, <ul><li> — structure : pour qui / dans quel contexte / pourquoi choisir ce produit / quelles limites éventuelles / liste technique lisible — INTERDIT de mélanger description et synthèse stratégique — la description est un texte vendeur pour le CLIENT, pas pour le consultant]\n\n'
+    + 'BACKEND_KEYWORDS: [espaces uniquement — MAXIMUM 250 BYTES ABSOLUS — cible 40-60 mots — les accents comptent double, chaque caractère compte — zéro répétition de mots déjà dans le titre ou les bullets — zéro marque concurrente — partir du TYPE de produit et de ses USAGES RÉELS : synonymes métier, fautes courantes de recherche, variantes de taille/matériau, longue traîne qualifiée — PAS une liste fourre-tout de mots vagues — CHAQUE mot doit gagner sa place]\n\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
+    + 'ÉTAPE 4 — SYNTHÈSE STRATÉGIQUE\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
+    + 'POSITIONNEMENT_AMAZON: [positionnement retenu sur Amazon — 1 phrase claire]\n'
+    + 'LEVIERS_RANKING: [3 leviers principaux pour gagner du ranking sur cet ASIN]\n'
+    + 'ERREURS_A_EVITER: [erreurs absolues à ne pas commettre sur cette fiche]\n'
+    + 'OPPORTUNITE_SEO: [1 opportunité concurrentielle non exploitée]';
+}
+
+function parseSEOResponse(text, lang) {
+  const result = { titre: '', bullets: ['','','','',''], description: '',
+                   nomType: '', backendKW: '',
+                   positionnement: '', leviers: '', erreurs: '', opportunite: '' };
+  try {
+    // Utiliser split par lignes pour éviter les regex multilignes
+    function extractField(t, key) {
+      const lines = t.split('\n');
+      for (let li = 0; li < lines.length; li++) {
+        const line = lines[li];
+        const idx = line.indexOf(key + ':');
+        if (idx !== -1) {
+          let val = line.slice(idx + key.length + 1).trim();
+          // Récupérer les lignes suivantes si la valeur continue
+          let li2 = li + 1;
+          while (li2 < lines.length && lines[li2] && !lines[li2].match(/^[A-Z_\u00C9]{3,}:/) && !lines[li2].match(/^[-─━]{3,}/) && !lines[li2].match(/^\*\*ÉTAPE|^ÉTAPE/)) {
+            val += ' ' + lines[li2].trim();
+            li2++;
+          }
+          return val.trim();
+        }
+      }
+      return '';
+    }
+
+    result.nomType      = extractField(text, 'NOM_TYPE_PRODUIT').replace(/\*\*/g, '').trim();
+    result.titre        = extractField(text, 'TITRE').replace(/\*\*/g, '').trim();
+    result.backendKW    = extractField(text, 'BACKEND_KEYWORDS');
+    result.positionnement = extractField(text, 'POSITIONNEMENT_AMAZON');
+    result.leviers      = extractField(text, 'LEVIERS_RANKING');
+    result.erreurs      = extractField(text, 'ERREURS_A_EVITER');
+    result.opportunite  = extractField(text, 'OPPORTUNITE_SEO');
+
+    for (let i = 1; i <= 5; i++) {
+      result.bullets[i-1] = extractField(text, 'BULLET_' + i).replace(/\*\*/g, '').trim();
+    }
+    const descMatch = text.match(/DESCRIPTION:\s*([\s\S]+?)(?=\n(?:BACKEND_KEYWORDS|POSITIONNEMENT_AMAZON|LEVIERS_RANKING|ERREURS_A_EVITER|OPPORTUNITE_SEO|ÉTAPE|---)|$)/);
+    if (descMatch) result.description = descMatch[1].trim().replace(/```html|```/g, '').trim();
+  } catch(e) { /* parsing partiel OK */ }
+  return result;
+}
