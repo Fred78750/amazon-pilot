@@ -451,7 +451,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.68';
+const APP_VERSION = '3.1.69';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -9644,7 +9644,7 @@ function buildSEOPrompt(a, c, lang, isBackendKW) {
       + 'Génère UNIQUEMENT les backend keywords en ' + langName + '.\n'
       + 'RÈGLES STRICTES :\n'
       + '- Séparateur : espace uniquement (jamais de virgule)\n'
-      + '- Maximum 500 BYTES (limite Vendor Central — les accents comptent double en FR/ES/IT, sois économe)\n'
+      + '- MAXIMUM 250 BYTES ABSOLUS — 40 à 60 mots max — zéro mot générique sans valeur\n'
       + '- Zéro répétition — les mots déjà dans le titre sont déjà indexés, ne pas les répéter\n'
       + '- Zéro nom de marque concurrente\n'
       + '- Zéro superlatif (meilleur, top, n°1)\n'
@@ -9682,12 +9682,12 @@ function buildSEOPrompt(a, c, lang, isBackendKW) {
     + '━━━━━━━━━━━━━━━━━━\n'
     + 'GÉNÈRE EXACTEMENT dans cet ordre :\n\n'
     + 'NOM_TYPE_PRODUIT: [en ' + langName + ', minuscules, sans marque, précis, sans underscore — ex: tenaille russe / cric rouleur hydraulique]\n\n'
-    + 'TITRE: [Viser 150-200 caractères — 200 max — plus le titre est long et informatif, mieux il performe]\n'
+    + 'TITRE: [Viser 150-200 caractères — 200 max — long, informatif ET lisible par un consommateur]\n'
     + 'STRUCTURE OBLIGATOIRE : [Marque] [Référence interne] - [Type produit exact] [Taille/Format] - [Matériau/Attribut clé] - [Usage principal] - [Contexte/Compatibilité si pertinent]\n'
     + 'RÈGLES TITRE STRICTES :\n'
     + '- La RÉFÉRENCE INTERNE doit figurer IMMÉDIATEMENT après la marque — obligatoire pour PO et gestion catalogue\n'
     + '- Séparateurs : tirets - uniquement (JAMAIS de | / ! ? *)\n'
-    + '- Mot-clé principal dans les 30 premiers caractères\n'
+    + '- Mot-clé principal (type produit exact) dans les 40 premiers caractères — tester : un client comprendrait-il ce produit en lisant le titre ?\n'
     + '- Un même mot maximum 2 fois\n'
     + '- INTERDIT dans le titre : prix, promotions, "meilleur", "n°1", "gratuit"\n'
     + '- Pas de répétition de la taille ou des specs\n'
@@ -9707,11 +9707,11 @@ function buildSEOPrompt(a, c, lang, isBackendKW) {
     + '- Une seule icône pertinente par bullet, en PREMIER — choisie au contexte réel\n'
     + '- Icônes : 🔧 outil/bricolage ⚡ électricité 💧 étanchéité 🔒 sécurité 🚗 auto 🌱 jardin 🔥 barbecue 🧰 kit 📏 dimensions 💪 robustesse 🛡️ garantie\n'
     + '- Interdit : ⭐ ✅ ❌ et répétition d\'icône\n'
-    + '- 200-250 caractères par bullet — détaillés, vendeurs, jamais vagues\n'
+    + '- MINIMUM 200 caractères par bullet, idéalement 250-300 — style narratif : bénéfice + usage terrain + preuve — éviter les adjectifs creux, les prouver\n'
     + '- Mélanger : bénéfice client + usage concret + mot-clé secondaire + réassurance\n'
     + '- Pas de HTML, pas de prix, pas de référence interne\n\n'
     + 'DESCRIPTION: [HTML pédagogique UNIQUEMENT — utiliser <b>, <br>, <ul><li> — structure : pour qui / dans quel contexte / pourquoi choisir ce produit / quelles limites éventuelles / liste technique lisible — INTERDIT de mélanger description et synthèse stratégique — la description est un texte vendeur pour le CLIENT, pas pour le consultant]\n\n'
-    + 'BACKEND_KEYWORDS: [espaces uniquement, max 500 bytes (limite Vendor Central) — les accents comptent double, sois économe — zéro répétition de mots déjà dans le titre — zéro concurrent — partir du TYPE de produit et de ses USAGES RÉELS pour trouver : synonymes du métier, fautes courantes de recherche, variantes de taille, longue traîne qualifiée, termes techniques spécifiques — PAS une liste générique de mots vagues]\n\n'
+    + 'BACKEND_KEYWORDS: [espaces uniquement — MAXIMUM 250 BYTES ABSOLUS — cible 40-60 mots — les accents comptent double, chaque caractère compte — zéro répétition de mots déjà dans le titre ou les bullets — zéro marque concurrente — partir du TYPE de produit et de ses USAGES RÉELS : synonymes métier, fautes courantes de recherche, variantes de taille/matériau, longue traîne qualifiée — PAS une liste fourre-tout de mots vagues — CHAQUE mot doit gagner sa place]\n\n'
     + '━━━━━━━━━━━━━━━━━━\n'
     + 'ÉTAPE 4 — SYNTHÈSE STRATÉGIQUE\n'
     + '━━━━━━━━━━━━━━━━━━\n'
