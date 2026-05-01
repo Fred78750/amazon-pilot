@@ -271,15 +271,30 @@ Fred n'est pas codeur. Claude exécute toutes les tâches techniques (code, AWS,
 3. Validation JS : `node --check /tmp/check.js`
 4. Déployer en staging → Playwright 6/6 → merger en prod
 
-### Protocole de livraison
+### Protocole de livraison (ordre OBLIGATOIRE — ne jamais déroger)
 ```bash
+# 1. TOUJOURS committer sur staging en premier
 cp amazon-pilot-vX.Y.Z.html amazon-pilot-latest.html
-git add amazon-pilot-latest.html src/
+git add amazon-pilot-latest.html src/ build.py
 git commit -m "vX.Y.Z - [description]"
-git push origin staging
-# Attendre 2 min → nouvel onglet RECETTE → smoke test Playwright
-# Si 6/6 → git push origin main → invalidation CloudFront
+git push origin staging         # → déploie RECETTE automatiquement
+
+# 2. Valider sur RECETTE (nouvel onglet, pas F5)
+# https://d9xny9istvl53.cloudfront.net
+# → Vérifier version + npx playwright test tests/smoke.spec.js (6/6)
+
+# 3. Merger sur main SEULEMENT après validation RECETTE
+git checkout main
+git merge staging --no-edit
+git push origin main            # → déploie PROD automatiquement
+aws cloudfront create-invalidation --distribution-id E3ERL241475BJI --paths "/*" --region eu-west-3
+
+# 4. Resynchroniser staging sur main après tout commit direct sur main
+git checkout staging && git merge main --no-edit && git push origin staging
 ```
+
+⚠️ INTERDIT : committer directement sur main sans passer par staging
+⚠️ Si staging et main divergent : git checkout staging && git merge main && git push origin staging
 
 ### Nommage fichiers
 - Livraison : `amazon-pilot-vX.Y.Z.html`
