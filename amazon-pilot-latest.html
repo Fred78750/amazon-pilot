@@ -451,7 +451,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.2.0';
+const APP_VERSION = '3.2.1';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -2452,28 +2452,16 @@ async function askClaude(sys, usr, feature) {
   if (!apiKey) return `__ERR_NOKEY__`;
   try {
     log('🤖 Appel Claude API...');
-    let res = await callAPI(sys, usr, feature);
-    // Retry auto sur surcharge
-    if (res.status === 529 || res.status === 503) {
-      log('⏳ API surchargée — retry dans 4s...', 'warn');
-      await new Promise(r => setTimeout(r, 4000));
-      res = await callAPI(sys, usr, feature);
-    }
-    if (!res.ok) {
-      const et = await res.text();
-      log('API Error ' + res.status, 'err');
-      if (res.status === 401) return `__ERR_401__`;
-      if (res.status === 403) return `__ERR_403__`;
-      if (res.status === 529 || res.status === 503) return `__ERR_529__`;
-      if (res.status === 429) return `__ERR_429__`;
-      return `__ERR_${res.status}__` + et.slice(0, 150);
-    }
-    const d = await res.json();
+    const result = await callAPI(sys, usr, feature);
     log('✓ Réponse OK', 'ok');
-    return d.content?.map(b => b.text || '').join('\n') || 'Pas de réponse';
+    return result || 'Pas de réponse';
   } catch(e) {
     log('AI Error: ' + e.message, 'err');
     if (e.message.includes('Failed to fetch')) return `__ERR_CORS__`;
+    if (e.message.includes('401')) return `__ERR_401__`;
+    if (e.message.includes('403')) return `__ERR_403__`;
+    if (e.message.includes('429')) return `__ERR_429__`;
+    if (e.message.includes('529') || e.message.includes('503')) return `__ERR_529__`;
     return `__ERR_UNKNOWN__` + e.message;
   }
 }
