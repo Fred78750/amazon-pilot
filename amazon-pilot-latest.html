@@ -451,7 +451,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.69';
+const APP_VERSION = '3.1.70';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -520,7 +520,7 @@ const SMOKE_REF = {
   ca2024:  { val: 1703110, tol: 0.01, expiry: '2026-12-31', label: 'CA 2024' },
   ca2025:  { val: 1297621, tol: 0.01, expiry: '2027-12-31', label: 'CA 2025' },
   asinMin: { val: 1500,               expiry: null,          label: 'ASINs catalogue >= 1500' },
-  asinRef: { asin: 'B009G3EMDI', revMin: 1554, revMax: 1720, label: 'ASIN B009G3EMDI revenue dans [1554,1720]' }
+  asinRef: { asin: 'B009G3EMDI', label: 'ASIN B009G3EMDI cohérence pipeline' }
 };
 
 async function smokeTest(silent) {
@@ -561,10 +561,13 @@ async function smokeTest(silent) {
     if (typeof go === 'function') go('buybox');
     await new Promise(r => setTimeout(r, 400));
     const e = getErr();
-    let alerts = []; if (typeof calcBuyBoxAlerts === 'function' && c) alerts = calcBuyBoxAlerts(c);
-    const corrupt = Array.isArray(alerts) ? alerts.filter(a => parseNum(String(a.retailPct||'').replace(',','.').replace(/[^0-9.]/g,'')) > 100) : [];
-    if (!e && Array.isArray(alerts) && corrupt.length === 0)
-      pass('vital','V4','Buy Box liste (' + alerts.length + ' alertes)');
+    // v3.1.70 — calcBuyBoxAlerts retourne {critical, warning, suppressed} (pas un tableau plat)
+    let alertObj = { critical: [], warning: [], suppressed: [] };
+    if (typeof calcBuyBoxAlerts === 'function' && c) alertObj = calcBuyBoxAlerts(c) || alertObj;
+    const allAlerts = [...(alertObj.critical||[]), ...(alertObj.warning||[]), ...(alertObj.suppressed||[])];
+    const corrupt = allAlerts.filter(a => parseNum(String(a.retailPct||'').replace(',','.').replace(/[^0-9.]/g,'')) > 100);
+    if (!e && corrupt.length === 0)
+      pass('vital','V4','Buy Box liste (' + allAlerts.length + ' : ' + alertObj.critical.length + ' crit + ' + alertObj.warning.length + ' warn + ' + alertObj.suppressed.length + ' supp)');
     else fail('vital','V4','Buy Box liste', e || corrupt.length + ' alertes retailPct>100');
   } catch(ex) { fail('vital','V4','Buy Box liste', ex.message); }
 
@@ -631,14 +634,39 @@ async function smokeTest(silent) {
   if (asinCnt >= SMOKE_REF.asinMin.val) pass('vital','V9c','Catalogue : ' + asinCnt + ' ASINs');
   else fail('vital','V9c','Catalogue ASINs', asinCnt + ' < minimum ' + SMOKE_REF.asinMin.val);
 
-  // V9d — ASIN de référence
+  // V9d — ASIN de référence : invariants pipeline (PAS la santé business)
+  // v3.1.70 — On vérifie que l'import n'a pas cassé la cohérence des données,
+  //          pas que le CA est dans une fourchette (volatile par nature)
   const refA = c?.asins?.find(a => a.asin === SMOKE_REF.asinRef.asin);
-  if (refA) {
-    const rev = Math.round(refA.revenue||0);
-    if (rev === 0) pass('vital','V9d','ASIN réf. : pas de vente cette semaine (normal)');
-    else if (rev >= SMOKE_REF.asinRef.revMin && rev <= SMOKE_REF.asinRef.revMax)
-      pass('vital','V9d','ASIN réf. B009G3EMDI : ' + rev + ' EUR');
-    else fail('vital','V9d','ASIN réf. dévié', rev + ' hors [' + SMOKE_REF.asinRef.revMin + ',' + SMOKE_REF.asinRef.revMax + ']');
+  if (!refA) {
+    fail('vital','V9d','ASIN réf. ABSENT du catalogue après import', SMOKE_REF.asinRef.asin);
+  } else {
+    const rev = Math.round(refA.revenue || 0);
+    const units = refA.units || refA.orderedUnits || 0;
+    const checks = [];
+
+    // Invariant 1 : cohérence units/revenue (l'un sans l'autre = parser cassé)
+    if (units > 0 && rev === 0) checks.push('units=' + units + ' mais revenue=0 (parser CA cassé ?)');
+    if (rev > 0 && units === 0) checks.push('revenue=' + rev + '€ mais units=0 (parser units cassé ?)');
+
+    // Invariant 2 : ratio prix unitaire dans [0,1€ ; 1000€]
+    // Détecte erreur virgule décimale, unité monétaire, ou colonne mal mappée
+    if (rev > 0 && units > 0) {
+      const prixUnit = rev / units;
+      if (prixUnit < 0.1) checks.push('prix unitaire ' + prixUnit.toFixed(2) + '€ anormalement bas');
+      if (prixUnit > 1000) checks.push('prix unitaire ' + prixUnit.toFixed(2) + '€ anormalement haut');
+    }
+
+    // Invariant 3 : title et brand non vides (sinon c'est un row tronqué à l'import)
+    if (!refA.title) checks.push('title vide');
+    if (!refA.brand) checks.push('brand vide');
+
+    if (checks.length === 0) {
+      const detail = rev === 0 ? 'pas de vente cette semaine (OK)' : rev + '€ / ' + units + 'u (cohérent)';
+      pass('vital','V9d','ASIN réf. ' + SMOKE_REF.asinRef.asin + ' : ' + detail);
+    } else {
+      fail('vital','V9d','ASIN réf. cohérence pipeline', checks.join(' | '));
+    }
   }
 
   // I1 — Analyse ASINs
@@ -682,8 +710,10 @@ async function smokeTest(silent) {
   // I6 — retailPct>100 exclu
   if (typeof calcBuyBoxAlerts === 'function' && c) {
     try {
-      const alerts = calcBuyBoxAlerts(c);
-      const corrupt = alerts.filter(a => parseNum(String(a.retailPct||'').replace(',','.').replace(/[^0-9.]/g,'')) > 100);
+      // v3.1.70 — calcBuyBoxAlerts retourne {critical, warning, suppressed}
+      const alertObj = calcBuyBoxAlerts(c) || {};
+      const allAlerts = [...(alertObj.critical||[]), ...(alertObj.warning||[]), ...(alertObj.suppressed||[])];
+      const corrupt = allAlerts.filter(a => parseNum(String(a.retailPct||'').replace(',','.').replace(/[^0-9.]/g,'')) > 100);
       if (corrupt.length === 0) pass('important','I6','retailPct>100 correctement exclu');
       else fail('important','I6','retailPct>100', corrupt.length + ' alertes avec valeur incohérente');
     } catch(ex) { fail('important','I6','retailPct>100',ex.message); }
@@ -1126,17 +1156,22 @@ function parseCSVFile(text, filename) {
     const itemMarket = BOUTIQUE_CODES[boutiqueCode.trim()] || market;
     const item = { asin, title: findCol(row, 'nom du produit', 'product title') || '', brand: findCol(row, 'marque', 'brand') || '', market: itemMarket, periodStart, periodEnd, periodType, distributorView };
     if (fileType === 'ventes') {
-      // Fab : CA expédié = col "expéditions" (col[7]) — ne pas prendre "commandes" (col[3])
-      // Appro : CA expédié = col "chiffre" (unique, col[3])
-      item.revenue = distributorView === 'fab'
-        ? parseNum(findCol(row, 'expeditions', 'shipped revenue'))
-        : parseNum(findCol(row, 'chiffre', 'ordered revenue'));
+      // v3.1.70 — On stocke explicitement les 2 métriques CA :
+      //   orderedRevenue (Recettes commandées) = KPI métier de référence Vendor Central
+      //   shippedRevenue (Expéditions)         = indicateur secondaire
+      // En v3.1.70 : revenue garde le comportement actuel (compat) → pas de régression visuelle
+      // En v3.1.71 : revenue deviendra dynamique via getRevenue(a, c) selon c.kpiPrimaireCA
+      item.orderedRevenue = parseNum(findCol(row, 'recettes commandees', 'commandes', 'ordered revenue', 'chiffre'));
+      item.shippedRevenue = parseNum(findCol(row, 'expeditions', 'shipped revenue', 'shipped'));
+      // Compat v3.1.70 : revenue garde le comportement antérieur (shipped pour Fab, ordered pour Appro)
+      item.revenue = distributorView === 'fab' ? item.shippedRevenue : item.orderedRevenue;
       item.revenueDelta = findCol(row, 'periode anterieure') || '';
       item.revenueYoY = findCol(row, "l'annee derniere", 'annee derniere') || '';
-      item.units = parseNum(findCol(row, 'unites commandees', 'ordered units', 'commandees'));
+      item.orderedUnits = parseNum(findCol(row, 'unites commandees', 'ordered units', 'commandees'));
+      item.shippedUnits = parseNum(findCol(row, 'unites expediees', 'shipped units'));
+      // Compat v3.1.70 : units garde le comportement antérieur (= orderedUnits)
+      item.units = item.orderedUnits;
       item.unitsDelta = findCol(row, 'unites commandees - periode') || '';
-      item.shippedRevenue = parseNum(findCol(row, 'expeditions', 'shipped'));
-      item.shippedUnits = parseNum(findCol(row, 'unites expediees'));
       item.returns = parseNum(findCol(row, 'retours client', 'retours'));
     }
     if (fileType === 'trafic') {
@@ -10262,8 +10297,13 @@ function handlePOImport(files) {
 }
 
 function parsePOCSV(text, filename) {
+  // v3.1.70 — Strip BOM UTF-8 si présent (export Amazon Vendor Central)
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
   const lines = text.split('\n');
-  const headers = lines[0].split(',').map(h => h.trim().replace(/["\r]/g,''));  for (let i = 1; i < lines.length; i++) {
+  const headers = lines[0].split(',').map(h => h.trim().replace(/["\r]/g,''));
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
     // Gestion des guillemets dans les valeurs CSV
