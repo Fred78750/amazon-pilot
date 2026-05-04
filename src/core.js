@@ -262,7 +262,9 @@ async function load() {
         pos:            c.pos            || [],
         ficheOptimisee: c.ficheOptimisee || {},
         ppmData:        c.ppmData        || {},
-        forecastData:   c.forecastData   || {}
+        forecastData:   c.forecastData   || {},
+        // v3.1.71 — migration silencieuse : default KPI primaire = ordered
+        kpiPrimaireCA:  c.kpiPrimaireCA  || 'ordered',
       }));
       activeId = clients[0].id;
       screen = 'dashboard';
@@ -474,8 +476,11 @@ function parseCSVFile(text, filename) {
       //   shippedRevenue (Expéditions)         = indicateur secondaire
       // En v3.1.70 : revenue garde le comportement actuel (compat) → pas de régression visuelle
       // En v3.1.71 : revenue deviendra dynamique via getRevenue(a, c) selon c.kpiPrimaireCA
-      item.orderedRevenue = parseNum(findCol(row, 'recettes commandees', 'commandes', 'ordered revenue', 'chiffre'));
-      item.shippedRevenue = parseNum(findCol(row, 'expeditions', 'shipped revenue', 'shipped'));
+      // v3.1.71 — libellés Amazon VC normalisés (apostrophe typographique → norm() → ASCII apostrophe)
+      // "Chiffre d'affaires basé sur les commandes" → "chiffre d'affaires base sur les commandes"
+      // "Chiffre d'affaires basé sur les expéditions" → "chiffre d'affaires base sur les expeditions"
+      item.orderedRevenue = parseNum(findCol(row, "chiffre d'affaires base sur les commandes", 'recettes commandees', 'commandes', 'ordered revenue'));
+      item.shippedRevenue = parseNum(findCol(row, "chiffre d'affaires base sur les expeditions", 'expeditions', 'shipped revenue'));
       // Compat v3.1.70 : revenue garde le comportement antérieur (shipped pour Fab, ordered pour Appro)
       item.revenue = distributorView === 'fab' ? item.shippedRevenue : item.orderedRevenue;
       item.revenueDelta = findCol(row, 'periode anterieure') || '';
@@ -804,6 +809,10 @@ function mergeImportData(client, parsedFiles) {
             // ASIN Fab → mettre à jour shippedRevenue uniquement
             if (row.shippedRevenue != null) ex.shippedRevenue = row.shippedRevenue || ex.revenue;
             if (row.shippedUnits != null) ex.shippedUnits = row.shippedUnits;
+            // v3.1.71 — propager orderedRevenue/orderedUnits uniquement si la colonne était présente (> 0)
+            // parseNum retourne 0 quand la colonne est absente — != null ne suffit pas
+            if (row.orderedRevenue > 0) ex.orderedRevenue = row.orderedRevenue;
+            if (row.orderedUnits > 0) ex.orderedUnits = row.orderedUnits;
             continue;
           } else if (!isFabBrand) {
             // Marque inconnue/revendeur → ignorer
@@ -899,8 +908,8 @@ function mergeImportData(client, parsedFiles) {
         const monthSnap = {
           monthKey,
           label: mm + '/' + yyyy,
-          revenue: (existingIdx >= 0 ? a.historyMonthly[existingIdx].revenue : 0) + (a.revenue || 0),
-          units: (existingIdx >= 0 ? a.historyMonthly[existingIdx].units : 0) + (a.units || 0),
+          revenue: (existingIdx >= 0 ? a.historyMonthly[existingIdx].revenue : 0) + (getRevenue(a,c)||0),
+          units: (existingIdx >= 0 ? a.historyMonthly[existingIdx].units : 0) + (getUnits(a,c)||0),
           glanceViews: (existingIdx >= 0 ? a.historyMonthly[existingIdx].glanceViews : 0) + (a.glanceViews || 0),
           weeks: (existingIdx >= 0 ? a.historyMonthly[existingIdx].weeks : 0) + 1,
           sellableUnitsLast: a.sellableUnits != null ? a.sellableUnits : (existingIdx >= 0 ? a.historyMonthly[existingIdx].sellableUnitsLast : null),
@@ -963,12 +972,25 @@ function healthClass(score) {
   return 'critical';
 }
 
-function calcSegment(a, totalCA) {
-  if (!totalCA || !(a.revenue > 0)) return 'C';
-  const pct = (a.revenue / totalCA) * 100;
+function calcSegment(a, totalCA, c) {
+  const rev = getRevenue(a, c);
+  if (!totalCA || !(rev > 0)) return 'C';
+  const pct = (rev / totalCA) * 100;
   if (pct > 2) return 'A';
   if (pct > 0.5) return 'B';
   return 'C';
+}
+
+// ── Helpers KPI Ordered/Shipped ──────────────────────────────────
+function getRevenue(a, c) {
+  const pref = c?.kpiPrimaireCA || 'ordered';
+  if (pref === 'shipped' && a.shippedRevenue != null) return a.shippedRevenue;
+  return a.orderedRevenue ?? a.revenue ?? 0;
+}
+function getUnits(a, c) {
+  const pref = c?.kpiPrimaireCA || 'ordered';
+  if (pref === 'shipped' && a.shippedUnits != null) return a.shippedUnits;
+  return a.orderedUnits ?? a.units ?? 0;
 }
 
 // ── Fraîcheur des données ────────────────────────────────────────
@@ -1363,8 +1385,8 @@ function getFilteredAsins(client) {
   if (filters.market !== 'all') asins = asins.filter(a => a.market === filters.market);
   if (filters.brand !== 'all') asins = asins.filter(a => a.brand && norm(a.brand) === norm(filters.brand));
   if (filters.segment !== 'all') {
-    const tc = asins.reduce((s, a) => s + (a.revenue || 0), 0);
-    asins = asins.filter(a => calcSegment(a, tc) === filters.segment);
+    const tc = asins.reduce((s, a) => s + (getRevenue(a,client)||0), 0);
+    asins = asins.filter(a => calcSegment(a, tc, client) === filters.segment);
   }
   // Recherche texte : ASIN, SKU (depuis catalogue), mot dans le titre, marque
   if (asinSearch && asinSearch.trim()) {
@@ -1388,8 +1410,8 @@ function getFilteredAsins(client) {
 function generateWeeklyActions(client) {
   if (!client?.asins?.length) return [];
   const asins = client.asins;
-  const activeAsins = asins.filter(a => (a.revenue || 0) > 0);
-  const totalCA = asins.reduce((s, a) => s + (a.revenue || 0), 0);
+  const activeAsins = asins.filter(a => (getRevenue(a,client)||0) > 0);
+  const totalCA = asins.reduce((s, a) => s + (getRevenue(a,client)||0), 0);
   const actions = [];
   const ts = Date.now();
 
@@ -1452,7 +1474,7 @@ function generateWeeklyActions(client) {
   const oosRisk = asins.filter(a => {
     const oos = parseNum(a.oosPct);
     const stock = a.sellableUnits;
-    return (a.revenue || 0) > 50 && (
+    return (getRevenue(a,client)||0) > 50 && (
       (oos > 0 && oos < 90) ||  // disponibilité < 90%
       (stock != null && stock > 0 && stock < 30)
     );
@@ -1485,10 +1507,10 @@ function generateWeeklyActions(client) {
   // Buy // PO — fill rate faible ou fin de série (basé sur CSV PO importé)
   const poUnconfirmed = asins.filter(a => {
     const po = getPOData(client, a.asin);
-    if (po) return (po.fillRate < 80 || po.isPermanentOOS || po.isDiscontinued) && (a.revenue || 0) > 0;
+    if (po) return (po.fillRate < 80 || po.isPermanentOOS || po.isDiscontinued) && (getRevenue(a,client)||0) > 0;
     const openPO = parseNum(a.openPOQty) || 0;
     const cpct = parseNum(String(a.confirmPct || '0').replace(',', '.').replace(/[^0-9.]/g, ''));
-    return openPO > 0 && cpct < 50 && (a.revenue || 0) > 0;
+    return openPO > 0 && cpct < 50 && (getRevenue(a,client)||0) > 0;
   });
   if (poUnconfirmed.length) {
     actions.push({
@@ -1500,7 +1522,7 @@ function generateWeeklyActions(client) {
   }
 
   // Box à risque : Retail% < 95% sur ASIN actif
-  const bbRisk = asins.filter(a => (a.revenue || 0) > 50 && a.retailPct && parseNum(a.retailPct) < 95 && parseNum(a.retailPct) > 0);
+  const bbRisk = asins.filter(a => (getRevenue(a,client)||0) > 50 && a.retailPct && parseNum(a.retailPct) < 95 && parseNum(a.retailPct) > 0);
   if (bbRisk.length) {
     const canUse3P = client.threeP;
     const btrOk = client.btr === 'Autorisé';
@@ -1515,7 +1537,7 @@ function generateWeeklyActions(client) {
 
   // ── MARDI — Analyse des baisses ───────────────────────────────
   // GV en baisse > 15% vs S-1 (signal : perte de visibilité imminente)
-  const gvDown = asins.filter(a => (a.revenue || 0) > 50 && parseNum(a.gvDelta) < -15);
+  const gvDown = asins.filter(a => (getRevenue(a,client)||0) > 50 && parseNum(a.gvDelta) < -15);
   if (gvDown.length) {
     actions.push({
       id: 'gv-' + ts, type: 'seo', priority: 'high', day: 'Mardi',
@@ -1526,7 +1548,7 @@ function generateWeeklyActions(client) {
   }
 
   // CA en baisse structurelle (utilise calcTrendDeep si historique disponible)
-  const caDown = asins.filter(a => (a.revenue || 0) > 50 && parseNum(a.revenueDelta) < -15);
+  const caDown = asins.filter(a => (getRevenue(a,client)||0) > 50 && parseNum(a.revenueDelta) < -15);
   const caDownStructural = caDown.filter(a => {
     if (!a.history?.length) return false;
     const trend = calcTrend(a);
@@ -1544,7 +1566,7 @@ function generateWeeklyActions(client) {
 
   // Ordered Units en baisse > 20% vs N-1 (prédit réduction POs Amazon)
   // Approximation : utiliser revenueDelta comme proxy si pas de YoY direct
-  const unitsRisk = asins.filter(a => (a.revenue || 0) > 100 && parseNum(a.revenueYoY) < -20);
+  const unitsRisk = asins.filter(a => (getRevenue(a,client)||0) > 100 && parseNum(a.revenueYoY) < -20);
   if (unitsRisk.length) {
     actions.push({
       id: 'pos-' + ts, type: 'analysis', priority: 'high', day: 'Mardi',
@@ -1555,7 +1577,7 @@ function generateWeeklyActions(client) {
   }
 
   // ── MERCREDI — Opportunités ────────────────────────────────────
-  const growing = asins.filter(a => (a.revenue || 0) > 100 && parseNum(a.revenueDelta) > 25);
+  const growing = asins.filter(a => (getRevenue(a,client)||0) > 100 && parseNum(a.revenueDelta) > 25);
   const growingStructural = growing.filter(a => {
     const trend = calcTrend(a);
     return trend && trend.slope > 5;
@@ -1573,7 +1595,7 @@ function generateWeeklyActions(client) {
   // ── JEUDI — Contenu & SEO ─────────────────────────────────────
   // GV stable mais CA en baisse → problème de taux de conversion → contenu
   const contentIssue = asins.filter(a =>
-    (a.revenue || 0) > 50 &&
+    (getRevenue(a,client)||0) > 50 &&
     parseNum(a.revenueDelta) < -10 &&
     parseNum(a.gvDelta) > -10 // trafic OK mais ventes baissent
   );
@@ -1587,7 +1609,7 @@ function generateWeeklyActions(client) {
   }
 
   // Audit listings (hebdo sur les Top 20 par CA)
-  const top20 = [...asins].sort((a, b) => (b.revenue || 0) - (a.revenue || 0)).slice(0, 20);
+  const top20 = [...asins].sort((a, b) => (getRevenue(b,client)||0) - (getRevenue(a,client)||0)).slice(0, 20);
   actions.push({
     id: 'audit-' + ts, type: 'audit', priority: 'low', day: 'Jeudi',
     title: '🔍 Vérifier les listings Top 20 ASINs (Claude × Chrome)',
@@ -1814,7 +1836,7 @@ function calcTrendDeep(a, c) {
   const ca2  = ann2 ? parseNum(ann2.revenue) : null;
   const ca1  = ann1 ? parseNum(ann1.revenue) : null;
   const caYTD = ytdA ? parseNum(ytdA.revenue) : null;
-  const caNow = a.revenue || 0;
+  const caNow = getRevenue(a,c)||0;
 
   // YoY Amazon-fourni (plus fiable si pas de données annuelles)
   const yoyAmazon = a.revenueYoY ? parseNum(a.revenueYoY) : null;
@@ -1959,7 +1981,7 @@ function buildAsinContext(a, c) {
     lines.push('');
     lines.push('📊 PRÉVISIONS AMAZON (prochaines semaines) :');
     lines.push('  S+1 : ' + s1 + 'u prévues | Moy. S+1→S+4 : ' + s4avg + 'u/sem.');
-    const velocite = a.history?.length >= 2 ? Math.round(a.history.slice(-4).reduce((s,h)=>s+(h.units||0),0)/Math.min(a.history.length,4)) : (a.units||0);
+    const velocite = a.history?.length >= 2 ? Math.round(a.history.slice(-4).reduce((s,h)=>s+(h.units||0),0)/Math.min(a.history.length,4)) : (getUnits(a,c)||0);
     if (velocite > 0) {
       const ratio = Math.round(s4avg/velocite*100);
       lines.push('  Vs vélocité actuelle (' + velocite + 'u) : ' + ratio + '%' + (ratio > 110 ? ' — Amazon anticipe une hausse' : ratio < 90 ? ' — Amazon anticipe une baisse' : ' — stable'));
@@ -2025,15 +2047,15 @@ function buildClientContext(c) {
     // Top catégories en croissance/déclin depuis les données annuelles
     if (ca1 && c.annualData?.[prevYear]?.ventes?.asins && c.asins?.length) {
       const annAsins = c.annualData[prevYear].ventes.asins;
-      const currentAsins = c.asins.filter(a => (a.revenue||0) > 0);
-      const totalCur = currentAsins.reduce((s,a) => s+(a.revenue||0), 0);
+      const currentAsins = c.asins.filter(a => (getRevenue(a,c)||0) > 0);
+      const totalCur = currentAsins.reduce((s,a) => s+(getRevenue(a,c)||0), 0);
       // Comparer les marques
       const brandGrowth = {};
       currentAsins.forEach(a => {
         if (!a.brand) return;
         const annVal = annAsins[a.asin] ? parseNum(annAsins[a.asin].revenue) : 0;
         if (!brandGrowth[a.brand]) brandGrowth[a.brand] = { cur: 0, prev: 0 };
-        brandGrowth[a.brand].cur += a.revenue || 0;
+        brandGrowth[a.brand].cur += getRevenue(a,c)||0;
         brandGrowth[a.brand].prev += annVal;
       });
       const topBrands = Object.entries(brandGrowth)
@@ -2136,7 +2158,7 @@ function render() {
 
 function renderNav() {
   const c = cl();
-  const alertCount = c ? c.asins?.filter(a => (a.revenue || 0) > 0 && parseNum(a.revenueDelta) < -15).length : 0;
+  const alertCount = c ? c.asins?.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) < -15).length : 0;
   // Badge Buy Box : ASINs avec Retail% en baisse ou critique
   const _bbAlerts = c ? calcBuyBoxAlerts(c) : { critical: [], warning: [], suppressed: [] };
   const bbBadgeCount = _bbAlerts.critical.length + _bbAlerts.suppressed.length;
@@ -2840,17 +2862,17 @@ function renderWeeklyReview() {
   if (!c.asins?.length) return `<div class="alr alr-a">Importez d'abord des données CSV pour lancer la revue hebdomadaire.</div>`;
 
   const asins = getFilteredAsins(c);
-  const totalCA = asins.reduce((s, a) => s + (a.revenue || 0), 0);
-  const totalUnits = asins.reduce((s, a) => s + (a.units || 0), 0);
+  const totalCA = asins.reduce((s, a) => s + (getRevenue(a,c)||0), 0);
+  const totalUnits = asins.reduce((s, a) => s + (getUnits(a,c)||0), 0);
   const totalGV = asins.reduce((s, a) => s + (a.glanceViews || 0), 0);
   // Delta CA : comparer uniquement les ASINs Fabrication (sourcingOnly exclus) pour éviter
   // un faux delta lors de l'activation initiale de la fusion Approvisionnement
-  const caFabOnly = asins.filter(a=>!a.sourcingOnly).reduce((s,a)=>s+(a.revenue||0),0);
+  const caFabOnly = asins.filter(a=>!a.sourcingOnly).reduce((s,a)=>s+(getRevenue(a,c)||0),0);
   const prevH = c.history?.weekly?.slice(-2)?.[0];
   const caDelta = prevH && prevH.totalCA ? ((caFabOnly - prevH.totalCA) / prevH.totalCA * 100).toFixed(1) : null;
-  const declining = asins.filter(a => (a.revenue || 0) > 0 && parseNum(a.revenueDelta) < -10);
-  const lowStock = asins.filter(a => a.sellableUnits > 0 && a.sellableUnits < 30 && (a.revenue || 0) > 50);
-  const growing = asins.filter(a => (a.revenue || 0) > 50 && parseNum(a.revenueDelta) > 20);
+  const declining = asins.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) < -10);
+  const lowStock = asins.filter(a => a.sellableUnits > 0 && a.sellableUnits < 30 && (getRevenue(a,c)||0) > 50);
+  const growing = asins.filter(a => (getRevenue(a,c)||0) > 50 && parseNum(a.revenueDelta) > 20);
 
   // ── Section Buy Box dans la Revue Hebdo ──────────────────────
   const { critical: bbCritical, warning: bbWarning, suppressed: bbSuppressed } = calcBuyBoxAlerts(c);
@@ -2890,7 +2912,7 @@ function renderWeeklyReview() {
       </div>
       <div class="week-kpi"><div class="week-kpi-label">Unités</div><div class="week-kpi-value">${fmt(totalUnits)}</div></div>
       <div class="week-kpi"><div class="week-kpi-label">Glance Views</div><div class="week-kpi-value">${fmt(totalGV)}</div></div>
-      <div class="week-kpi"><div class="week-kpi-label">ASINs Actifs</div><div class="week-kpi-value">${asins.filter(a=>(a.revenue||0)>0).length}</div></div>
+      <div class="week-kpi"><div class="week-kpi-label">ASINs Actifs</div><div class="week-kpi-value">${asins.filter(a=>(getRevenue(a,c)||0)>0).length}</div></div>
     </div>
   </div>`;
 
@@ -2932,7 +2954,7 @@ function renderWeeklyReview() {
     }
     if (declining.length) {
       const topDecline = declining.sort((a,b) => parseNum(a.revenueDelta)-parseNum(b.revenueDelta));
-      const totalLost = topDecline.reduce((s,a) => s + Math.abs(parseNum(a.revenueDelta)/100*(a.revenue||0)), 0);
+      const totalLost = topDecline.reduce((s,a) => s + Math.abs(parseNum(a.revenueDelta)/100*(getRevenue(a,c)||0)), 0);
       h += `<button class="alert-row chip-a" onclick="goFilteredAsins('declining')">
         <div style="display:flex;align-items:center;gap:12px;flex:1">
           <span style="font-size:20px;flex-shrink:0">🟡</span>
@@ -2949,7 +2971,7 @@ function renderWeeklyReview() {
     }
     if (growing.length) {
       const topGrow = growing.sort((a,b) => parseNum(b.revenueDelta)-parseNum(a.revenueDelta));
-      const totalGain = topGrow.reduce((s,a) => s + Math.abs(parseNum(a.revenueDelta)/100*(a.revenue||0)), 0);
+      const totalGain = topGrow.reduce((s,a) => s + Math.abs(parseNum(a.revenueDelta)/100*(getRevenue(a,c)||0)), 0);
       h += `<button class="alert-row chip-g" onclick="goFilteredAsins('growing')">
         <div style="display:flex;align-items:center;gap:12px;flex:1">
           <span style="font-size:20px;flex-shrink:0">🟢</span>
@@ -3088,6 +3110,12 @@ function renderDashboard() {
   // Bannière données manquantes
   h += renderFreshnessBanner(c);
 
+  // Bandeau avertissement mode Commandé + données Appro uniquement
+  const lastVentesImport = c.imports?.filter(i => i.type === 'ventes' && (i.periodType === 'weekly' || !i.periodType)).sort((a,b) => new Date(b.date) - new Date(a.date))[0];
+  if ((c.kpiPrimaireCA || 'ordered') === 'ordered' && lastVentesImport?.distributorView === 'appro') {
+    h += `<div class="alr alr-a">⚠ <strong>Données Commandé indisponibles :</strong> le dernier import ventes est en vue Appro — les colonnes "Commandé" ne sont pas renseignées. Passez en mode <button class="btn btn-sm" onclick="setKpiPrimaire('shipped')" style="margin-left:6px">Expédié</button> pour voir les revenus réels.</div>`;
+  }
+
   if (!c.stockDeporte || c.btr !== 'Autorisé' || !c.threeP) {
     const csts = [];
     if (!c.stockDeporte) csts.push('Stock déporté interdit');
@@ -3132,15 +3160,21 @@ function renderDashboard() {
   if (filters.market !== 'all' || filters.brand !== 'all' || filters.segment !== 'all') {
     h += `<button class="btn btn-sm" onclick="resetFilters()">✕ Reset</button>`;
   }
+  const kpiMode = c.kpiPrimaireCA || 'ordered';
+  h += `<div style="display:flex;align-items:center;gap:6px;margin-left:auto">
+    <span class="filter-label">CA</span>
+    <button class="btn btn-sm${kpiMode !== 'shipped' ? ' btn-p' : ''}" onclick="setKpiPrimaire('ordered')">Commandé</button>
+    <button class="btn btn-sm${kpiMode === 'shipped' ? ' btn-p' : ''}" onclick="setKpiPrimaire('shipped')">Expédié</button>
+  </div>`;
   h += `</div>`;
 
   const asins = getFilteredAsins(c);
-  const totalCA = asins.reduce((s, a) => s + (a.revenue || 0), 0);
-  const totalUnits = asins.reduce((s, a) => s + (a.units || 0), 0);
+  const totalCA = asins.reduce((s, a) => s + (getRevenue(a,c)||0), 0);
+  const totalUnits = asins.reduce((s, a) => s + (getUnits(a,c)||0), 0);
   const totalGV = asins.reduce((s, a) => s + (a.glanceViews || 0), 0);
   const totalStock = asins.reduce((s, a) => s + (a.sellableUnits || 0), 0);
-  const lowStockN = asins.filter(a => a.sellableUnits > 0 && a.sellableUnits < 50 && (a.revenue||0) > 50).length;
-  const declineN = asins.filter(a => (a.revenue||0) > 0 && parseNum(a.revenueDelta) < -10).length;
+  const lowStockN = asins.filter(a => a.sellableUnits > 0 && a.sellableUnits < 50 && (getRevenue(a,c)||0) > 50).length;
+  const declineN = asins.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) < -10).length;
 
   // Période des données courantes
   const dashImport = c.imports?.filter(i=>i.type==='ventes'&&(i.periodType==='weekly'||!i.periodType)).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
@@ -3148,7 +3182,7 @@ function renderDashboard() {
   const dashPeriodTag = dashPeriod ? `<span style="font-size:10px;color:var(--or);font-weight:600;margin-top:3px;display:block">${dashPeriod}</span>` : '';
 
   h += `<div class="kpi-g">`;
-  h += `<div class="kpi"><div class="kpi-lb">CA Commandé</div><div class="kpi-v">${fmtEur(totalCA)}</div>${dashPeriodTag}</div>`;
+  h += `<div class="kpi"><div class="kpi-lb">CA ${kpiMode === 'shipped' ? 'Expédié' : 'Commandé'}</div><div class="kpi-v">${fmtEur(totalCA)}</div>${dashPeriodTag}</div>`;
   h += `<div class="kpi"><div class="kpi-lb">Unités</div><div class="kpi-v">${fmt(totalUnits)}</div>${dashPeriodTag}</div>`;
   h += `<div class="kpi"><div class="kpi-lb">Glance Views</div><div class="kpi-v">${fmt(totalGV)}</div>${dashPeriodTag}</div>`;
   h += `<div class="kpi"><div class="kpi-lb">ASINs</div><div class="kpi-v">${asins.length}</div></div>`;
@@ -3181,12 +3215,12 @@ function renderDashboard() {
     <th class="r">CA</th><th class="r">Δ</th><th>Tendance</th><th class="r">GV</th><th class="r">Stock</th><th></th>
   </tr></thead><tbody>`;
 
-  asins.sort((a,b) => (b.revenue||0)-(a.revenue||0)).slice(0, 50).forEach(a => {
+  asins.sort((a,b) => (getRevenue(b,c)||0)-(getRevenue(a,c)||0)).slice(0, 50).forEach(a => {
     const health = calcHealth(a);
     const hCls = healthClass(health);
-    const seg = calcSegment(a, totalCA);
+    const seg = calcSegment(a, totalCA, c);
     const isLow = a.sellableUnits > 0 && a.sellableUnits < 50;
-    const isDec = (a.revenue||0) > 0 && parseNum(a.revenueDelta) < -10;
+    const isDec = (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) < -10;
     const rc = isDec ? 'al-row' : isLow ? 'warn-row' : '';
     h += `<tr class="${rc}">
       <td><div class="hs hs-sm ${hCls}">${health}</div></td>
@@ -3195,7 +3229,7 @@ function renderDashboard() {
         <div class="mono" style="font-size:10px;color:var(--tx3)">${a.asin}</div>
       </td>
       <td>${segBadge(seg)}</td>
-      <td class="r" style="font-weight:600">${fmtEur(a.revenue||0)}</td>
+      <td class="r" style="font-weight:600">${fmtEur(getRevenue(a,c)||0)}</td>
       <td class="r">${deltaBadge(a.revenueDelta)}</td>
       <td>
         <div style="display:flex;align-items:center;gap:5px">
@@ -3251,7 +3285,7 @@ Je vous contacte au sujet d'un problème de réapprovisionnement urgent pour le 
 Situation actuelle :
 - Stock vendable actuel : ${a.sellableUnits != null ? a.sellableUnits + ' unité(s)' : 'non renseigné'}
 - Retail % : ${a.retailPct || 'non renseigné'}
-- CA sur la période : ${a.revenue ? Math.round(a.revenue) + ' €' : 'non renseigné'}
+- CA sur la période : ${getRevenue(a,c) ? Math.round(getRevenue(a,c)) + ' €' : 'non renseigné'}
 
 Ce produit génère un CA significatif et le stock actuel ne couvre pas la demande prévisionnelle des prochains jours. Une rupture imminente entraînerait une perte de Buy Box et une dégradation du classement organique difficile à récupérer.
 
@@ -3504,7 +3538,7 @@ Je vous contacte au sujet d'un taux de retours anormalement élevé constaté su
 
 Données observées :
 - Nombre de retours sur la période : ${a.returns ? fmt(a.returns) : '[À PRÉCISER]'}
-- CA sur la période : ${a.revenue ? Math.round(a.revenue) + ' €' : 'non renseigné'}
+- CA sur la période : ${getRevenue(a,c) ? Math.round(getRevenue(a,c)) + ' €' : 'non renseigné'}
 - Taux de retours estimé : [CALCULER : retours / unités vendues × 100]%
 
 Analyse préliminaire :
@@ -3621,24 +3655,24 @@ function renderAsins() {
   const c = cl();
   if (!c?.asins?.length) return `<div class="alr alr-a">Importez d'abord des données CSV.</div>`;
   const asins = getFilteredAsins(c);
-  const totalCA = asins.reduce((s, a) => s + (a.revenue || 0), 0);
-  const withRevenue = asins.filter(a => (a.revenue||0) > 0);
+  const totalCA = asins.reduce((s, a) => s + (getRevenue(a,c)||0), 0);
+  const withRevenue = asins.filter(a => (getRevenue(a,c)||0) > 0);
   let h = '';
 
   if (!selectedAsin) {
     // ── Calcul des vues disponibles ──────────────────────────────
     const allAsinsForViews = c.asins;
-    const totalCAAll = allAsinsForViews.reduce((s,a) => s+(a.revenue||0), 0);
+    const totalCAAll = allAsinsForViews.reduce((s,a) => s+(getRevenue(a,c)||0), 0);
     const countLowStock = allAsinsForViews.filter(a => {
       const oos = parseNum(a.oosPct);
-      return (a.revenue||0) > 50 && ((oos > 0 && oos < 90) || (a.sellableUnits != null && a.sellableUnits >= 0 && a.sellableUnits < 30));
+      return (getRevenue(a,c)||0) > 50 && ((oos > 0 && oos < 90) || (a.sellableUnits != null && a.sellableUnits >= 0 && a.sellableUnits < 30));
     }).length;
-    const countDeclining = allAsinsForViews.filter(a => (a.revenue||0)>0 && parseNum(a.revenueDelta) <= -10).length;
-    const countGrowing   = allAsinsForViews.filter(a => (a.revenue||0)>0 && parseNum(a.revenueDelta) >= 20).length;
-    const countA = allAsinsForViews.filter(a => calcSegment(a, totalCAAll) === 'A').length;
-    const countB = allAsinsForViews.filter(a => calcSegment(a, totalCAAll) === 'B').length;
-    const countC = allAsinsForViews.filter(a => calcSegment(a, totalCAAll) === 'C').length;
-    const countAll = allAsinsForViews.filter(a => (a.revenue||0)>0).length;
+    const countDeclining = allAsinsForViews.filter(a => (getRevenue(a,c)||0)>0 && parseNum(a.revenueDelta) <= -10).length;
+    const countGrowing   = allAsinsForViews.filter(a => (getRevenue(a,c)||0)>0 && parseNum(a.revenueDelta) >= 20).length;
+    const countA = allAsinsForViews.filter(a => calcSegment(a, totalCAAll, c) === 'A').length;
+    const countB = allAsinsForViews.filter(a => calcSegment(a, totalCAAll, c) === 'B').length;
+    const countC = allAsinsForViews.filter(a => calcSegment(a, totalCAAll, c) === 'C').length;
+    const countAll = allAsinsForViews.filter(a => (getRevenue(a,c)||0)>0).length;
 
     // ── Vues prédéfinies ─────────────────────────────────────────
     const views = [
@@ -3753,8 +3787,8 @@ function renderAsins() {
 
     // ── Tri ──────────────────────────────────────────────────────
     let sorted = [...withRevenue];
-    if (asinSort === 'ca_desc')         sorted.sort((a,b) => (b.revenue||0)-(a.revenue||0));
-    else if (asinSort === 'ca_asc')     sorted.sort((a,b) => (a.revenue||0)-(b.revenue||0));
+    if (asinSort === 'ca_desc')         sorted.sort((a,b) => (getRevenue(b,c)||0)-(getRevenue(a,c)||0));
+    else if (asinSort === 'ca_asc')     sorted.sort((a,b) => (getRevenue(a,c)||0)-(getRevenue(b,c)||0));
     else if (asinSort === 'hausse')     sorted.sort((a,b) => parseNum(b.revenueDelta)-parseNum(a.revenueDelta));
     else if (asinSort === 'hausse_baisse_desc') sorted.sort((a,b) => parseNum(b.revenueDelta)-parseNum(a.revenueDelta));
     else if (asinSort === 'hausse_baisse_asc')  sorted.sort((a,b) => parseNum(a.revenueDelta)-parseNum(b.revenueDelta));
@@ -3803,9 +3837,9 @@ function renderAsins() {
 
     visible.forEach(a => {
       const health = calcHealth(a);
-      const seg = calcSegment(a, totalCA);
+      const seg = calcSegment(a, totalCA, c);
       const delta = parseNum(a.revenueDelta);
-      const isLow = a.sellableUnits >= 0 && a.sellableUnits < 30 && (a.revenue||0) > 50;
+      const isLow = a.sellableUnits >= 0 && a.sellableUnits < 30 && (getRevenue(a,c)||0) > 50;
       const isDec = delta < -10;
       const rc = isDec ? 'al-row' : isLow ? 'warn-row' : '';
       const rank = visible.indexOf(a) + 1;
@@ -3817,7 +3851,7 @@ function renderAsins() {
           <div style="font-size:10px;color:var(--tx3);font-family:var(--fm)">${a.asin} <span style="margin-left:4px;opacity:.6">${a.market||'.fr'}</span>${a.sourcingOnly ? '<span style="margin-left:4px;font-size:9px;font-weight:700;color:var(--a);background:var(--a-bg);border-radius:3px;padding:1px 4px">Appro</span>' : ''}</div>
         </td>
         <td>${segBadge(seg)}</td>
-        <td class="r" style="font-weight:600">${fmtEur(a.revenue||0)}</td>
+        <td class="r" style="font-weight:600">${fmtEur(getRevenue(a,c)||0)}</td>
         <td class="r">${deltaBadge(a.revenueDelta)}</td>
         <td>
           <div style="display:flex;align-items:center;gap:6px">
@@ -3844,7 +3878,7 @@ function renderAsins() {
     if (!a) { selectedAsin = null; return renderAsins(); }
     const health = calcHealthDeep(a, c);
     const deep = calcTrendDeep(a, c);
-    const seg = calcSegment(a, totalCA);
+    const seg = calcSegment(a, totalCA, c);
     const keyword = getMainKeyword(a);
 
     h += `<button class="btn btn-sm" onclick="selectedAsin=null;render()" style="margin-bottom:14px">← Retour</button>`;
@@ -3921,10 +3955,10 @@ function renderAsins() {
           </div>`;
         }
         // Semaine actuelle pour comparaison
-        if (a.revenue && a.periodEnd) {
+        if (getRevenue(a,c) && a.periodEnd) {
           h += `<div style="background:var(--b-bg);border:1px solid var(--b-bd);border-radius:var(--rd);padding:10px 12px;text-align:center">
             <div style="font-size:10px;font-weight:600;color:var(--b);text-transform:uppercase;margin-bottom:4px">Semaine ${a.periodEnd.slice(0,5)}</div>
-            <div style="font-size:15px;font-weight:700">${fmtEur(a.revenue)}</div>
+            <div style="font-size:15px;font-weight:700">${fmtEur(getRevenue(a,c))}</div>
             <div style="font-size:10px;color:var(--tx3);margin-top:2px">${a.periodStart ? a.periodStart.slice(0,5)+'→'+a.periodEnd.slice(0,5) : 'Période courante'}</div>
           </div>`;
         }
@@ -3946,8 +3980,8 @@ function renderAsins() {
     const periodBadge = `<div style="font-size:10px;color:var(--or);font-weight:600;margin-top:3px">${periodLabel}</div>`;
 
     h += `<div class="kpi-g">`;
-    h += `<div class="kpi"><div class="kpi-lb">CA Commandé</div><div class="kpi-v">${fmtEur(a.revenue||0)}</div><div>${deltaBadge(a.revenueDelta)}</div>${periodBadge}</div>`;
-    h += `<div class="kpi"><div class="kpi-lb">Unités</div><div class="kpi-v">${fmt(a.units||0)}</div><div>${deltaBadge(a.unitsDelta)}</div>${periodBadge}</div>`;
+    h += `<div class="kpi"><div class="kpi-lb">CA Commandé</div><div class="kpi-v">${fmtEur(getRevenue(a,c)||0)}</div><div>${deltaBadge(a.revenueDelta)}</div>${periodBadge}</div>`;
+    h += `<div class="kpi"><div class="kpi-lb">Unités</div><div class="kpi-v">${fmt(getUnits(a,c)||0)}</div><div>${deltaBadge(a.unitsDelta)}</div>${periodBadge}</div>`;
     h += `<div class="kpi"><div class="kpi-lb">Glance Views</div><div class="kpi-v">${fmt(a.glanceViews||0)}</div><div>${deltaBadge(a.gvDelta)}</div>${periodBadge}</div>`;
     h += `<div class="kpi"><div class="kpi-lb">Stock Vendable</div><div class="kpi-v">${a.sellableUnits ? fmt(a.sellableUnits)+'u' : '—'}</div>${periodBadge}</div>`;
     h += `<div class="kpi"><div class="kpi-lb">Retail %</div><div class="kpi-v">${(()=>{const v=parseNum(String(a.retailPct||'').replace(',','.').replace(/[^0-9.]/g,''));return v>0&&v<=100?v.toFixed(1)+'%':'—';})()}</div>${periodBadge}</div>`;
@@ -4034,7 +4068,7 @@ function renderAsins() {
       }
 
       h += `</div>`;
-    } else if (a.revenue) {
+    } else if (getRevenue(a,c)) {
       h += `<div style="font-size:11px;color:var(--tx3);padding:12px 16px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rdl);margin-bottom:14px">
         💡 <strong>Première semaine importée.</strong> À chaque nouvel import hebdo, les données de la semaine précédente s'archiveront automatiquement ici — construisant la courbe hebdo et les synthèses mensuelles.
       </div>`;
@@ -4075,14 +4109,14 @@ function renderPompier() {
   if (!c) return renderWelcome();
   if (!c.asins?.length) return `<div class="alr alr-a">Importez d'abord des données pour lancer le diagnostic.</div>`;
   const asins = getFilteredAsins(c);
-  const totalCA = asins.reduce((s, a) => s + (a.revenue || 0), 0);
+  const totalCA = asins.reduce((s, a) => s + (getRevenue(a,c)||0), 0);
 
   // Seuil configurable via le filtre pompier
   const threshold = pompierThreshold;
-  const declining = asins.filter(a => (a.revenue||0) > 0 && parseNum(a.revenueDelta) < -threshold)
+  const declining = asins.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) < -threshold)
     .sort((a, b) => parseNum(a.revenueDelta) - parseNum(b.revenueDelta));
 
-  const totalLost = declining.reduce((s,a) => s + Math.abs(parseNum(a.revenueDelta)/100*(a.revenue||0)), 0);
+  const totalLost = declining.reduce((s,a) => s + Math.abs(parseNum(a.revenueDelta)/100*(getRevenue(a,c)||0)), 0);
 
   const pompPeriodImport = c.imports?.filter(i=>i.periodType==='weekly'||!i.periodType).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
   const pompPeriodLabel = pompPeriodImport ? pompPeriodImport.periodStart + ' → ' + pompPeriodImport.periodEnd : null;
@@ -4136,10 +4170,10 @@ function renderPompier() {
   let decliningSorted = [...declining];
   if (pompierSort === 'delta_asc')     decliningSorted.sort((a,b) => parseNum(a.revenueDelta)-parseNum(b.revenueDelta));
   else if (pompierSort === 'delta_desc')    decliningSorted.sort((a,b) => parseNum(b.revenueDelta)-parseNum(a.revenueDelta));
-  else if (pompierSort === 'ca_desc')       decliningSorted.sort((a,b) => (b.revenue||0)-(a.revenue||0));
-  else if (pompierSort === 'ca_asc')        decliningSorted.sort((a,b) => (a.revenue||0)-(b.revenue||0));
-  else if (pompierSort === 'lost_desc')     decliningSorted.sort((a,b) => Math.abs(parseNum(b.revenueDelta)/100*(b.revenue||0))-Math.abs(parseNum(a.revenueDelta)/100*(a.revenue||0)));
-  else if (pompierSort === 'lost_asc')      decliningSorted.sort((a,b) => Math.abs(parseNum(a.revenueDelta)/100*(a.revenue||0))-Math.abs(parseNum(b.revenueDelta)/100*(b.revenue||0)));
+  else if (pompierSort === 'ca_desc')       decliningSorted.sort((a,b) => (getRevenue(b,c)||0)-(getRevenue(a,c)||0));
+  else if (pompierSort === 'ca_asc')        decliningSorted.sort((a,b) => (getRevenue(a,c)||0)-(getRevenue(b,c)||0));
+  else if (pompierSort === 'lost_desc')     decliningSorted.sort((a,b) => Math.abs(parseNum(b.revenueDelta)/100*(getRevenue(b,c)||0))-Math.abs(parseNum(a.revenueDelta)/100*(getRevenue(a,c)||0)));
+  else if (pompierSort === 'lost_asc')      decliningSorted.sort((a,b) => Math.abs(parseNum(a.revenueDelta)/100*(getRevenue(a,c)||0))-Math.abs(parseNum(b.revenueDelta)/100*(getRevenue(b,c)||0)));
   else if (pompierSort === 'stock_asc')     decliningSorted.sort((a,b) => (a.sellableUnits||9999)-(b.sellableUnits||9999));
   else if (pompierSort === 'stock_desc')    decliningSorted.sort((a,b) => (b.sellableUnits||9999)-(a.sellableUnits||9999));
 
@@ -4166,9 +4200,9 @@ function renderPompier() {
 
   decliningSorted.forEach(a => {
     const health = calcHealth(a);
-    const seg = calcSegment(a, totalCA);
+    const seg = calcSegment(a, totalCA, c);
     const delta = parseNum(a.revenueDelta);
-    const lost = Math.abs(delta / 100 * (a.revenue || 0));
+    const lost = Math.abs(delta / 100 * (getRevenue(a,c)||0));
     const isNoStock = (a.sellableUnits || 0) === 0;
     const trend = calcTrend(a);
     // Indiquer explicitement si croissance structurelle malgré baisse hebdo
@@ -4180,7 +4214,7 @@ function renderPompier() {
         <div style="font-size:10px;color:var(--tx3);font-family:var(--fm)">${a.asin} <span style="opacity:.6">${a.market||'.fr'}</span>${a.sourcingOnly ? '<span style="margin-left:4px;font-size:9px;font-weight:700;color:var(--a);background:var(--a-bg);border-radius:3px;padding:1px 4px">Appro</span>' : ''}</div>
       </td>
       <td>${segBadge(seg)}</td>
-      <td class="r" style="font-weight:600">${fmtEur(a.revenue||0)}</td>
+      <td class="r" style="font-weight:600">${fmtEur(getRevenue(a,c)||0)}</td>
       <td class="r"><span style="font-weight:700;color:var(--r)">▼ ${a.revenueDelta||'?'}</span></td>
       <td>
         <div style="display:flex;align-items:center;gap:6px">
@@ -4314,7 +4348,7 @@ function calcAppro(a, client, catalogueEntry, erpEntry) {
     const allUnits = recent.filter(h => (h.units||0) > 0);
     const prixMoyen = (allRevs.length && allUnits.length)
       ? allRevs.reduce((s,h)=>s+(h.revenue||0),0) / allUnits.reduce((s,h)=>s+(h.units||0),0)
-      : (a.revenue && a.units) ? a.revenue / a.units : 0;
+      : (getRevenue(a,client) && getUnits(a,client)) ? getRevenue(a,client) / getUnits(a,client) : 0;
 
     recent.forEach(function(h, i) {
       const w = 1 + (i / Math.max(nbPeriodes - 1, 1));
@@ -4327,22 +4361,22 @@ function calcAppro(a, client, catalogueEntry, erpEntry) {
     });
     velociteBase = sumWV / sumW;
     velociteSource = nbPeriodes + ' sem.';
-    if (velociteBase <= 0 && prixMoyen > 0 && (a.revenue||0) > 0) {
+    if (velociteBase <= 0 && prixMoyen > 0 && (getRevenue(a,client)||0) > 0) {
       // Dernier recours : vélocité depuis le revenue total de l'ASIN / prix
-      velociteBase = a.revenue / prixMoyen / Math.max(nbPeriodes, 1);
+      velociteBase = getRevenue(a,client) / prixMoyen / Math.max(nbPeriodes, 1);
       velociteSource = 'est. rev. ⚠';
       velociteWarning = true;
     }
-  } else if ((a.units || 0) > 0) {
-    velociteBase = a.units;
+  } else if ((getUnits(a,client)||0) > 0) {
+    velociteBase = getUnits(a,client);
     velociteWarning = true;
     velociteSource = '1 sem. ⚠';
     nbPeriodes = 1;
-  } else if ((a.revenue || 0) > 0) {
+  } else if ((getRevenue(a,client)||0) > 0) {
     // Fallback : estimer depuis le revenue de la semaine courante
-    const prixEst = (a.sellableUnits > 0 && a.revenue > 0) ? a.revenue / Math.max(a.units||1, 1) : 0;
+    const prixEst = (a.sellableUnits > 0 && getRevenue(a,client) > 0) ? getRevenue(a,client) / Math.max(getUnits(a,client)||1, 1) : 0;
     if (prixEst > 0) {
-      velociteBase = a.revenue / prixEst;
+      velociteBase = getRevenue(a,client) / prixEst;
       velociteWarning = true;
       velociteSource = 'est. rev. ⚠';
       nbPeriodes = 1;
@@ -5225,7 +5259,7 @@ function renderPotentiel() {
   }
 
   // Calculer le score pour tous les ASINs actifs
-  const activeAsins = c.asins.filter(a => (a.revenue || 0) > 50);
+  const activeAsins = c.asins.filter(a => (getRevenue(a,c)||0) > 50);
   const scored = activeAsins
     .map(a => ({ a, p: calcPotential(a, c) }))
     .sort((x, y) => y.p.score - x.p.score);
@@ -5303,7 +5337,7 @@ function renderPotentiel() {
     if (hasForecast) {
       const fc = (c.forecastData || {})[a.asin];
       const s4 = fc ? Math.round((fc.weeks[1]+fc.weeks[2]+fc.weeks[3]+(fc.weeks[4]||0))/4) : null;
-      const vel = a.units || 0;
+      const vel = getUnits(a,c)||0;
       const fcColor = s4 !== null && s4 > vel * 1.1 ? 'var(--g)' : s4 !== null && s4 < vel * 0.9 ? 'var(--r)' : 'var(--tx)';
       h += '<td class="r">' + (s4 !== null ? '<span style="font-weight:600;color:' + fcColor + '">' + s4 + 'u</span>' : '<span style="color:var(--tx3)">—</span>') + '</td>';
     }
@@ -5313,7 +5347,7 @@ function renderPotentiel() {
       h += '<td class="r">' + (ppm?.ppm != null ? '<span style="font-weight:600;color:' + ppmColor + '">' + ppm.ppm.toFixed(1) + '%</span>' : '<span style="color:var(--tx3)">—</span>') + '</td>';
     }
 
-    h += '<td class="r"><strong>' + fmtEur(a.revenue || 0) + '</strong></td>';
+    h += '<td class="r"><strong>' + fmtEur(getRevenue(a,c)||0) + '</strong></td>';
     h += '<td class="r">' + (a.sellableUnits != null ? fmt(a.sellableUnits) + 'u' : '<span style="color:var(--tx3)">—</span>') + '</td>';
     h += '<td><button class="btn btn-xs" onclick="selectedAsin=\'' + a.asin + '\';go(\'asins\')">→</button></td>';
     h += '</tr>';
@@ -5487,7 +5521,7 @@ function renderApprosResults() {
   h += `</div>`;
 
   // ── Calcul et affichage du tableau ────────────────────────────
-  const activeAsins = c.asins.filter(a => (a.revenue || 0) > 0);
+  const activeAsins = c.asins.filter(a => (getRevenue(a,c)||0) > 0);
   const catMap = {};
   (c.catalogue || []).forEach(e => { catMap[e.asin] = e; });
 
@@ -5703,7 +5737,7 @@ function renderApprosForecast() {
     });
   }
 
-  const activeAsins = c.asins.filter(a => (a.revenue || 0) > 0);
+  const activeAsins = c.asins.filter(a => (getRevenue(a,c)||0) > 0);
   const appros = activeAsins
     .map(a => ({ a, r: calcAppro(a, c, catMap[a.asin], erpMap[a.asin]) }))
     .filter(({ r }) => r !== null && !r.stockManquant);
@@ -6157,7 +6191,7 @@ function calcPotential(a, c) {
     const s4avg = (forecast.weeks[1]+forecast.weeks[2]+forecast.weeks[3]+forecast.weeks[4]) / 4;
     const velocite = a.history && a.history.length >= 2
       ? a.history.slice(-4).reduce((s,h)=>s+(h.units||0),0) / Math.min(a.history.length, 4)
-      : (a.units || 0);
+      : (getUnits(a,c)||0);
     if (velocite > 0 && s4avg > velocite * 1.1) {
       const gain = Math.min(25, Math.round((s4avg/velocite - 1) * 100));
       score += gain;
@@ -6205,19 +6239,19 @@ function calcPotential(a, c) {
 
   // ── Signal 5 : Stock suffisant pour absorber la croissance (0-20 pts) ──
   // Note : si Buy Box perdue, le stock n'est PAS la cause racine à traiter
-  const stockOk = !hasBuyBoxLoss && a.sellableUnits != null && a.sellableUnits > (a.units || 0) * 3;
+  const stockOk = !hasBuyBoxLoss && a.sellableUnits != null && a.sellableUnits > (getUnits(a,c)||0) * 3;
   if (stockOk) {
     score += 20;
     signals.push({ icon:'📦', label:'Stock suffisant (' + a.sellableUnits + 'u)', cls:'g', pts: 20 });
-  } else if (!hasBuyBoxLoss && a.sellableUnits != null && a.sellableUnits < (a.units || 0)) {
+  } else if (!hasBuyBoxLoss && a.sellableUnits != null && a.sellableUnits < (getUnits(a,c)||0)) {
     signals.push({ icon:'📦', label:'Stock insuffisant — frein à la croissance', cls:'r', pts: 0 });
-  } else if (hasBuyBoxLoss && a.sellableUnits != null && a.sellableUnits < (a.units || 0)) {
+  } else if (hasBuyBoxLoss && a.sellableUnits != null && a.sellableUnits < (getUnits(a,c)||0)) {
     signals.push({ icon:'📦', label:'Stock faible — mais Buy Box à traiter en priorité', cls:'a', pts: 0 });
   }
 
   // ── Signal 5 : Conversion stable ou en hausse (0-15 pts) ──
-  if (a.glanceViews > 0 && a.revenue > 0) {
-    const convRate = a.revenue / a.glanceViews;
+  if (a.glanceViews > 0 && getRevenue(a,c) > 0) {
+    const convRate = getRevenue(a,c) / a.glanceViews;
     // Comparer avec semaine précédente si dispo
     const prevH = a.history && a.history.length >= 2 ? a.history[a.history.length - 2] : null;
     if (prevH && prevH.glanceViews > 0 && prevH.revenue > 0) {
@@ -6548,7 +6582,7 @@ function exportApprosCsv() {
       }
     });
   }
-  const activeAsins = c.asins.filter(a => (a.revenue || 0) > 0);
+  const activeAsins = c.asins.filter(a => (getRevenue(a,c)||0) > 0);
   const appros = activeAsins
     .map(a => ({ a, r: calcAppro(a, c, catMap[a.asin], erpMapExp[a.asin]) }))
     .filter(({ r }) => r !== null && r.qteACommander > 0)
@@ -6686,7 +6720,7 @@ function renderFiche() {
     h += `<div class="cd"><div class="cd-t">📊 Statistiques</div><div class="kpi-g">`;
     h += `<div class="kpi"><div class="kpi-lb">ASINs en base</div><div class="kpi-v">${c.asins.length}</div></div>`;
     h += `<div class="kpi"><div class="kpi-lb">Imports réalisés</div><div class="kpi-v">${c.imports.length}</div></div>`;
-    const ca = c.asins.reduce((s,a) => s+(a.revenue||0), 0);
+    const ca = c.asins.reduce((s,a) => s+(getRevenue(a,c)||0), 0);
     h += `<div class="kpi"><div class="kpi-lb">CA Total Base</div><div class="kpi-v">${fmtEur(ca)}</div></div>`;
     h += `</div></div>`;
   }
@@ -6875,14 +6909,14 @@ function initChart() {
   if (!canvas) return;
   if (chartInst) chartInst.destroy();
   const asins = getFilteredAsins(c);
-  const top10 = asins.filter(a => (a.revenue||0) > 0).sort((a,b) => (b.revenue||0)-(a.revenue||0)).slice(0, 10);
+  const top10 = asins.filter(a => (getRevenue(a,c)||0) > 0).sort((a,b) => (getRevenue(b,c)||0)-(getRevenue(a,c)||0)).slice(0, 10);
   const colors = getChartColors();
   const deltas = top10.map(a => parseNum(a.revenueDelta));
   chartInst = new Chart(canvas.getContext('2d'), {
     type: 'bar',
     data: {
       labels: top10.map(a => shortName(a).slice(0, 20)),
-      datasets: [{ label: 'CA (€)', data: top10.map(a => a.revenue||0), backgroundColor: deltas.map(d => d >= 0 ? '#22C55E' : '#EF4444'), borderRadius: 5 }]
+      datasets: [{ label: 'CA (€)', data: top10.map(a => getRevenue(a,c)||0), backgroundColor: deltas.map(d => d >= 0 ? '#22C55E' : '#EF4444'), borderRadius: 5 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -7008,12 +7042,12 @@ function initSegChart() {
   if (!canvas) return;
   if (segChartInst) segChartInst.destroy();
   const asins = getFilteredAsins(c);
-  const totalCA = asins.reduce((s, a) => s + (a.revenue || 0), 0);
+  const totalCA = asins.reduce((s, a) => s + (getRevenue(a,c)||0), 0);
   const segs = { A: 0, B: 0, C: 0 };
   const cnts = { A: 0, B: 0, C: 0 };
   for (const a of asins) {
-    const s = calcSegment(a, totalCA);
-    segs[s] += (a.revenue || 0);
+    const s = calcSegment(a, totalCA, c);
+    segs[s] += (getRevenue(a,c)||0);
     cnts[s]++;
   }
   const colors = getChartColors();
@@ -7048,15 +7082,15 @@ function exportPompierCsv() {
   const c = cl();
   if (!c?.asins?.length) return;
   const asins = getFilteredAsins(c);
-  const totalCA = asins.reduce((s, a) => s + (a.revenue || 0), 0);
-  const declining = asins.filter(a => (a.revenue||0) > 0 && parseNum(a.revenueDelta) < -pompierThreshold)
+  const totalCA = asins.reduce((s, a) => s + (getRevenue(a,c)||0), 0);
+  const declining = asins.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) < -pompierThreshold)
     .sort((a, b) => parseNum(a.revenueDelta) - parseNum(b.revenueDelta));
   const headers = ['ASIN','Titre','Marque','Segment','CA actuel (€)','Δ CA','CA perdu estimé (€)','Glance Views','Δ GV','Stock','Retail%'];
   const rows = declining.map(a => {
-    const seg = calcSegment(a, totalCA);
-    const lost = Math.abs(parseNum(a.revenueDelta)/100*(a.revenue||0));
+    const seg = calcSegment(a, totalCA, c);
+    const lost = Math.abs(parseNum(a.revenueDelta)/100*(getRevenue(a,c)||0));
     return [a.asin, '"'+(a.title||'').replace(/"/g,'""')+'"', a.brand||'', seg,
-      Math.round(a.revenue||0), a.revenueDelta||'', Math.round(lost),
+      Math.round(getRevenue(a,c)||0), a.revenueDelta||'', Math.round(lost),
       a.glanceViews||'', a.gvDelta||'', a.sellableUnits!=null?a.sellableUnits:'', a.retailPct||''];
   });
   const csv = [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
@@ -7091,10 +7125,10 @@ function exportAsinsXlsx() {
   const c = cl();
   if (!c?.asins?.length) return;
   const allFiltered = getFilteredAsins(c);
-  const totalCA = allFiltered.reduce((s, a) => s + (a.revenue || 0), 0);
+  const totalCA = allFiltered.reduce((s, a) => s + (getRevenue(a,c)||0), 0);
   let asins = [...allFiltered];
-  if (asinSort === 'ca_desc')    asins.sort((a,b) => (b.revenue||0)-(a.revenue||0));
-  else if (asinSort === 'ca_asc')     asins.sort((a,b) => (a.revenue||0)-(b.revenue||0));
+  if (asinSort === 'ca_desc')    asins.sort((a,b) => (getRevenue(b,c)||0)-(getRevenue(a,c)||0));
+  else if (asinSort === 'ca_asc')     asins.sort((a,b) => (getRevenue(a,c)||0)-(getRevenue(b,c)||0));
   else if (asinSort === 'hausse')     asins.sort((a,b) => parseNum(b.revenueDelta)-parseNum(a.revenueDelta));
   else if (asinSort === 'baisse')     asins.sort((a,b) => parseNum(a.revenueDelta)-parseNum(b.revenueDelta));
   else if (asinSort === 'stock_asc')  asins.sort((a,b) => (a.sellableUnits||9999)-(b.sellableUnits||9999));
@@ -7109,8 +7143,8 @@ function exportAsinsXlsx() {
     return [
       a.asin, cat?.sku||'', cat?.ean||'',
       (a.title||'').slice(0,100), a.brand||'', a.market||'',
-      calcSegment(a, totalCA), calcHealth(a),
-      Math.round(a.revenue||0), a.revenueDelta||'', a.units||'',
+      calcSegment(a, totalCA, c), calcHealth(a),
+      Math.round(getRevenue(a,c)||0), a.revenueDelta||'', getUnits(a,c)||'',
       a.glanceViews||'', a.gvDelta||'',
       a.sellableUnits!=null?a.sellableUnits:'', a.retailPct||'', a.returns||'',
       pot.score, ppm?.ppm!=null?ppm.ppm:''
@@ -7124,21 +7158,21 @@ function exportAsinsXlsx() {
 function exportPompierXlsx() {
   const c = cl();
   if (!c?.asins?.length) return;
-  const totalCA = c.asins.reduce((s,a)=>s+(a.revenue||0),0);
+  const totalCA = c.asins.reduce((s,a)=>s+(getRevenue(a,c)||0),0);
   const threshold = pompierThreshold || 10;
   const declining = c.asins.filter(a => {
-    if (!(a.revenue > 0)) return false;
+    if (!(getRevenue(a,c) > 0)) return false;
     const delta = parseNum(a.revenueDelta);
     return delta <= -threshold;
   }).sort((a,b) => parseNum(a.revenueDelta)-parseNum(b.revenueDelta));
   const headers = ['ASIN','Titre','Marque','Segment','CA (€)','Δ CA (%)','CA perdu est. (€)','Tendance','Stock','Retail%'];
   const rows = declining.map(a => {
     const trend = calcTrend(a);
-    const caPerdu = Math.abs(Math.round((parseNum(a.revenueDelta)/100) * (a.revenue||0)));
+    const caPerdu = Math.abs(Math.round((parseNum(a.revenueDelta)/100) * (getRevenue(a,c)||0)));
     return [
       a.asin, (a.title||'').slice(0,100), a.brand||'',
-      calcSegment(a,totalCA),
-      Math.round(a.revenue||0), a.revenueDelta||'', caPerdu,
+      calcSegment(a, totalCA, c),
+      Math.round(getRevenue(a,c)||0), a.revenueDelta||'', caPerdu,
       trend?.label||'', a.sellableUnits!=null?a.sellableUnits:'', a.retailPct||''
     ];
   });
@@ -7163,7 +7197,7 @@ function exportApprosXlsx() {
       }
     });
   }
-  const activeAsins = c.asins.filter(a => (a.revenue||0) > 0);
+  const activeAsins = c.asins.filter(a => (getRevenue(a,c)||0) > 0);
   const appros = activeAsins
     .map(a => ({ a, r: calcAppro(a, c, catMap[a.asin], erpMapX[a.asin]) }))
     .filter(({r}) => r !== null)
@@ -7205,7 +7239,7 @@ function exportApprosXlsx() {
 function exportPotentielXlsx() {
   const c = cl();
   if (!c?.asins?.length) return;
-  const activeAsins = c.asins.filter(a => (a.revenue||0) > 50);
+  const activeAsins = c.asins.filter(a => (getRevenue(a,c)||0) > 50);
   const scored = activeAsins
     .map(a => ({ a, p: calcPotential(a, c) }))
     .sort((x,y) => y.p.score - x.p.score);
@@ -7221,7 +7255,7 @@ function exportPotentielXlsx() {
       p.btrCandidat ? 'Oui' : 'Non',
       p.signals.map(s=>s.label).join(' | '),
       s4, ppm,
-      Math.round(a.revenue||0),
+      Math.round(getRevenue(a,c)||0),
       a.sellableUnits!=null?a.sellableUnits:'',
       trend?.label||''
     ];
@@ -7254,8 +7288,8 @@ function exportViewXlsx() {
   const c = cl();
   if (!c) return;
   const viewSet = asinViewAsins ? new Set(asinViewAsins) : null;
-  const asins = viewSet ? c.asins.filter(a => viewSet.has(a.asin)) : c.asins.filter(a => (a.revenue||0)>0);
-  const totalCA = asins.reduce((s,a) => s+(a.revenue||0), 0);
+  const asins = viewSet ? c.asins.filter(a => viewSet.has(a.asin)) : c.asins.filter(a => (getRevenue(a,c)||0)>0);
+  const totalCA = asins.reduce((s,a) => s+(getRevenue(a,c)||0), 0);
   const catMap = {};
   (c.catalogue||[]).forEach(e => { catMap[e.asin] = e; });
 
@@ -7272,18 +7306,18 @@ function exportViewXlsx() {
       const cat = catMap[a.asin]; const ppm = (c.ppmData||{})[a.asin];
       const oos = parseNum(a.oosPct);
       const raison = a.sellableUnits < 15 ? 'Stock critique < 15u' : a.sellableUnits < 30 ? 'Stock faible < 30u' : 'Disponibilité < 90%';
-      return [a.asin, cat?.sku||'', (a.title||'').slice(0,80), calcSegment(a,totalCA),
-        Math.round(a.revenue||0), a.revenueDelta||'', a.sellableUnits!=null?a.sellableUnits:'',
+      return [a.asin, cat?.sku||'', (a.title||'').slice(0,80), calcSegment(a, totalCA, c),
+        Math.round(getRevenue(a,c)||0), a.revenueDelta||'', a.sellableUnits!=null?a.sellableUnits:'',
         a.retailPct||'', ppm?.ppm!=null?ppm.ppm:'', raison];
     });
   } else if (asinView === 'declining') {
     headers = ['ASIN','SKU','Titre','Segment','CA (€)','Δ CA (%)','CA perdu est. (€)','Tendance','GV','Δ GV','Stock','PPM%'];
     rows = asins.map(a => {
       const cat = catMap[a.asin]; const ppm = (c.ppmData||{})[a.asin];
-      const caPerdu = Math.round(Math.abs(parseNum(a.revenueDelta)/100*(a.revenue||0)));
+      const caPerdu = Math.round(Math.abs(parseNum(a.revenueDelta)/100*(getRevenue(a,c)||0)));
       const trend = calcTrend(a);
-      return [a.asin, cat?.sku||'', (a.title||'').slice(0,80), calcSegment(a,totalCA),
-        Math.round(a.revenue||0), a.revenueDelta||'', caPerdu,
+      return [a.asin, cat?.sku||'', (a.title||'').slice(0,80), calcSegment(a, totalCA, c),
+        Math.round(getRevenue(a,c)||0), a.revenueDelta||'', caPerdu,
         trend?.label||'', a.glanceViews||'', a.gvDelta||'',
         a.sellableUnits!=null?a.sellableUnits:'', ppm?.ppm!=null?ppm.ppm:''];
     });
@@ -7291,10 +7325,10 @@ function exportViewXlsx() {
     headers = ['ASIN','SKU','Titre','Segment','CA (€)','Δ CA (%)','Gain est. (€)','Tendance','GV','Δ GV','Stock','Score Potentiel','PPM%'];
     rows = asins.map(a => {
       const cat = catMap[a.asin]; const ppm = (c.ppmData||{})[a.asin];
-      const gain = Math.round(Math.abs(parseNum(a.revenueDelta)/100*(a.revenue||0)));
+      const gain = Math.round(Math.abs(parseNum(a.revenueDelta)/100*(getRevenue(a,c)||0)));
       const trend = calcTrend(a); const pot = calcPotential(a, c);
-      return [a.asin, cat?.sku||'', (a.title||'').slice(0,80), calcSegment(a,totalCA),
-        Math.round(a.revenue||0), a.revenueDelta||'', gain,
+      return [a.asin, cat?.sku||'', (a.title||'').slice(0,80), calcSegment(a, totalCA, c),
+        Math.round(getRevenue(a,c)||0), a.revenueDelta||'', gain,
         trend?.label||'', a.glanceViews||'', a.gvDelta||'',
         a.sellableUnits!=null?a.sellableUnits:'', pot.score, ppm?.ppm!=null?ppm.ppm:''];
     });
@@ -7303,8 +7337,8 @@ function exportViewXlsx() {
     rows = asins.map(a => {
       const cat = catMap[a.asin]; const ppm = (c.ppmData||{})[a.asin];
       const trend = calcTrend(a);
-      return [a.asin, cat?.sku||'', (a.title||'').slice(0,80), calcSegment(a,totalCA),
-        Math.round(a.revenue||0), a.revenueDelta||'',
+      return [a.asin, cat?.sku||'', (a.title||'').slice(0,80), calcSegment(a, totalCA, c),
+        Math.round(getRevenue(a,c)||0), a.revenueDelta||'',
         a.sellableUnits!=null?a.sellableUnits:'', trend?.label||'', ppm?.ppm!=null?ppm.ppm:''];
     });
   }
@@ -7323,11 +7357,11 @@ function exportAsinsCsv() {
   if (!c?.asins?.length) return;
   // Exporter exactement ce qui est affiché — filtrée + triée + limitée + recherche
   const allFiltered = getFilteredAsins(c);
-  const totalCA = allFiltered.reduce((s, a) => s + (a.revenue || 0), 0);
+  const totalCA = allFiltered.reduce((s, a) => s + (getRevenue(a,c)||0), 0);
   // Appliquer le même tri que l'écran
   let asins = [...allFiltered];
-  if (asinSort === 'ca_desc')    asins.sort((a,b) => (b.revenue||0)-(a.revenue||0));
-  else if (asinSort === 'ca_asc')     asins.sort((a,b) => (a.revenue||0)-(b.revenue||0));
+  if (asinSort === 'ca_desc')    asins.sort((a,b) => (getRevenue(b,c)||0)-(getRevenue(a,c)||0));
+  else if (asinSort === 'ca_asc')     asins.sort((a,b) => (getRevenue(a,c)||0)-(getRevenue(b,c)||0));
   else if (asinSort === 'hausse')     asins.sort((a,b) => parseNum(b.revenueDelta)-parseNum(a.revenueDelta));
   else if (asinSort === 'baisse')     asins.sort((a,b) => parseNum(a.revenueDelta)-parseNum(b.revenueDelta));
   else if (asinSort === 'stock_asc')  asins.sort((a,b) => (a.sellableUnits||9999)-(b.sellableUnits||9999));
@@ -7348,11 +7382,11 @@ function exportAsinsCsv() {
       '"' + (a.title||'').replace(/"/g,'""') + '"',
       a.brand || '',
       a.market || '',
-      calcSegment(a, totalCA),
+      calcSegment(a, totalCA, c),
       calcHealth(a),
-      Math.round(a.revenue || 0),
+      Math.round(getRevenue(a,c)||0),
       a.revenueDelta || '',
-      a.units || '',
+      getUnits(a,c)||'',
       a.glanceViews || '',
       a.gvDelta || '',
       a.sellableUnits || '',
@@ -7377,7 +7411,7 @@ async function runAI(type) {
   if (!c) return;
   aiLoading = true; aiResult = ''; render();
   const asins = getFilteredAsins(c);
-  const totalCA = asins.reduce((s,a) => s+(a.revenue||0), 0);
+  const totalCA = asins.reduce((s,a) => s+(getRevenue(a,c)||0), 0);
   let prompt = '';
 
   // Helper : résumé historique d'un ASIN en 1 ligne
@@ -7386,13 +7420,13 @@ async function runAI(type) {
     const hist = deep?.hasLongData
       ? ` | Trend: ${deep.signal}`
       : (a.revenueYoY ? ` | YoY: ${a.revenueYoY}` : '');
-    return `- ${shortName(a)} (${a.asin}): ${fmtEur(a.revenue)} | Δ ${a.revenueDelta||'N/A'}${hist}`;
+    return `- ${shortName(a)} (${a.asin}): ${fmtEur(getRevenue(a,c))} | Δ ${a.revenueDelta||'N/A'}${hist}`;
   };
 
   if (type === 'weekly') {
-    const dec = asins.filter(a => (a.revenue||0)>0 && parseNum(a.revenueDelta)<-10);
-    const grow = asins.filter(a => (a.revenue||0)>50 && parseNum(a.revenueDelta)>20);
-    const low = asins.filter(a => a.sellableUnits>0 && a.sellableUnits<30 && (a.revenue||0)>50);
+    const dec = asins.filter(a => (getRevenue(a,c)||0)>0 && parseNum(a.revenueDelta)<-10);
+    const grow = asins.filter(a => (getRevenue(a,c)||0)>50 && parseNum(a.revenueDelta)>20);
+    const low = asins.filter(a => a.sellableUnits>0 && a.sellableUnits<30 && (getRevenue(a,c)||0)>50);
     // Distinguer baisses structurelles vs ponctuelles
     const decStructural = dec.filter(a => { const d = calcTrendDeep(a,c); return d.hasLongData && d.signalCls === 'trend-down'; });
     const decPunctual   = dec.filter(a => { const d = calcTrendDeep(a,c); return d.hasLongData && d.signalCls !== 'trend-down'; });
@@ -7408,7 +7442,7 @@ async function runAI(type) {
     prompt = [
       'REVUE HEBDOMADAIRE — ' + c.name,
       '',
-      '📊 CA Semaine: ' + fmtEur(totalCA) + ' | ASINs actifs: ' + asins.filter(a=>(a.revenue||0)>0).length + ' | Baisses: ' + dec.length + ' | Croissances: ' + grow.length + ' | Stock critique: ' + low.length,
+      '📊 CA Semaine: ' + fmtEur(totalCA) + ' | ASINs actifs: ' + asins.filter(a=>(getRevenue(a,c)||0)>0).length + ' | Baisses: ' + dec.length + ' | Croissances: ' + grow.length + ' | Stock critique: ' + low.length,
       '',
       '🔴 BAISSES (' + dec.length + ' ASINs):',
       decStructLines,
@@ -7428,29 +7462,29 @@ async function runAI(type) {
     ].filter(x => x !== undefined && x !== null).join(nl);
 
   } else if (type === 'opportunities') {
-    const grow = asins.filter(a => (a.revenue||0)>50 && parseNum(a.revenueDelta)>10)
+    const grow = asins.filter(a => (getRevenue(a,c)||0)>50 && parseNum(a.revenueDelta)>10)
       .sort((a,b) => parseNum(b.revenueDelta)-parseNum(a.revenueDelta));
     // Qualifier chaque opportunité par sa tendance longue
     const oppLines = grow.slice(0,10).map(a => {
       const deep = calcTrendDeep(a, c);
       const qual = deep.hasLongData ? ' | Fond: ' + deep.signal : (a.revenueYoY ? ' | YoY: ' + a.revenueYoY : '');
-      return '- ' + shortName(a) + ' (' + a.asin + '): ' + fmtEur(a.revenue) + ' | Δ ' + (a.revenueDelta||'N/A') + ' | GV: ' + fmt(a.glanceViews||0) + ' | Stock: ' + (a.sellableUnits||'?') + 'u' + qual;
+      return '- ' + shortName(a) + ' (' + a.asin + '): ' + fmtEur(getRevenue(a,c)) + ' | Δ ' + (a.revenueDelta||'N/A') + ' | GV: ' + fmt(a.glanceViews||0) + ' | Stock: ' + (a.sellableUnits||'?') + 'u' + qual;
     }).join('\n');
     prompt = 'ANALYSE OPPORTUNITÉS — ' + c.name + '\n\n' + oppLines + '\n\nPour chaque opportunité : distingue les croissances sur fond structurel haussier (à capitaliser fort) des rebonds ponctuels (à surveiller).\nActions concrètes : Ads, stock, A+ Content, bundle, prix.';
 
   } else if (type === 'risks') {
-    const dec = asins.filter(a => (a.revenue||0)>0 && parseNum(a.revenueDelta)<-5);
-    const low = asins.filter(a => a.sellableUnits>0 && a.sellableUnits<50 && (a.revenue||0)>30);
+    const dec = asins.filter(a => (getRevenue(a,c)||0)>0 && parseNum(a.revenueDelta)<-5);
+    const low = asins.filter(a => a.sellableUnits>0 && a.sellableUnits<50 && (getRevenue(a,c)||0)>30);
     const riskDecLines = dec.slice(0,10).map(a => {
       const deep = calcTrendDeep(a, c);
       const qual = deep.hasLongData ? ' | Fond: ' + deep.signal : '';
-      return '- ' + shortName(a) + ': ' + fmtEur(a.revenue) + ' | Δ ' + (a.revenueDelta||'N/A') + qual;
+      return '- ' + shortName(a) + ': ' + fmtEur(getRevenue(a,c)) + ' | Δ ' + (a.revenueDelta||'N/A') + qual;
     }).join('\n');
-    const riskStockLines = low.slice(0,10).map(a => '- ' + shortName(a) + ': ' + a.sellableUnits + 'u | CA ' + fmtEur(a.revenue)).join('\n');
+    const riskStockLines = low.slice(0,10).map(a => '- ' + shortName(a) + ': ' + a.sellableUnits + 'u | CA ' + fmtEur(getRevenue(a,c))).join('\n');
     prompt = 'ANALYSE RISQUES — ' + c.name + '\n\nASINs en baisse:\n' + riskDecLines + '\n\nStock faible:\n' + riskStockLines + '\n\nClasse les risques : critique (déclin structurel) / modéré (ponctuel sur fond stable) / faible (creux sur fond haussier).\nActions de mitigation par niveau de risque.';
 
   } else if (type === 'decline') {
-    const dec = asins.filter(a => (a.revenue||0)>0 && parseNum(a.revenueDelta)<-10)
+    const dec = asins.filter(a => (getRevenue(a,c)||0)>0 && parseNum(a.revenueDelta)<-10)
       .sort((a,b) => parseNum(a.revenueDelta)-parseNum(b.revenueDelta));
     prompt = `DIAGNOSTIC BAISSES CA — ${c.name}
 
@@ -7462,7 +7496,7 @@ ${dec.slice(0,12).map(a => {
   if (deep.caYTD) histLines.push(`YTD: ${fmtEur(deep.caYTD)}`);
   return `📉 ${shortName(a)}
    ASIN: ${a.asin} | ${a.market} | Δ: ${a.revenueDelta}
-   Semaine: ${fmtEur(a.revenue)} | GV: ${fmt(a.glanceViews||0)} (Δ ${a.gvDelta||'N/A'}) | Stock: ${a.sellableUnits||'?'}u
+   Semaine: ${fmtEur(getRevenue(a,c))} | GV: ${fmt(a.glanceViews||0)} (Δ ${a.gvDelta||'N/A'}) | Stock: ${a.sellableUnits||'?'}u
    Historique: ${histLines.join(' / ') || 'non disponible'}
    Signal: ${deep.signal}`;
 }).join('\n\n')}
@@ -7687,8 +7721,8 @@ async function runAsinAI(asin) {
   const a = c.asins.find(x => x.asin === asin);
   if (!a) return;
   aiLoading = true; aiResult = ''; selectedAsin = asin; render();
-  const totalCA = c.asins.reduce((s,x) => s+(x.revenue||0), 0);
-  const seg = calcSegment(a, totalCA);
+  const totalCA = c.asins.reduce((s,x) => s+(getRevenue(x,c)||0), 0);
+  const seg = calcSegment(a, totalCA, c);
   const health = calcHealth(a);
   const deep = calcTrendDeep(a, c);
   const histCtx = buildAsinContext(a, c);
@@ -7700,8 +7734,8 @@ ASIN: ${a.asin} | Marque: ${a.brand||'N/A'} | Marché: ${a.market||'.fr'}
 Segment: ${seg} | Health Score: ${health}/100
 
 📊 MÉTRIQUES PÉRIODE EN COURS:
-- CA: ${fmtEur(a.revenue||0)} (Δ période: ${a.revenueDelta||'N/A'})
-- Unités: ${fmt(a.units||0)} (Δ ${a.unitsDelta||'N/A'})
+- CA: ${fmtEur(getRevenue(a,c)||0)} (Δ période: ${a.revenueDelta||'N/A'})
+- Unités: ${fmt(getUnits(a,c)||0)} (Δ ${a.unitsDelta||'N/A'})
 - Glance Views: ${fmt(a.glanceViews||0)} (Δ GV: ${a.gvDelta||'N/A'})
 - Stock vendable: ${a.sellableUnits!=null?a.sellableUnits+'u':'N/A'} | Malsain: ${a.unhealthyUnits||0}u
 - Retail %: ${a.retailPct||'N/A'} | Confirm %: ${a.confirmPct||'N/A'}
@@ -7812,34 +7846,34 @@ function goFilteredAsins(preset) {
   const c = cl();
   if (!c) { render(); return; }
   const allAsins = [...c.asins];
-  const totalCA  = allAsins.reduce((s,a) => s+(a.revenue||0), 0);
+  const totalCA  = allAsins.reduce((s,a) => s+(getRevenue(a,c)||0), 0);
 
   if (preset === 'lowstock') {
     asinSort = 'stock_asc';
     asinViewAsins = allAsins.filter(a => {
       const oos = parseNum(a.oosPct);
-      return (a.revenue||0) > 50 && (
+      return (getRevenue(a,c)||0) > 50 && (
         (oos > 0 && oos < 90) ||
         (a.sellableUnits != null && a.sellableUnits >= 0 && a.sellableUnits < 30)
       );
     }).map(a => a.asin);
   } else if (preset === 'declining') {
     asinSort = 'baisse';
-    asinViewAsins = allAsins.filter(a => (a.revenue||0) > 0 && parseNum(a.revenueDelta) <= -10)
+    asinViewAsins = allAsins.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) <= -10)
       .map(a => a.asin);
   } else if (preset === 'growing') {
     asinSort = 'hausse';
-    asinViewAsins = allAsins.filter(a => (a.revenue||0) > 0 && parseNum(a.revenueDelta) >= 20)
+    asinViewAsins = allAsins.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) >= 20)
       .map(a => a.asin);
   } else if (preset === 'seg-a') {
     asinSort = 'ca_desc';
-    asinViewAsins = allAsins.filter(a => calcSegment(a, totalCA) === 'A').map(a => a.asin);
+    asinViewAsins = allAsins.filter(a => calcSegment(a, totalCA, c) === 'A').map(a => a.asin);
   } else if (preset === 'seg-b') {
     asinSort = 'ca_desc';
-    asinViewAsins = allAsins.filter(a => calcSegment(a, totalCA) === 'B').map(a => a.asin);
+    asinViewAsins = allAsins.filter(a => calcSegment(a, totalCA, c) === 'B').map(a => a.asin);
   } else if (preset === 'seg-c') {
     asinSort = 'ca_desc';
-    asinViewAsins = allAsins.filter(a => calcSegment(a, totalCA) === 'C').map(a => a.asin);
+    asinViewAsins = allAsins.filter(a => calcSegment(a, totalCA, c) === 'C').map(a => a.asin);
   } else {
     asinSort = 'ca_desc';
     asinViewAsins = null;
@@ -7858,6 +7892,7 @@ function updClient(key, val) { const c = cl(); if (c) { c[key] = val; save(); } 
 function deleteClient(id) { clients = clients.filter(c => c.id !== id); activeId = clients.length ? clients[0].id : null; screen = clients.length ? 'dashboard' : 'welcome'; save(); render(); }
 function setFilter(k, v) { filters[k] = v; render(); }
 function resetFilters() { filters = { market: 'all', brand: 'all', segment: 'all' }; render(); }
+function setKpiPrimaire(mode) { const c = cl(); if (!c) return; c.kpiPrimaireCA = mode; save(); go('dashboard'); }
 function selectAsin(asin) {
   selectedAsin = asin;
   aiResult = '';
@@ -8288,7 +8323,7 @@ function exportAllData(silent = false) {
       exportDateHuman: now.toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit' }),
       clientCount: clients.length,
       totalAsins: clients.reduce((s,c) => s + (c.asins?.length||0), 0),
-      totalCA: clients.reduce((s,c) => s + (c.asins?.reduce((ss,a) => ss + (a.revenue||0), 0)||0), 0),
+      totalCA: clients.reduce((s,c) => s + (c.asins?.reduce((ss,a) => ss + (getRevenue(a,c)||0), 0)||0), 0),
       clientsSummary: clients.map(c => ({
         id: c.id, name: c.name, brand: c.brand, markets: c.markets,
         asinCount: c.asins?.length || 0,

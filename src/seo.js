@@ -239,11 +239,11 @@ function copySEOField(asin, mkt, field) {
 // ── Score SEO défaillant ────────────────────────────────────────
 function calcSEODefaillance(a, c) {
   const asins = c.asins || [];
-  const totalCA = asins.reduce(function(s,x){ return s+(x.revenue||0); }, 0);
+  const totalCA = asins.reduce(function(s,x){ return s+(getRevenue(x,c)||0); }, 0);
   const seg = calcSegment(a, totalCA);
   const gvList = asins.map(function(x){ return x.glanceViews||0; }).filter(function(v){ return v>0; }).sort(function(a,b){return a-b;});
   const medGV = gvList.length ? gvList[Math.floor(gvList.length/2)] : 0;
-  const units = a.units || 0;
+  const units = getUnits(a,c)||0;
   const gv = a.glanceViews || 0;
   const convRate = (gv > 0) ? units/gv : 0;
   const convList = asins.map(function(x){ return (x.glanceViews&&x.units) ? x.units/x.glanceViews : 0; }).filter(function(v){return v>0;}).sort(function(a,b){return a-b;});
@@ -262,7 +262,7 @@ function calcSEODefaillance(a, c) {
   if (seg === 'A' || seg === 'B')                  score += 1; // priorité commerciale
   if (sellable < 10)                               score -= 2; // exclure : rupture stock
   if (convRate > medConv * 1.2)                    score -= 1; // produit convertit bien, SEO ok
-  if (a.revenue === 0 || a.revenue == null)        score -= 1; // pas de ventes = hors scope
+  if (getRevenue(a,c) === 0)                        score -= 1; // pas de ventes = hors scope
 
   if (score >= 4) return 'critical';   // 🔴
   if (score >= 2) return 'watch';      // 🟡
@@ -535,7 +535,7 @@ function renderSEOScreen() {
   if (!c) return '<div class="alr alr-r">Aucun client sélectionné.</div>';
 
   var asins = c.asins || [];
-  var totalCA = asins.reduce(function(s,x){ return s+(x.revenue||0); }, 0);
+  var totalCA = asins.reduce(function(s,x){ return s+(getRevenue(x,c)||0); }, 0);
   var pendingVerif = seoGetPendingVerifications();
   var markets = c.markets && c.markets.length ? c.markets : [c.mainMarket || '.fr'];
 
@@ -570,7 +570,7 @@ function renderSEOScreen() {
     var pa = calcSEODefaillance(a,c)==='critical'?1:0;
     var pb = calcSEODefaillance(b,c)==='critical'?1:0;
     if (pa !== pb) return pb - pa;
-    return (b.revenue||0) - (a.revenue||0);
+    return (getRevenue(b,c)||0) - (getRevenue(a,c)||0);
   }).slice(0, 10);
 
   if (defaillants.length > 0) {
@@ -588,7 +588,7 @@ function renderSEOScreen() {
       h += '<div style="flex-shrink:0;width:22px;height:22px;border-radius:50%;background:'+segC+';display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff">'+seg+'</div>';
       h += '<div style="flex:1;min-width:0">';
       h += '<div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(short) + '</div>';
-      h += '<div style="font-size:10px;color:var(--tx3);font-family:var(--mono)">' + esc(a.asin) + ' · ' + fmtEur(a.revenue||0) + '</div>';
+      h += '<div style="font-size:10px;color:var(--tx3);font-family:var(--mono)">' + esc(a.asin) + ' · ' + fmtEur(getRevenue(a,c)||0) + '</div>';
       h += '</div>';
       h += '<div style="flex-shrink:0;font-size:10px;color:var(--tx3)">' + icon + ' ' + label + '</div>';
       h += '<button class="btn btn-xs btn-p" onclick="openSEODrawer('+asinJ+')">✍️ Générer</button>';
@@ -694,14 +694,14 @@ function buildSEOPrompt(a, c, lang, isBackendKW) {
                : 'niveau non déterminé';
   const pot = calcPotential(a, c);
   const trend = calcTrend(a);
-  const convRate = a.glanceViews > 0 && a.revenue > 0
-    ? (a.revenue / a.glanceViews * 100).toFixed(1) + '%' : 'N/D';
-  const totalCA = c.asins.reduce((s,x) => s+(x.revenue||0), 0);
+  const convRate = a.glanceViews > 0 && getRevenue(a,c) > 0
+    ? (getRevenue(a,c) / a.glanceViews * 100).toFixed(1) + '%' : 'N/D';
+  const totalCA = c.asins.reduce((s,x) => s+(getRevenue(x,c)||0), 0);
 
   const dataCtx = [
     'Titre actuel : ' + (a.title || 'N/D'),
     'ASIN : ' + a.asin + ' | Marque : ' + (a.brand || 'N/D'),
-    'CA semaine : ' + fmtEur(a.revenue || 0) + ' | Tendance : ' + (trend?.label || 'N/D'),
+    'CA semaine : ' + fmtEur(getRevenue(a,c)||0) + ' | Tendance : ' + (trend?.label || 'N/D'),
     'Taux de conversion : ' + convRate,
     'Retours : ' + (a.returns || 0) + ' | Retail % : ' + (a.retailPct || 'N/D'),
     'Segment : ' + calcSegment(a, totalCA),

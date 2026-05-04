@@ -8,7 +8,7 @@ function calcBuyBoxAlerts(c) {
   const suppressed = []; // Retail% = 0% sur ≥2 semaines consécutives
 
   for (const a of c.asins) {
-    if (!(a.revenue > 0) && !(a.retailPct)) continue;
+    if (!(getRevenue(a,c) > 0) && !(a.retailPct)) continue;
     const rPct = parseNum(String(a.retailPct||'').replace(',','.').replace(/[^0-9.]/g,''));
     if (!rPct && rPct !== 0) continue;
     if (rPct > 100) continue; // valeur incohérente (bug CSV) — ignorer
@@ -24,7 +24,7 @@ function calcBuyBoxAlerts(c) {
     const isSuppressed = rPct === 0 && zeroWeeks >= 2;
 
     // Cause probable (arbre de décision)
-    const stockOk = a.sellableUnits == null || a.sellableUnits >= (a.units || 0);
+    const stockOk = a.sellableUnits == null || a.sellableUnits >= (getUnits(a,c)||0);
     // PO non confirmé = cause racine si openPOQty > 0 et confirmPct < 50%
     const openPOv = parseNum(a.openPOQty) || 0;
     const cpctv = parseNum(String(a.confirmPct || '0').replace(',', '.').replace(/[^0-9.]/g, ''));
@@ -44,7 +44,7 @@ function calcBuyBoxAlerts(c) {
     const joursAvantLimite = _apro?.joursAvantLimite ?? null;
     const stockUrgent = couvertureSem !== null && couvertureSem < 3;
 
-    const entry = { asin: a.asin, title: a.title, brand: a.brand, rPct, prevRetail, delta, cause, zeroWeeks, revenue: a.revenue, segment: calcSegment(a, c.asins.reduce((s,x)=>s+(x.revenue||0),0)), sellableUnits: a.sellableUnits, couvertureSem, joursAvantLimite, stockUrgent };
+    const entry = { asin: a.asin, title: a.title, brand: a.brand, rPct, prevRetail, delta, cause, zeroWeeks, revenue: getRevenue(a,c), segment: calcSegment(a, c.asins.reduce((s,x)=>s+(getRevenue(x,c)||0),0), c), sellableUnits: a.sellableUnits, couvertureSem, joursAvantLimite, stockUrgent };
 
     if (isSuppressed)                          suppressed.push(entry);
     else if (isCritical)                       critical.push(entry);
@@ -52,7 +52,7 @@ function calcBuyBoxAlerts(c) {
   }
 
   // Trier par impact CA décroissant
-  const byCA = (a, b) => (b.revenue || 0) - (a.revenue || 0);
+  const byCA = (a, b) => (getRevenue(b,c)||0) - (getRevenue(a,c)||0);
   critical.sort(byCA); warning.sort(byCA); suppressed.sort(byCA);
   return { critical, warning, suppressed };
 }

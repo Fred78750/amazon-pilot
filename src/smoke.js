@@ -24,7 +24,7 @@ async function smokeTest(silent) {
   try {
     if (typeof go === 'function') go('dashboard');
     await new Promise(r => setTimeout(r, 300));
-    const e = getErr(); const ca = c?.asins?.reduce((s,a)=>s+(a.revenue||0),0)||0;
+    const e = getErr(); const ca = c?.asins?.reduce((s,a)=>s+(getRevenue(a,c)||0),0)||0;
     if (!e && ca > 0) pass('vital','V2','Tableau de bord (CA ' + Math.round(ca) + ' EUR)');
     else fail('vital','V2','Tableau de bord', e || 'CA semaine = 0');
   } catch(ex) { fail('vital','V2','Tableau de bord', ex.message); }
