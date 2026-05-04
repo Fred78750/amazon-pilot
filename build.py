@@ -15,7 +15,10 @@ BUILD_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT    = os.path.join(BUILD_DIR, 'amazon-pilot-latest.html')
 
 def r(f):
-    with open(os.path.join(SRC_DIR, f), 'rb') as fp: return fp.read().decode('utf-8').replace('\r\n', '\n')
+    with open(os.path.join(SRC_DIR, f), 'rb') as fp:
+        data = fp.read()
+    if data[:3] == b'\xef\xbb\xbf': data = data[3:]  # strip UTF-8 BOM
+    return data.decode('utf-8').replace('\r\n', '\n')
 
 def w(path, c):
     with open(path, 'wb') as fp: fp.write(c.encode('utf-8'))

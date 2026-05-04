@@ -40,7 +40,8 @@ const aiUsage = {
     byFeature: {
       revue:  {calls:0,tokensIn:0,tokensOut:0,costEur:0},
       buybox: {calls:0,tokensIn:0,tokensOut:0,costEur:0},
-      seo:    {calls:0,tokensIn:0,tokensOut:0,costEur:0},
+      seo:        {calls:0,tokensIn:0,tokensOut:0,costEur:0},
+      seo_enrich: {calls:0,tokensIn:0,tokensOut:0,costEur:0},
       import: {calls:0,tokensIn:0,tokensOut:0,costEur:0},
       swot:   {calls:0,tokensIn:0,tokensOut:0,costEur:0},
       other:  {calls:0,tokensIn:0,tokensOut:0,costEur:0},
@@ -1699,64 +1700,65 @@ function generateMonthlyActions(client) {
 
   return actions;
 }
-async function callAPI(sys, usr, feature) {
+async function callAPI(sys, usr, feature, tools, maxTokens) {
   const modelKey = aiUsage.getModel(feature || 'revue');
   const modelId  = AI_MODELS[modelKey].id;
   const feat     = feature || 'revue';
+  const tokLimit = maxTokens || 2500;
 
   // Tenter via Lambda (proxy IA avec comptabilité serveur)
   const idToken = localStorage.getItem('ap-id-token');
   if (idToken) {
     try {
+      const lambdaBody = {
+        model: modelId, max_tokens: tokLimit, system: sys,
+        messages: [{ role: 'user', content: usr }], feature: feat,
+      };
+      if (tools) lambdaBody.tools = tools;
       const res = await fetch(API_BASE_URL + '/ai/complete', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + idToken,
-        },
-        body: JSON.stringify({
-          model: modelId,
-          max_tokens: 2500,
-          system: sys,
-          messages: [{ role: 'user', content: usr }],
-          feature: feat,
-        })
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
+        body: JSON.stringify(lambdaBody)
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Erreur Lambda');
-      // Comptabiliser côté client aussi (pour le widget Config)
       const tokIn  = data.usage?.input_tokens  || 0;
       const tokOut = data.usage?.output_tokens || 0;
       aiUsage.record(feat, modelKey, tokIn, tokOut);
-      return data.content?.[0]?.text || '';
+      const textBlocks = (data.content || []).filter(b => b.type === 'text');
+      return textBlocks.length ? textBlocks[textBlocks.length - 1].text : '';
     } catch(lambdaErr) {
       console.warn('[AI] Lambda fallback direct:', lambdaErr.message);
-      // Fallback sur appel direct si Lambda échoue
     }
   }
 
   // Mode direct (admin local sans token Cognito)
+  const directBody = {
+    model: modelId, max_tokens: tokLimit, system: sys,
+    messages: [{ role: 'user', content: usr }]
+  };
+  if (tools) directBody.tools = tools;
+  const directHeaders = {
+    'Content-Type': 'application/json',
+    'x-api-key': apiKey,
+    'anthropic-version': '2023-06-01',
+    'anthropic-dangerous-direct-browser-access': 'true'
+  };
+  if (tools && tools.some(t => t.type && t.type.startsWith('web_search'))) {
+    directHeaders['anthropic-beta'] = 'web-search-2025-03-05';
+  }
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: JSON.stringify({
-      model: modelId,
-      max_tokens: 2500,
-      system: sys,
-      messages: [{ role: 'user', content: usr }]
-    })
+    headers: directHeaders,
+    body: JSON.stringify(directBody)
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || 'Erreur API');
   const tokIn  = data.usage?.input_tokens  || 0;
   const tokOut = data.usage?.output_tokens || 0;
   aiUsage.record(feat, modelKey, tokIn, tokOut);
-  return data.content?.[0]?.text || '';
+  const textBlocks = (data.content || []).filter(b => b.type === 'text');
+  return textBlocks.length ? textBlocks[textBlocks.length - 1].text : '';
 }
 
 async function askClaude(sys, usr, feature) {
@@ -7501,71 +7503,97 @@ ${dec.slice(0,12).map(a => {
 
 // État SEO global
 let seoLoading = false;
-let seoResults = {}; // { asin: { '.fr': {...}, backendKW: '...' } }
+let seoResults = {}; // { asin: { '.fr': {...}, backendKW: '...', _progress: {...} } }
 let seoActiveTab = null;
-let seoDrawerAsin = null; // ASIN actuellement affiché dans le drawer
+let seoDrawerAsin = null;
+let seoMotcle = {}; // { asin: motcle } — mot-clé concurrence par ASIN
 
 // ── seoGetPendingVerifications — déclarée tôt car utilisée par le badge nav ──
 // @seo
 
-async function runSEOFiche(asin) {
+async function runSEOFiche(asin, market, motcle) {
   const c = cl();
   if (!c) return;
   const a = c.asins.find(x => x.asin === asin);
   if (!a) return;
 
-  const markets = c.markets && c.markets.length ? c.markets : [c.mainMarket || '.fr'];
-  const seenLangs = new Set();
-  const marketsToProcess = markets.filter(function(mkt) {
-    const ml = MARKET_LANG[mkt];
-    if (!ml) return false;
-    if (seenLangs.has(ml.lang + (mkt === '.be' ? '-be' : ''))) return false;
-    seenLangs.add(ml.lang + (mkt === '.be' ? '-be' : ''));
-    return true;
-  });
+  // Fallbacks si appelé sans arguments (ancien comportement ou CTA liste)
+  const mkt = market || (c.markets && c.markets.length ? c.markets[0] : (c.mainMarket || '.fr'));
+  const keyword = motcle || seoMotcle[asin] || extractSearchKeyword(asin, c);
+  seoMotcle[asin] = keyword;
+  const ml = MARKET_LANG[mkt];
+  if (!ml) return;
 
   seoLoading = true;
-  seoResults[asin] = { generatedAt: new Date().toISOString() };
-  seoActiveTab = marketsToProcess[0];
-  refreshSEODrawer(); // mise à jour du drawer si ouvert
-  // Mettre à jour aussi la section dans le détail ASIN
-  const seoWrapper = document.getElementById('seo-section-wrapper');
-  if (seoWrapper) { const c2 = cl(); const a2 = c2 && c2.asins.find(x => x.asin === asin); if (a2) seoWrapper.innerHTML = renderSEOSection(a2, c2); }
+  if (!seoResults[asin]) seoResults[asin] = {};
+  seoResults[asin]._progress = { phase: '🔍 Enrichissement web…', pct: 5 };
+  seoActiveTab = mkt;
+  refreshSEODrawer();
+  const sw = document.getElementById('seo-section-wrapper');
+  if (sw) { const c2=cl(); const a2=c2&&c2.asins.find(x=>x.asin===asin); if(a2) sw.innerHTML=renderSEOSection(a2,c2); }
 
   const sys = getSysPrompt(c);
 
-  const calls = marketsToProcess.map(async function(mkt) {
-    const ml = MARKET_LANG[mkt];
-    try {
-      const result = await askClaude(sys, buildSEOPrompt(a, c, ml.lang, false), 'seo');
-      if (!isAIError(result)) {
-        seoResults[asin][mkt] = parseSEOResponse(result, ml.lang);
-        seoResults[asin][mkt].generatedAt = new Date().toISOString();
-      } else {
-        seoResults[asin][mkt] = { error: result };
-      }
-    } catch(e) {
-      seoResults[asin][mkt] = { error: e.message };
-    }
+  try {
+    // ── Étape 1 : définition produit via aperçu IA Google ──
+    seoResults[asin]._progress = { phase: '🔍 Définition produit…', pct: 10 };
     refreshSEODrawer();
-    const sw = document.getElementById('seo-section-wrapper'); if (sw) { const c2=cl(); const a2=c2&&c2.asins.find(x=>x.asin===asin); if(a2) sw.innerHTML=renderSEOSection(a2,c2); }
-  });
+    const defResult = await seoFetchDefinition(keyword);
+    await sleep(2000);
 
-  const bkwCall = (async function() {
-    try {
-      const result = await askClaude(sys, buildSEOPrompt(a, c, 'fr', true), 'seo');
-      if (!isAIError(result)) seoResults[asin].backendKW = result.trim();
-    } catch(e) { /* ignore */ }
-  })();
+    // ── Étape 2 : fiche Amazon existante ──
+    seoResults[asin]._progress = { phase: '🔍 Lecture fiche Amazon…', pct: 25 };
+    refreshSEODrawer();
+    const ficheResult = await seoFetchFiche(asin, mkt);
+    if (!ficheResult.titre_actuel) {
+      ficheResult.titre_actuel = a.title || '';
+      ficheResult.warning_fiche = '⚠ Fiche Amazon non lue — données catalogue utilisées';
+    }
+    await sleep(2000);
 
-  await Promise.all([...calls, bkwCall]);
+    // ── Étape 3 : génération fiche ──
+    seoResults[asin]._progress = { phase: '✍️ Génération fiche…', pct: 50 };
+    refreshSEODrawer();
+    const enrichies = Object.assign({}, defResult, ficheResult, { motcleUsed: keyword });
 
-  if (!c.ficheOptimisee) c.ficheOptimisee = {};
-  c.ficheOptimisee[asin] = seoResults[asin];
-  save();
-  seoLoading = false;
-  refreshSEODrawer();
-  const swf = document.getElementById('seo-section-wrapper'); if (swf) { const c2=cl(); const a2=c2&&c2.asins.find(x=>x.asin===asin); if(a2) swf.innerHTML=renderSEOSection(a2,c2); }
+    let mainResult;
+    try { mainResult = await callAPI(sys, buildSEOPrompt(a, c, ml.lang, false, enrichies), 'seo', null, 2500); }
+    catch(e) { mainResult = '__ERR_UNKNOWN__' + e.message; }
+    if (isAIError(mainResult)) {
+      seoResults[asin][mkt] = { error: mainResult };
+      return; // finally garantit seoLoading = false
+    }
+    const parsed = parseSEOResponse(mainResult, ml.lang);
+    parsed.generatedAt = new Date().toISOString();
+    seoResults[asin][mkt] = parsed;
+    refreshSEODrawer();
+
+    // ── Étape 4 : backend keywords ──
+    seoResults[asin]._progress = { phase: '🏷 Backend keywords…', pct: 80 };
+    refreshSEODrawer();
+    await sleep(2000);
+
+    const motsExclure = extractMotsTitreBullets(parsed.titre, parsed.bullets);
+    let bkwResult;
+    try { bkwResult = await callAPI(sys, buildSEOPrompt(a, c, ml.lang, true, enrichies, motsExclure), 'seo', null, 600); }
+    catch(e) { bkwResult = ''; }
+    if (bkwResult && !isAIError(bkwResult)) {
+      seoResults[asin][mkt].backendKW = bkwResult.trim();
+    }
+
+  } catch(e) {
+    if (!seoResults[asin][mkt]) seoResults[asin][mkt] = {};
+    seoResults[asin][mkt].error = e.message;
+  } finally {
+    delete seoResults[asin]._progress;
+    if (!c.ficheOptimisee) c.ficheOptimisee = {};
+    c.ficheOptimisee[asin] = seoResults[asin];
+    save();
+    seoLoading = false;
+    refreshSEODrawer();
+    const swf = document.getElementById('seo-section-wrapper');
+    if (swf) { const c2=cl(); const a2=c2&&c2.asins.find(x=>x.asin===asin); if(a2) swf.innerHTML=renderSEOSection(a2,c2); }
+  }
 }
 
 function renderSEOSection(a, c) {
@@ -7586,7 +7614,7 @@ function renderSEOSection(a, c) {
 
   let h = '<div class="cd"><div class="cd-t space"><span>✍️ Optimisation fiche produit</span>';
   if (existing && !seoLoading) {
-    h += '<button class="btn btn-xs" onclick="runSEOFiche(' + _asinJ + ')">🔄 Regénérer</button>';
+    h += '<button class="btn btn-xs" onclick="runSEOFiche(' + _asinJ + ',seoActiveTab||(cl()&&(cl().mainMarket||\'.fr\')),seoMotcle[' + _asinJ + ']||extractSearchKeyword(' + _asinJ + ',cl()))">🔄 Regénérer</button>';
   }
   h += '</div>';
 
@@ -7599,7 +7627,7 @@ function renderSEOSection(a, c) {
     h += '<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Génère la fiche optimisée pour les ' + marketsToProcess.length + ' marché(s) : ';
     h += marketsToProcess.map(function(m) { return (MARKET_LANG[m]?.flag || '') + ' ' + (MARKET_LANG[m]?.label || m); }).join(', ');
     h += '.</p>';
-    h += '<button class="btn btn-p" onclick="runSEOFiche(' + _asinJ + ')" ' + (seoLoading ? 'disabled' : '') + '>✍️ Générer la fiche (' + marketsToProcess.length + ' langue' + (marketsToProcess.length > 1 ? 's' : '') + ')</button>';
+    h += '<button class="btn btn-p" onclick="runSEOFiche(' + _asinJ + ',seoActiveTab||(cl()&&(cl().mainMarket||\'.fr\')),seoMotcle[' + _asinJ + ']||extractSearchKeyword(' + _asinJ + ',cl()))" ' + (seoLoading ? 'disabled' : '') + '>✍️ Générer la fiche (' + marketsToProcess.length + ' langue' + (marketsToProcess.length > 1 ? 's' : '') + ')</button>';
     h += '</div>';
     return h;
   }

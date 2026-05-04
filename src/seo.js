@@ -281,7 +281,7 @@ function openSEODrawer(asin) {
   }
   var hasFiche = !!seoResults[asin];
   renderSEODrawer();
-  if (!hasFiche) runSEOFiche(asin);
+  if (!hasFiche) runSEOFiche(asin, seoActiveTab || (c.mainMarket || '.fr'), seoMotcle[asin] || extractSearchKeyword(asin, c));
 }
 
 function closeSEODrawer() {
@@ -336,12 +336,18 @@ function refreshSEODrawer() {
   });
 
   var res = seoResults[asin] || {};
-  var activeMkt = seoActiveTab || mtp[0];
+  var activeMkt = seoActiveTab || mtp[0] || (c.mainMarket || '.fr');
   var r = res[activeMkt];
+  if (!r) {
+    var firstKey = Object.keys(res).find(function(k){ return k !== '_progress' && k !== 'backendKW'; });
+    if (firstKey) { activeMkt = firstKey; r = res[firstKey]; }
+  }
   var status = seoGetStatus(asin, c);
   var shortTitle = (a.title || asin).substring(0, 50) + ((a.title||'').length > 50 ? '…' : '');
   var asinJ = "'" + asin + "'";
 
+  var ctrlMkt = activeMkt;
+  var ctrlKW = seoMotcle[asin] || extractSearchKeyword(asin, c);
   var h = '';
 
   // ── Header ──
@@ -354,11 +360,49 @@ function refreshSEODrawer() {
   h += '<a href="https://www.amazon' + esc(c.mainMarket||'.fr') + '/dp/' + esc(asin) + '" target="_blank" class="btn btn-xs">🔗</a>';
   h += '</div>';
 
+  // ── Contrôles : référence interne + marché + mot-clé + lancer ──
+  h += '<div style="padding:8px 16px;border-bottom:1px solid var(--bd);background:var(--s2);flex-shrink:0">';
+  var refVal = a.internalRef || '';
+  h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">';
+  h += '<span style="font-size:10px;font-weight:700;color:var(--tx3);width:52px;flex-shrink:0">RÉF. INT.</span>';
+  h += '<input type="text" value="' + esc(refVal) + '" placeholder="Ex : RT200, 011162…" '
+    + 'style="flex:1;padding:4px 8px;border:1px solid var(--bd2);border-radius:var(--rd);background:var(--s1);color:var(--tx);font-size:11px;font-family:var(--fn)" '
+    + 'oninput="seoSetInternalRef(' + asinJ + ',this.value)" />';
+  h += '</div>';
+  if (mtp.length > 1) {
+    h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+    h += '<span style="font-size:10px;font-weight:700;color:var(--tx3);width:52px;flex-shrink:0">MARCHÉ</span>';
+    h += '<select style="flex:1;padding:3px 6px;border:1px solid var(--bd2);border-radius:var(--rd);background:var(--s1);color:var(--tx);font-size:11px;cursor:pointer" onchange="seoActiveTab=this.value;refreshSEODrawer()">';
+    mtp.forEach(function(mkt) {
+      var ml = MARKET_LANG[mkt];
+      h += '<option value="' + esc(mkt) + '"' + (mkt === ctrlMkt ? ' selected' : '') + '>' + (ml ? ml.flag + ' ' + ml.label : mkt) + '</option>';
+    });
+    h += '</select>';
+    h += '</div>';
+  }
+  h += '<div style="display:flex;align-items:center;gap:6px">';
+  h += '<span style="font-size:10px;font-weight:700;color:var(--tx3);width:52px;flex-shrink:0">MOT-CLÉ</span>';
+  h += '<input id="seo-kw-input" type="text" value="' + esc(ctrlKW) + '" placeholder="Mot-clé recherche Amazon..." '
+    + 'style="flex:1;padding:4px 8px;border:1px solid var(--bd2);border-radius:var(--rd);background:var(--s1);color:var(--tx);font-size:11px;font-family:var(--fn)" '
+    + 'oninput="seoSetMotcle(' + asinJ + ',this.value)" />';
+  h += '<button class="btn btn-xs" title="Réinitialiser le mot-clé" onclick="seoResetMotcle(' + asinJ + ')">↺</button>';
+  h += '</div>';
+  if (!seoLoading) {
+    h += '<div style="margin-top:6px">';
+    var _safeMarket = ctrlMkt || (c.mainMarket || '.fr');
+    h += '<button class="btn btn-xs btn-p" style="width:100%" onclick="runSEOFiche(' + asinJ + ',' + JSON.stringify(_safeMarket) + ',seoMotcle[' + asinJ + ']||extractSearchKeyword(' + asinJ + ',cl()))">'
+      + (r && !r.error ? '🔄 Regénérer avec enrichissement web' : '✍️ Générer avec enrichissement web') + '</button>';
+    h += '</div>';
+  }
+  h += '</div>';
+
   // ── Body scrollable ──
   h += '<div style="flex:1;overflow-y:auto;padding:16px">';
 
   if (seoLoading && seoDrawerAsin === asin) {
-    // Onglets marchés avec progression
+    var prog = (seoResults[asin] && seoResults[asin]._progress) || {};
+    var progPhase = prog.phase || '⏳ Traitement en cours…';
+    var progPct   = prog.pct   || 0;
     if (mtp.length > 1) {
       h += '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:14px">';
       mtp.forEach(function(mkt) {
@@ -368,12 +412,13 @@ function refreshSEODrawer() {
       });
       h += '</div>';
     }
-    var doneCnt = mtp.filter(function(m){ return !!(res[m]&&!res[m].error); }).length;
-    h += '<div style="text-align:center;padding:48px 20px">';
-    h += '<div style="font-size:40px;margin-bottom:14px"><span class="spin">⏳</span></div>';
-    h += '<div style="font-size:14px;font-weight:600;margin-bottom:6px">Génération en cours...</div>';
-    h += '<div style="font-size:12px;color:var(--tx3)">' + doneCnt + ' / ' + mtp.length + ' marché(s) terminé(s)</div>';
-    if (doneCnt > 0 && r && !r.error) {
+    h += '<div style="text-align:center;padding:32px 20px">';
+    h += '<div style="font-size:14px;font-weight:600;margin-bottom:12px;color:var(--tx1)">' + esc(progPhase) + '</div>';
+    h += '<div style="height:6px;background:var(--bd2);border-radius:3px;overflow:hidden;margin:0 auto;max-width:260px">';
+    h += '<div style="height:100%;width:' + progPct + '%;background:var(--accent);border-radius:3px;transition:width .5s ease"></div>';
+    h += '</div>';
+    h += '<div style="font-size:10px;color:var(--tx3);margin-top:6px">' + progPct + '%</div>';
+    if (r && !r.error) {
       h += '</div>';
       h += drawSEOContent(asin, activeMkt, res, mtp, true);
     } else {
@@ -427,21 +472,22 @@ function refreshSEODrawer() {
   h += '</div>';
 
   // ── Footer actions ──
-  if (!seoLoading && r && !r.error) {
+  if (!seoLoading) {
+    var _safeMarket = activeMkt || ctrlMkt || (c.mainMarket || '.fr');
     h += '<div style="padding:12px 16px;border-top:1px solid var(--bd);display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">';
-    h += '<button class="btn btn-sm btn-p" onclick="copySEOTitreMkt('+asinJ+','+JSON.stringify(activeMkt)+')">📋 Tout copier</button>';
-    h += '<button class="btn btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)" onclick="seoLaunchModify('+asinJ+')">📤 Modifier VC</button>';
-    if (status==='submitted'||status==='overdue') {
-      h += '<button class="btn btn-sm" style="background:var(--or);color:#fff;border-color:var(--or)" onclick="seoLaunchVerify('+asinJ+')">🔍 Vérifier</button>';
+    if (r && !r.error) {
+      h += '<button class="btn btn-sm btn-p" onclick="copySEOTitreMkt('+asinJ+','+JSON.stringify(activeMkt)+')">📋 Tout copier</button>';
+      h += '<button class="btn btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)" onclick="seoLaunchModify('+asinJ+')">📤 Modifier VC</button>';
+      if (status==='submitted'||status==='overdue') {
+        h += '<button class="btn btn-sm" style="background:var(--or);color:#fff;border-color:var(--or)" onclick="seoLaunchVerify('+asinJ+')">🔍 Vérifier</button>';
+      }
+      if (status==='failed') {
+        h += '<button class="btn btn-sm" style="background:var(--r);color:#fff;border-color:var(--r)" onclick="seoOpenCase('+asinJ+')">🆘 Cas support</button>';
+      }
+      h += '<button class="btn btn-sm" style="background:var(--or);color:#fff;border-color:var(--or)" '
+        + 'onclick="runSEOFiche(' + asinJ + ',' + JSON.stringify(_safeMarket) + ',seoMotcle[' + asinJ + ']||extractSearchKeyword(' + asinJ + ',cl()))">'
+        + '🔄 Régénérer</button>';
     }
-    if (status==='failed') {
-      h += '<button class="btn btn-sm" style="background:var(--r);color:#fff;border-color:var(--r)" onclick="seoOpenCase('+asinJ+')">🆘 Cas support</button>';
-    }
-    h += '<button class="btn btn-sm" onclick="runSEOFiche('+asinJ+')">🔄 Regénérer</button>';
-    h += '</div>';
-  } else if (!seoLoading) {
-    h += '<div style="padding:12px 16px;border-top:1px solid var(--bd)">';
-    h += '<button class="btn btn-p" onclick="runSEOFiche('+asinJ+')" style="width:100%">✍️ Générer la fiche</button>';
     h += '</div>';
   }
 
@@ -509,6 +555,20 @@ function drawSEOContent(asin, activeMkt, res, mtp, compact) {
       if (r.opportunite)    h += '<div><span style="font-size:9px;font-weight:700;color:var(--b)">OPPORTUNITÉ</span><div style="font-size:11px">' + esc(r.opportunite) + '</div></div>';
       h += '</div>';
     }
+
+    if (r.images && r.images.length) {
+      h += '<div style="margin-bottom:10px">';
+      h += '<div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:6px">🖼 PRÉCONISATIONS IMAGES (' + r.images.length + ')</div>';
+      r.images.forEach(function(img, i) {
+        h += '<div style="margin-bottom:5px;padding:7px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd)">';
+        h += '<div style="font-size:9px;font-weight:700;color:var(--or);margin-bottom:3px">IMAGE ' + (i+1) + ' — ' + esc(img.emplacement) + ' / ' + esc(img.type) + '</div>';
+        if (img.scene)          h += '<div style="font-size:10px;margin-bottom:2px"><span style="font-size:9px;color:var(--tx3)">Scène : </span>' + esc(img.scene) + '</div>';
+        if (img.texte_overlay)  h += '<div style="font-size:10px;margin-bottom:2px"><span style="font-size:9px;color:var(--tx3)">Overlay : </span>' + esc(img.texte_overlay) + '</div>';
+        if (img.pourquoi)       h += '<div style="font-size:10px;color:var(--tx2)"><span style="font-size:9px;color:var(--tx3)">Pourquoi : </span>' + esc(img.pourquoi) + '</div>';
+        h += '</div>';
+      });
+      h += '</div>';
+    }
   }
   return h;
 }
@@ -516,6 +576,15 @@ function drawSEOContent(asin, activeMkt, res, mtp, compact) {
 function copySEOTitreMkt(asin, mkt) { copySEOField(asin, mkt, 'all'); }
 function copySEODescMkt(asin, mkt)  { copySEOField(asin, mkt, 'description'); }
 function copySEOBkwMkt(asin)        { copySEOField(asin, null, 'backendKW'); }
+
+function seoSetInternalRef(asin, val) {
+  var c = cl();
+  if (!c) return;
+  var a = c.asins.find(function(x){ return x.asin === asin; });
+  if (!a) return;
+  a.internalRef = val.trim();
+  save();
+}
 
 function seoMarkVerified(asin, actionIndex, isVerified) {
   var c = cl();
@@ -683,7 +752,34 @@ function seoLaunchNewRef() {
   showToast('Route A — Création nouvelle référence : fonctionnalité en préparation', 'alr-b');
 }
 
-function buildSEOPrompt(a, c, lang, isBackendKW) {
+function buildDonneesMarche(enrichies) {
+  if (!enrichies) return '';
+  var lines = [''];
+  lines.push('━━━━━━━━━━━━━━━━━━');
+  lines.push('DONNÉES MARCHÉ (Source : Amazon Live + SERP — lues lors de cet appel)');
+  lines.push('━━━━━━━━━━━━━━━━━━');
+  if (enrichies.definition || enrichies.usages || enrichies.caracteristiques) {
+    lines.push('DÉFINITION PRODUIT :');
+    if (enrichies.definition)       lines.push('  ' + enrichies.definition);
+    if (enrichies.usages)           lines.push('  Usages : ' + enrichies.usages);
+    if (enrichies.caracteristiques) lines.push('  Caractéristiques : ' + enrichies.caracteristiques);
+    lines.push('');
+  }
+  if (enrichies.titre_actuel) {
+    lines.push('FICHE AMAZON ACTUELLE :');
+    lines.push('Titre actuel : ' + enrichies.titre_actuel);
+    if (enrichies.note)  lines.push('Note : ' + enrichies.note);
+    if (enrichies.specs) lines.push('Specs : ' + enrichies.specs);
+    if (enrichies.bullets_actuels && enrichies.bullets_actuels.length) {
+      lines.push('Bullets actuels :');
+      enrichies.bullets_actuels.forEach(function(b){ lines.push('  • ' + b); });
+    }
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
+function buildSEOPrompt(a, c, lang, isBackendKW, enrichies, motsExclure) {
   const langLabels = { fr:'français', de:'allemand', it:'italien', es:'espagnol',
                        en:'anglais', nl:'néerlandais', sv:'suédois', pl:'polonais' };
   const langName = langLabels[lang] || lang;
@@ -700,6 +796,7 @@ function buildSEOPrompt(a, c, lang, isBackendKW) {
 
   const dataCtx = [
     'Titre actuel : ' + (a.title || 'N/D'),
+    'Référence interne : ' + (a.internalRef || 'NON RENSEIGNÉE'),
     'ASIN : ' + a.asin + ' | Marque : ' + (a.brand || 'N/D'),
     'CA semaine : ' + fmtEur(getRevenue(a,c)||0) + ' | Tendance : ' + (trend?.label || 'N/D'),
     'Taux de conversion : ' + convRate,
@@ -714,25 +811,34 @@ function buildSEOPrompt(a, c, lang, isBackendKW) {
 
   if (isBackendKW) {
     return 'Tu es un expert Amazon SEO.\n'
-      + 'Génère UNIQUEMENT les backend keywords en ' + langName + '.\n'
-      + 'RÈGLES STRICTES :\n'
-      + '- Séparateur : espace uniquement (jamais de virgule)\n'
-      + '- MAXIMUM 250 BYTES ABSOLUS — 40 à 60 mots max — zéro mot générique sans valeur\n'
-      + '- Zéro répétition — les mots déjà dans le titre sont déjà indexés, ne pas les répéter\n'
-      + '- Zéro nom de marque concurrente\n'
-      + '- Zéro superlatif (meilleur, top, n°1)\n'
-      + '- Inclure : synonymes, fautes courantes, termes métier, variantes de taille, longue traîne\n'
-      + '- Les mots-clés doivent raconter une histoire sémantique cohérente — pas une liste disparate\n'
+      + 'Génère UNIQUEMENT les backend keywords en ' + langName + '.\n\n'
+      + 'CIBLE : 40 à 60 mots maximum — JAMAIS plus de 60.\n'
+      + 'FORMAT : mots séparés par des espaces, en minuscules, sans ponctuation, sans virgule.\n\n'
+      + 'INTERDIT (rejet automatique si présent) :\n'
+      + '- Tout mot déjà présent dans le titre OU les bullets que tu viens de générer (liste fournie ci-dessous)\n'
+      + '- Adjectifs vagues sans intention de recherche : polyvalent, robuste, universel, adaptable, ergonomique, confort, qualité, professionnel, durable, pratique, solide, fiable, performant\n'
+      + '- Substantifs génériques sans qualificatif : matériaux, formes, espaces, objets, éléments, produits, articles\n'
+      + '- Superlatifs, marques concurrentes\n\n'
+      + 'Exception autorisée : les synonymes directs du type de produit (autre appellation usuelle du même objet — ex : "pince" synonyme de "tenaille") sont autorisés même s\'ils semblent vagues isolément, car ils correspondent à une vraie requête Amazon.\n\n'
+      + 'TEST DE VALIDITÉ pour CHAQUE mot :\n'
+      + 'Termine cette phrase : "Un acheteur tape \'...\' dans la barre Amazon."\n'
+      + 'Si le mot ne passe pas le test → exclu.\n\n'
       + 'Réponds UNIQUEMENT avec les mots clés, rien d\'autre.\n\n'
-      + dataCtx;
+      + dataCtx
+      + (motsExclure ? '\n\nMOTS EXCLUS — déjà présents dans le titre et les bullets :\n' + motsExclure : '')
+      + (enrichies && enrichies.mots_cles_frequents && enrichies.mots_cles_frequents.length
+          ? '\n\nMOTS-CLÉS FRÉQUENTS SERP (à utiliser en priorité s\'ils ne sont pas déjà dans titre/bullets) :\n' + enrichies.mots_cles_frequents.join(', ')
+          : '');
   }
 
+  const donneesMarche = buildDonneesMarche(enrichies);
   return 'Tu es un expert Amazon FR, spécialisé en SEO A10, conversion, merchandising marketplace, analyse concurrentielle et stratégie catalogue.\n'
     + 'Tu travailles comme un consultant senior Amazon Vendor — pas comme un simple rédacteur.\n'
     + 'Langue de rédaction exclusive : ' + langName.toUpperCase() + '\n\n'
     + 'OBJECTIF : fiche produit Amazon capable de mieux se positionner, mieux convertir, mieux résister dans le temps.\n'
     + 'Ta réponse DOIT être complète, détaillée, professionnelle — pas une ébauche.\n\n'
-    + 'DONNÉES PRODUIT :\n' + dataCtx + '\n\n'
+    + 'DONNÉES PRODUIT :\n' + dataCtx + '\n'
+    + donneesMarche + '\n'
     + '━━━━━━━━━━━━━━━━━━\n'
     + 'ÉTAPE 1 — ANALYSE STRATÉGIQUE OBLIGATOIRE (à produire AVANT la fiche)\n'
     + '━━━━━━━━━━━━━━━━━━\n'
@@ -751,6 +857,18 @@ function buildSEOPrompt(a, c, lang, isBackendKW) {
     + '5. Intégrer une logique "anti-déception" — filtrer les mauvais clients\n'
     + '6. Penser comme Amazon : ce produit est-il la réponse exacte à cette recherche ?\n\n'
     + '━━━━━━━━━━━━━━━━━━\n'
+    + 'RÈGLES DE CONFORMITÉ ABSOLUE (toutes sections : titre, bullets, description, synthèse)\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
+    + 'INTERDIT — ne JAMAIS écrire :\n'
+    + '- "garantie à vie", "à vie", "garantie illimitée", "lifetime warranty"\n'
+    + '- Une durée de garantie chiffrée si elle n\'est PAS présente dans les DONNÉES MARCHÉ ci-dessous\n'
+    + '- Une date de création de marque, un effectif, un volume de ventes, un classement, une certification non sourcée\n'
+    + '- Un matériau, traitement, dimension non présent dans la fiche actuelle ou les données catalogue\n\n'
+    + 'SOURCE DE VÉRITÉ pour les SPECS FACTUELLES :\n'
+    + '- Reprends UNIQUEMENT les specs présentes dans le bloc DONNÉES MARCHÉ (titre actuel, bullets actuels, description actuelle, données catalogue)\n'
+    + '- Si une spec n\'est pas dans la source de vérité : NE LA MENTIONNE PAS. Préférer le silence à l\'invention.\n'
+    + '- Bénéfices, usages, positionnement, ton commercial : LIBRE — utilise avis clients et concurrence comme appui\n\n'
+    + '━━━━━━━━━━━━━━━━━━\n'
     + 'ÉTAPE 3 — CRÉATION DE LA FICHE EN ' + langName.toUpperCase() + '\n'
     + '━━━━━━━━━━━━━━━━━━\n'
     + 'GÉNÈRE EXACTEMENT dans cet ordre :\n\n'
@@ -758,11 +876,12 @@ function buildSEOPrompt(a, c, lang, isBackendKW) {
     + 'TITRE: [Viser 150-200 caractères — 200 max — long, informatif ET lisible par un consommateur]\n'
     + 'STRUCTURE OBLIGATOIRE : [Marque] [Référence interne] - [Type produit exact] [Taille/Format] - [Matériau/Attribut clé] - [Usage principal] - [Contexte/Compatibilité si pertinent]\n'
     + 'RÈGLES TITRE STRICTES :\n'
-    + '- La RÉFÉRENCE INTERNE doit figurer IMMÉDIATEMENT après la marque — obligatoire pour PO et gestion catalogue\n'
+    + '- La RÉFÉRENCE INTERNE doit figurer IMMÉDIATEMENT après la marque — RÈGLE DURE, jamais d\'exception, ordre EXACT : [Marque] [Référence] - [Type produit]…\n'
+    + '- Si la référence interne est inconnue : ne PAS inventer, structurer le titre sans référence et signaler "REFERENCE_MANQUANTE: true" dans la sortie\n'
     + '- Séparateurs : tirets - uniquement (JAMAIS de | / ! ? *)\n'
     + '- Mot-clé principal (type produit exact) dans les 40 premiers caractères — tester : un client comprendrait-il ce produit en lisant le titre ?\n'
     + '- Un même mot maximum 2 fois\n'
-    + '- INTERDIT dans le titre : prix, promotions, "meilleur", "n°1", "gratuit"\n'
+    + '- INTERDIT dans le titre : prix, promotions, "meilleur", "n°1", "gratuit", "garantie X ans", "garantie à vie", durée de garantie de toute nature\n'
     + '- Pas de répétition de la taille ou des specs\n'
     + '- Majuscule à chaque mot sauf articles/prépositions\n\n'
     + 'BULLET_1: [🔧 ou icône pertinente — BÉNÉFICE PRINCIPAL + mot-clé central + usage terrain spécifique]\n'
@@ -784,7 +903,22 @@ function buildSEOPrompt(a, c, lang, isBackendKW) {
     + '- Mélanger : bénéfice client + usage concret + mot-clé secondaire + réassurance\n'
     + '- Pas de HTML, pas de prix, pas de référence interne\n\n'
     + 'DESCRIPTION: [HTML pédagogique UNIQUEMENT — utiliser <b>, <br>, <ul><li> — structure : pour qui / dans quel contexte / pourquoi choisir ce produit / quelles limites éventuelles / liste technique lisible — INTERDIT de mélanger description et synthèse stratégique — la description est un texte vendeur pour le CLIENT, pas pour le consultant]\n\n'
-    + 'BACKEND_KEYWORDS: [espaces uniquement — MAXIMUM 250 BYTES ABSOLUS — cible 40-60 mots — les accents comptent double, chaque caractère compte — zéro répétition de mots déjà dans le titre ou les bullets — zéro marque concurrente — partir du TYPE de produit et de ses USAGES RÉELS : synonymes métier, fautes courantes de recherche, variantes de taille/matériau, longue traîne qualifiée — PAS une liste fourre-tout de mots vagues — CHAQUE mot doit gagner sa place]\n\n'
+    + 'PRECONISATIONS_IMAGES:\n'
+    + 'Toutes les images Amazon doivent faire 1500×1500 px minimum, fond blanc pur RGB(255,255,255) pour l\'image principale, produit ≥85% du cadre pour la principale.\n\n'
+    + 'Génère N préconisations (3 ≤ N ≤ 7, viser 5) — chaque préconisation au format STRICT :\n\n'
+    + 'IMAGE_1:\n'
+    + 'emplacement: principale | secondaire-2 | … | secondaire-7\n'
+    + 'type: packshot | usage-terrain | infographie-spec | détail-matière | comparatif-échelle | lifestyle\n'
+    + 'scene: [1-2 phrases — ce qu\'on doit voir, lumière, angle, props]\n'
+    + 'texte_overlay: [phrase courte ou "aucun"]\n'
+    + 'pourquoi_cette_image: [1 phrase — basée sur avis clients OU manque concurrent OU bénéfice à prouver]\n\n'
+    + 'RÈGLES :\n'
+    + '- IMAGE_1 (principale) : packshot fond blanc OBLIGATOIRE, pas de texte\n'
+    + '- Au moins 1 image "usage-terrain"\n'
+    + '- Au moins 1 image "infographie-spec" si dimensions/matériaux/specs sont des arguments forts\n'
+    + '- Le "pourquoi_cette_image" doit citer EXPLICITEMENT : un avis client ou un manque concurrent ou un bénéfice difficile à comprendre par le titre seul\n'
+    + '- Chaque image doit être actionnable par un graphiste sans question\n\n'
+    + 'BACKEND_KEYWORDS: [espaces uniquement — CIBLE 40 à 60 mots maximum — JAMAIS plus de 60 — zéro mot du titre ou des bullets — zéro adjectif vague (robuste, polyvalent, etc.) — zéro substantif générique (matériaux, produits, etc.) — zéro marque concurrente — chaque mot doit passer le test : "Un acheteur tape ce mot dans la barre Amazon" — partir du TYPE de produit et de ses USAGES RÉELS : synonymes métier, fautes courantes de recherche, variantes de taille/matériau, longue traîne qualifiée]\n\n'
     + '━━━━━━━━━━━━━━━━━━\n'
     + 'ÉTAPE 4 — SYNTHÈSE STRATÉGIQUE\n'
     + '━━━━━━━━━━━━━━━━━━\n'
@@ -794,9 +928,96 @@ function buildSEOPrompt(a, c, lang, isBackendKW) {
     + 'OPPORTUNITE_SEO: [1 opportunité concurrentielle non exploitée]';
 }
 
+// ── Utilitaires ─────────────────────────────────────────────────
+function sleep(ms) { return new Promise(function(r){ setTimeout(r, ms); }); }
+
+// ── Helpers mot-clé par ASIN ────────────────────────────────────
+function seoSetMotcle(asin, val) {
+  seoMotcle[asin] = val;
+}
+function seoResetMotcle(asin) {
+  delete seoMotcle[asin];
+  refreshSEODrawer();
+}
+
+// ── extractSearchKeyword ─────────────────────────────────────────
+function extractSearchKeyword(asin, c) {
+  var a = c.asins.find(function(x){ return x.asin === asin; });
+  if (!a || !a.title) return '';
+  var title = a.title.toLowerCase();
+  var brand = (a.brand || '').toLowerCase().trim();
+  var internalRef = (a.internalRef || '').toLowerCase().trim();
+  var stopWords = ['de','du','des','la','le','les','un','une','et','en','au','aux','pour',
+    'avec','sans','sur','par','à','a','the','for','with','and','of','in','to',
+    'set','lot','pack','pcs','x','nos','notre','pro','kit','new','by'];
+  if (brand.length >= 2) {
+    title = title.replace(new RegExp('\\b' + brand.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '\\b','g'),' ');
+  }
+  if (internalRef.length >= 2) {
+    title = title.replace(new RegExp('(?:^|\\s)' + internalRef.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '(?:\\s|$)','g'),' ');
+  }
+  title = title.replace(/\b\d+[,.]?\d*\s*(mm|cm|m|cl|l|ml|kg|g|w|v|hz|inch|pcs|pieces|pc)\b/gi,' ');
+  title = title.replace(/\b\d+x\d+(?:x\d+)?\b/gi,' ');
+  title = title.replace(/\b\d+\b/g,' ');
+  title = title.replace(/[^\wàáâãäçéèêëîïôùúûü\s]/gi,' ');
+  var words = title.split(/\s+/)
+    .map(function(w){ return w.trim(); })
+    .filter(function(w){ return w.length >= 3 && !stopWords.includes(w); });
+  return words.slice(0, 4).join(' ').trim();
+}
+
+// ── seoFetchDefinition — aperçu IA Google sur le type de produit ──
+async function seoFetchDefinition(typeHint) {
+  var tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 1 }];
+  var prompt = 'Recherche Google : "' + typeHint + '"\n'
+    + 'Retourne UNIQUEMENT l\'aperçu IA Google (2-4 phrases max) : définition, usages principaux, caractéristiques physiques clés.\n'
+    + 'FORMAT :\nDEFINITION: [texte]\nUSAGES: [texte]\nCARACTERISTIQUES: [texte]';
+  var raw = await callAPI('', prompt, 'seo_enrich', tools, 400);
+  if (isAIError(raw) || !raw) return { definition: '', usages: '', caracteristiques: '' };
+  return {
+    definition:       (raw.match(/DEFINITION:\s*(.+)/)       || [])[1] || '',
+    usages:           (raw.match(/USAGES:\s*(.+)/)           || [])[1] || '',
+    caracteristiques: (raw.match(/CARACTERISTIQUES:\s*(.+)/) || [])[1] || ''
+  };
+}
+
+// ── seoFetchFiche — lit la fiche Amazon existante ──
+async function seoFetchFiche(asin, market) {
+  var url = 'https://www.amazon' + market + '/dp/' + asin;
+  var tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 1 }];
+  var prompt = 'Lis cette page Amazon : ' + url + '\n'
+    + 'Retourne UNIQUEMENT :\n'
+    + 'TITRE_ACTUEL: [titre exact]\n'
+    + 'BULLETS_ACTUELS: [bullet1 | bullet2 | bullet3 | bullet4 | bullet5]\n'
+    + 'NOTE: [X/5 (N avis)]\n'
+    + 'SPECS: [matériau, dimensions, couleur — uniquement ce qui est affiché sur la page]';
+  var raw = await callAPI('', prompt, 'seo_enrich', tools, 1000);
+  if (isAIError(raw) || !raw) return { titre_actuel: '', bullets_actuels: [], note: '', specs: '' };
+  return {
+    titre_actuel:    (raw.match(/TITRE_ACTUEL:\s*([^\n]+)/)    || [])[1] || '',
+    bullets_actuels: ((raw.match(/BULLETS_ACTUELS:\s*([^\n]+)/) || [])[1] || '').split('|').map(function(s){ return s.trim(); }).filter(Boolean),
+    note:            (raw.match(/NOTE:\s*([^\n]+)/)             || [])[1] || '',
+    specs:           (raw.match(/SPECS:\s*([^\n]+)/)            || [])[1] || ''
+  };
+}
+
+// ── extractMotsTitreBullets — liste de mots à exclure des backend KW ──
+function extractMotsTitreBullets(titre, bullets) {
+  var stopWords = new Set(['de','du','des','la','le','les','un','une','et','en','au','aux',
+    'pour','avec','sans','sur','par','à','a','the','for','with','and','of','in','to',
+    'est','sont','ce','se','si','ne','pas','plus','très','tout','mais','ou','car',
+    'qui','que','dont','où','il','elle','ils','elles','vous','nous','on','sa','son','ses']);
+  var all = [titre || ''].concat(bullets || []).join(' ');
+  var words = all.toLowerCase()
+    .replace(/[^a-zàáâãäçéèêëîïôùúûü\s]/gi,' ')
+    .split(/\s+/)
+    .filter(function(w){ return w.length >= 3 && !stopWords.has(w); });
+  return Array.from(new Set(words)).join(' ');
+}
+
 function parseSEOResponse(text, lang) {
   const result = { titre: '', bullets: ['','','','',''], description: '',
-                   nomType: '', backendKW: '',
+                   nomType: '', backendKW: '', images: [],
                    positionnement: '', leviers: '', erreurs: '', opportunite: '' };
   try {
     // Utiliser split par lignes pour éviter les regex multilignes
@@ -830,8 +1051,25 @@ function parseSEOResponse(text, lang) {
     for (let i = 1; i <= 5; i++) {
       result.bullets[i-1] = extractField(text, 'BULLET_' + i).replace(/\*\*/g, '').trim();
     }
-    const descMatch = text.match(/DESCRIPTION:\s*([\s\S]+?)(?=\n(?:BACKEND_KEYWORDS|POSITIONNEMENT_AMAZON|LEVIERS_RANKING|ERREURS_A_EVITER|OPPORTUNITE_SEO|ÉTAPE|---)|$)/);
+    const descMatch = text.match(/DESCRIPTION:\s*([\s\S]+?)(?=\n(?:PRECONISATIONS_IMAGES|BACKEND_KEYWORDS|POSITIONNEMENT_AMAZON|LEVIERS_RANKING|ERREURS_A_EVITER|OPPORTUNITE_SEO|ÉTAPE|---)|$)/);
     if (descMatch) result.description = descMatch[1].trim().replace(/```html|```/g, '').trim();
+
+    // Parse PRECONISATIONS_IMAGES
+    const imgSection = text.match(/PRECONISATIONS_IMAGES:[\s\S]*?(?=BACKEND_KEYWORDS:|$)/);
+    if (imgSection) {
+      const blocks = imgSection[0].split(/\n?IMAGE_\d+:\s*\n?/);
+      result.images = blocks.slice(1).map(function(block) {
+        function gf(key) {
+          const m = block.match(new RegExp(key + ':\\s*(.+)'));
+          return m ? m[1].trim() : '';
+        }
+        return {
+          emplacement: gf('emplacement'), type: gf('type'),
+          scene: gf('scene'), texte_overlay: gf('texte_overlay'),
+          pourquoi: gf('pourquoi_cette_image')
+        };
+      }).filter(function(img) { return img.emplacement || img.type; });
+    }
   } catch(e) { /* parsing partiel OK */ }
   return result;
 }
