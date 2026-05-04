@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Amazon Pilot">
+<meta name="application-name" content="Amazon Pilot">
+<meta name="theme-color" content="#232F3E">
+<link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;Amazon Pilot&quot;,&quot;short_name&quot;:&quot;AP Pilot&quot;,&quot;start_url&quot;:&quot;/&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%23232F3E&quot;,&quot;theme_color&quot;:&quot;%23FF9900&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='32' fill='%23232F3E'/%3E%3Cpath d='M40 105 Q96 135 152 105' stroke='%23FF9900' stroke-width='13' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='148' cy='93' r='11' fill='%23FF9900'/%3E%3Cpath d='M88 50 L88 140 L112 124 L136 140 L136 50' fill='%23FF9900' opacity='0.9'/%3E%3C/svg%3E&quot;,&quot;sizes&quot;:&quot;192x192&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;}]}">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23232F3E'/%3E%3Cpath d='M7 17 Q16 22 25 17' stroke='%23FF9900' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='24' cy='15.5' r='1.8' fill='%23FF9900'/%3E%3Cpath d='M15 9 L15 23 L19 20 L23 23 L23 9' fill='%23FF9900' opacity='0.9'/%3E%3C/svg%3E">
+<title>Amazon Pilot — Pilotage Vendor Central</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" onerror="console.warn('[AP] PapaParse CDN failed')"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" onerror="console.warn('[AP] Chart.js CDN failed')"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" onerror="console.warn('[AP] XLSX CDN failed')"></script>
+<style>
+/* @styles */
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sb">
+    <div class="sb-logo">
+      <div class="sb-logo-ic">AP</div>
+      <div class="sb-logo-text"><b>Amazon Pilot</b><small>v</small><small id="ap-ver-sidebar"></small><small> — Vendor Central</small></div>
+    </div>
+    <div class="sb-section">Navigation</div>
+    <div class="sb-nav" id="nav-list"></div>
+    <div class="sb-section">Clients</div>
+    <div class="sb-clients" id="client-list"></div>
+    <div class="sb-footer">
+      <button class="sb-theme-btn" onclick="toggleTheme()">
+        <span id="theme-icon">🌙</span><span>Thème</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="mn">
+    <div class="topbar">
+      <div class="topbar-l">
+        <span class="topbar-t" id="tb-name">Amazon Pilot</span>
+        <span id="tb-badges"></span>
+      </div>
+      <div class="topbar-r" id="tb-actions"></div>
+    </div>
+    <div class="ct" id="content"></div>
+  </div>
+</div>
+
+<script>
+// @guide
+// @smoke
+// @core
+// @buybox
+// @seo
+// @smoke_manual
+</script>
+
+<!-- Tooltip JS global -->
+<div id="ap-tooltip"></div>
+<script>
+(function() {
+  var tt = document.getElementById('ap-tooltip');
+  var cur = null;
+  document.addEventListener('mouseover', function(e) {
+    var el = e.target.closest('.ap-tip');
+    if (!el) return;
+    cur = el;
+    var tip = el.getAttribute('data-tip') || '';
+    tt.textContent = tip;
+    tt.classList.add('vis');
+    posTooltip(e);
+  });
+  document.addEventListener('mousemove', function(e) {
+    if (!cur) return;
+    posTooltip(e);
+  });
+  document.addEventListener('mouseout', function(e) {
+    var el = e.target.closest('.ap-tip');
+    if (el) { cur = null; tt.classList.remove('vis'); }
+  });
+  function posTooltip(e) {
+    var x = e.clientX + 12;
+    var y = e.clientY - 8;
+    var w = tt.offsetWidth || 240;
+    var h = tt.offsetHeight || 80;
+    if (x + w > window.innerWidth - 8) x = e.clientX - w - 12;
+    if (y + h > window.innerHeight - 8) y = e.clientY - h - 8;
+    tt.style.left = x + 'px';
+    tt.style.top  = y + 'px';
+  }
+})();
+</script>
+</body>
+</html>

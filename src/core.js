@@ -10,7 +10,8 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.63';
+const APP_VERSION = '3.1.70';
+const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
 // MODULE AI USAGE — Compteur tokens + sélecteur modèles
@@ -468,17 +469,22 @@ function parseCSVFile(text, filename) {
     const itemMarket = BOUTIQUE_CODES[boutiqueCode.trim()] || market;
     const item = { asin, title: findCol(row, 'nom du produit', 'product title') || '', brand: findCol(row, 'marque', 'brand') || '', market: itemMarket, periodStart, periodEnd, periodType, distributorView };
     if (fileType === 'ventes') {
-      // Fab : CA expédié = col "expéditions" (col[7]) — ne pas prendre "commandes" (col[3])
-      // Appro : CA expédié = col "chiffre" (unique, col[3])
-      item.revenue = distributorView === 'fab'
-        ? parseNum(findCol(row, 'expeditions', 'shipped revenue'))
-        : parseNum(findCol(row, 'chiffre', 'ordered revenue'));
+      // v3.1.70 — On stocke explicitement les 2 métriques CA :
+      //   orderedRevenue (Recettes commandées) = KPI métier de référence Vendor Central
+      //   shippedRevenue (Expéditions)         = indicateur secondaire
+      // En v3.1.70 : revenue garde le comportement actuel (compat) → pas de régression visuelle
+      // En v3.1.71 : revenue deviendra dynamique via getRevenue(a, c) selon c.kpiPrimaireCA
+      item.orderedRevenue = parseNum(findCol(row, 'recettes commandees', 'commandes', 'ordered revenue', 'chiffre'));
+      item.shippedRevenue = parseNum(findCol(row, 'expeditions', 'shipped revenue', 'shipped'));
+      // Compat v3.1.70 : revenue garde le comportement antérieur (shipped pour Fab, ordered pour Appro)
+      item.revenue = distributorView === 'fab' ? item.shippedRevenue : item.orderedRevenue;
       item.revenueDelta = findCol(row, 'periode anterieure') || '';
       item.revenueYoY = findCol(row, "l'annee derniere", 'annee derniere') || '';
-      item.units = parseNum(findCol(row, 'unites commandees', 'ordered units', 'commandees'));
+      item.orderedUnits = parseNum(findCol(row, 'unites commandees', 'ordered units', 'commandees'));
+      item.shippedUnits = parseNum(findCol(row, 'unites expediees', 'shipped units'));
+      // Compat v3.1.70 : units garde le comportement antérieur (= orderedUnits)
+      item.units = item.orderedUnits;
       item.unitsDelta = findCol(row, 'unites commandees - periode') || '';
-      item.shippedRevenue = parseNum(findCol(row, 'expeditions', 'shipped'));
-      item.shippedUnits = parseNum(findCol(row, 'unites expediees'));
       item.returns = parseNum(findCol(row, 'retours client', 'retours'));
     }
     if (fileType === 'trafic') {
@@ -1674,6 +1680,40 @@ function generateMonthlyActions(client) {
 async function callAPI(sys, usr, feature) {
   const modelKey = aiUsage.getModel(feature || 'revue');
   const modelId  = AI_MODELS[modelKey].id;
+  const feat     = feature || 'revue';
+
+  // Tenter via Lambda (proxy IA avec comptabilité serveur)
+  const idToken = localStorage.getItem('ap-id-token');
+  if (idToken) {
+    try {
+      const res = await fetch(API_BASE_URL + '/ai/complete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + idToken,
+        },
+        body: JSON.stringify({
+          model: modelId,
+          max_tokens: 2500,
+          system: sys,
+          messages: [{ role: 'user', content: usr }],
+          feature: feat,
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Erreur Lambda');
+      // Comptabiliser côté client aussi (pour le widget Config)
+      const tokIn  = data.usage?.input_tokens  || 0;
+      const tokOut = data.usage?.output_tokens || 0;
+      aiUsage.record(feat, modelKey, tokIn, tokOut);
+      return data.content?.[0]?.text || '';
+    } catch(lambdaErr) {
+      console.warn('[AI] Lambda fallback direct:', lambdaErr.message);
+      // Fallback sur appel direct si Lambda échoue
+    }
+  }
+
+  // Mode direct (admin local sans token Cognito)
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -1693,20 +1733,20 @@ async function callAPI(sys, usr, feature) {
   if (!res.ok) throw new Error(data.error?.message || 'Erreur API');
   const tokIn  = data.usage?.input_tokens  || 0;
   const tokOut = data.usage?.output_tokens || 0;
-  aiUsage.record(feature || 'revue', modelKey, tokIn, tokOut);
+  aiUsage.record(feat, modelKey, tokIn, tokOut);
   return data.content?.[0]?.text || '';
 }
 
-async function askClaude(sys, usr) {
+async function askClaude(sys, usr, feature) {
   if (!apiKey) return `__ERR_NOKEY__`;
   try {
     log('🤖 Appel Claude API...');
-    let res = await callAPI(sys, usr);
+    let res = await callAPI(sys, usr, feature);
     // Retry auto sur surcharge
     if (res.status === 529 || res.status === 503) {
       log('⏳ API surchargée — retry dans 4s...', 'warn');
       await new Promise(r => setTimeout(r, 4000));
-      res = await callAPI(sys, usr);
+      res = await callAPI(sys, usr, feature);
     }
     if (!res.ok) {
       const et = await res.text();
@@ -7474,7 +7514,7 @@ async function runSEOFiche(asin) {
   const calls = marketsToProcess.map(async function(mkt) {
     const ml = MARKET_LANG[mkt];
     try {
-      const result = await askClaude(sys, buildSEOPrompt(a, c, ml.lang, false));
+      const result = await askClaude(sys, buildSEOPrompt(a, c, ml.lang, false), 'seo');
       if (!isAIError(result)) {
         seoResults[asin][mkt] = parseSEOResponse(result, ml.lang);
         seoResults[asin][mkt].generatedAt = new Date().toISOString();
@@ -7490,7 +7530,7 @@ async function runSEOFiche(asin) {
 
   const bkwCall = (async function() {
     try {
-      const result = await askClaude(sys, buildSEOPrompt(a, c, 'fr', true));
+      const result = await askClaude(sys, buildSEOPrompt(a, c, 'fr', true), 'seo');
       if (!isAIError(result)) seoResults[asin].backendKW = result.trim();
     } catch(e) { /* ignore */ }
   })();
@@ -7944,8 +7984,13 @@ function handlePOImport(files) {
 }
 
 function parsePOCSV(text, filename) {
+  // v3.1.70 — Strip BOM UTF-8 si présent (export Amazon Vendor Central)
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
   const lines = text.split('\n');
-  const headers = lines[0].split(',').map(h => h.trim().replace(/["\r]/g,''));  for (let i = 1; i < lines.length; i++) {
+  const headers = lines[0].split(',').map(h => h.trim().replace(/["\r]/g,''));
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
     // Gestion des guillemets dans les valeurs CSV
