@@ -481,14 +481,14 @@ function parseCSVFile(text, filename) {
       // "Chiffre d'affaires basé sur les expéditions" → "chiffre d'affaires base sur les expeditions"
       item.orderedRevenue = parseNum(findCol(row, "chiffre d'affaires base sur les commandes", 'recettes commandees', 'commandes', 'ordered revenue'));
       item.shippedRevenue = parseNum(findCol(row, "chiffre d'affaires base sur les expeditions", 'expeditions', 'shipped revenue'));
-      // Compat v3.1.70 : revenue garde le comportement antérieur (shipped pour Fab, ordered pour Appro)
-      item.revenue = distributorView === 'fab' ? item.shippedRevenue : item.orderedRevenue;
+      // v3.1.72 : pour Appro (pas de colonnes ordered), fallback sur shippedRevenue si orderedRevenue absent
+      item.revenue = distributorView === 'fab' ? item.shippedRevenue : (item.orderedRevenue > 0 ? item.orderedRevenue : item.shippedRevenue);
       item.revenueDelta = findCol(row, 'periode anterieure') || '';
       item.revenueYoY = findCol(row, "l'annee derniere", 'annee derniere') || '';
       item.orderedUnits = parseNum(findCol(row, 'unites commandees', 'ordered units', 'commandees'));
       item.shippedUnits = parseNum(findCol(row, 'unites expediees', 'shipped units'));
-      // Compat v3.1.70 : units garde le comportement antérieur (= orderedUnits)
-      item.units = item.orderedUnits;
+      // v3.1.72 : pour Appro (orderedUnits absent), fallback sur shippedUnits
+      item.units = distributorView === 'fab' ? item.orderedUnits : (item.orderedUnits > 0 ? item.orderedUnits : item.shippedUnits);
       item.unitsDelta = findCol(row, 'unites commandees - periode') || '';
       item.returns = parseNum(findCol(row, 'retours client', 'retours'));
     }
@@ -3112,7 +3112,8 @@ function renderDashboard() {
 
   // Bandeau avertissement mode Commandé + données Appro uniquement
   const lastVentesImport = c.imports?.filter(i => i.type === 'ventes' && (i.periodType === 'weekly' || !i.periodType)).sort((a,b) => new Date(b.date) - new Date(a.date))[0];
-  if ((c.kpiPrimaireCA || 'ordered') === 'ordered' && lastVentesImport?.distributorView === 'appro') {
+  const hasOrderedData = c.asins?.some(a => (a.orderedRevenue || 0) > 0);
+  if ((c.kpiPrimaireCA || 'ordered') === 'ordered' && lastVentesImport?.distributorView === 'appro' && !hasOrderedData) {
     h += `<div class="alr alr-a">⚠ <strong>Données Commandé indisponibles :</strong> le dernier import ventes est en vue Appro — les colonnes "Commandé" ne sont pas renseignées. Passez en mode <button class="btn btn-sm" onclick="setKpiPrimaire('shipped')" style="margin-left:6px">Expédié</button> pour voir les revenus réels.</div>`;
   }
 

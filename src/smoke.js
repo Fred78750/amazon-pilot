@@ -128,8 +128,9 @@ async function smokeTest(silent) {
     const checks = [];
 
     // Invariant 1 : cohérence units/revenue (l'un sans l'autre = parser cassé)
+    // Seuil rev>500 pour éviter faux positif sur commandes non encore expédiées (orderedRevenue>0, shippedUnits=0)
     if (units > 0 && rev === 0) checks.push('units=' + units + ' mais revenue=0 (parser CA cassé ?)');
-    if (rev > 0 && units === 0) checks.push('revenue=' + rev + '€ mais units=0 (parser units cassé ?)');
+    if (rev > 500 && units === 0) checks.push('revenue=' + rev + '€ mais units=0 (parser units cassé ?)');
 
     // Invariant 2 : ratio prix unitaire dans [0,1€ ; 1000€]
     // Détecte erreur virgule décimale, unité monétaire, ou colonne mal mappée

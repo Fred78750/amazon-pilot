@@ -14,8 +14,8 @@ SRC_DIR   = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src')
 BUILD_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT    = os.path.join(BUILD_DIR, 'amazon-pilot-latest.html')
 
-def r(f): 
-    with open(os.path.join(SRC_DIR, f), 'rb') as fp: return fp.read().decode('utf-8')
+def r(f):
+    with open(os.path.join(SRC_DIR, f), 'rb') as fp: return fp.read().decode('utf-8').replace('\r\n', '\n')
 
 def w(path, c):
     with open(path, 'wb') as fp: fp.write(c.encode('utf-8'))

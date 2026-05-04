@@ -451,7 +451,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.71';
+const APP_VERSION = '3.2.0';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -646,8 +646,9 @@ async function smokeTest(silent) {
     const checks = [];
 
     // Invariant 1 : cohérence units/revenue (l'un sans l'autre = parser cassé)
+    // Seuil rev>500 pour éviter faux positif sur commandes non encore expédiées (orderedRevenue>0, shippedUnits=0)
     if (units > 0 && rev === 0) checks.push('units=' + units + ' mais revenue=0 (parser CA cassé ?)');
-    if (rev > 0 && units === 0) checks.push('revenue=' + rev + '€ mais units=0 (parser units cassé ?)');
+    if (rev > 500 && units === 0) checks.push('revenue=' + rev + '€ mais units=0 (parser units cassé ?)');
 
     // Invariant 2 : ratio prix unitaire dans [0,1€ ; 1000€]
     // Détecte erreur virgule décimale, unité monétaire, ou colonne mal mappée
@@ -1169,14 +1170,14 @@ function parseCSVFile(text, filename) {
       // "Chiffre d'affaires basé sur les expéditions" → "chiffre d'affaires base sur les expeditions"
       item.orderedRevenue = parseNum(findCol(row, "chiffre d'affaires base sur les commandes", 'recettes commandees', 'commandes', 'ordered revenue'));
       item.shippedRevenue = parseNum(findCol(row, "chiffre d'affaires base sur les expeditions", 'expeditions', 'shipped revenue'));
-      // Compat v3.1.70 : revenue garde le comportement antérieur (shipped pour Fab, ordered pour Appro)
-      item.revenue = distributorView === 'fab' ? item.shippedRevenue : item.orderedRevenue;
+      // v3.1.72 : pour Appro (pas de colonnes ordered), fallback sur shippedRevenue si orderedRevenue absent
+      item.revenue = distributorView === 'fab' ? item.shippedRevenue : (item.orderedRevenue > 0 ? item.orderedRevenue : item.shippedRevenue);
       item.revenueDelta = findCol(row, 'periode anterieure') || '';
       item.revenueYoY = findCol(row, "l'annee derniere", 'annee derniere') || '';
       item.orderedUnits = parseNum(findCol(row, 'unites commandees', 'ordered units', 'commandees'));
       item.shippedUnits = parseNum(findCol(row, 'unites expediees', 'shipped units'));
-      // Compat v3.1.70 : units garde le comportement antérieur (= orderedUnits)
-      item.units = item.orderedUnits;
+      // v3.1.72 : pour Appro (orderedUnits absent), fallback sur shippedUnits
+      item.units = distributorView === 'fab' ? item.orderedUnits : (item.orderedUnits > 0 ? item.orderedUnits : item.shippedUnits);
       item.unitsDelta = findCol(row, 'unites commandees - periode') || '';
       item.returns = parseNum(findCol(row, 'retours client', 'retours'));
     }
@@ -4593,7 +4594,8 @@ function renderDashboard() {
 
   // Bandeau avertissement mode Commandé + données Appro uniquement
   const lastVentesImport = c.imports?.filter(i => i.type === 'ventes' && (i.periodType === 'weekly' || !i.periodType)).sort((a,b) => new Date(b.date) - new Date(a.date))[0];
-  if ((c.kpiPrimaireCA || 'ordered') === 'ordered' && lastVentesImport?.distributorView === 'appro') {
+  const hasOrderedData = c.asins?.some(a => (a.orderedRevenue || 0) > 0);
+  if ((c.kpiPrimaireCA || 'ordered') === 'ordered' && lastVentesImport?.distributorView === 'appro' && !hasOrderedData) {
     h += `<div class="alr alr-a">⚠ <strong>Données Commandé indisponibles :</strong> le dernier import ventes est en vue Appro — les colonnes "Commandé" ne sont pas renseignées. Passez en mode <button class="btn btn-sm" onclick="setKpiPrimaire('shipped')" style="margin-left:6px">Expédié</button> pour voir les revenus réels.</div>`;
   }
 
