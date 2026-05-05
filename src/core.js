@@ -864,6 +864,8 @@ function mergeImportData(client, parsedFiles) {
               periodStart: ex.periodStart || null,
               periodType: ex.periodType || 'weekly',
               revenue: ex.revenue || 0,
+              orderedRevenue: ex.orderedRevenue || 0,
+              shippedRevenue: ex.shippedRevenue || ex.revenue || 0,
               units: ex.units || 0,
               glanceViews: ex.glanceViews || 0,
               sellableUnits: ex.sellableUnits != null ? ex.sellableUnits : null,
@@ -3194,7 +3196,7 @@ function buildDashWeeklyChartConfig(periods, c, isMonthly) {
       type: 'line', label: 'Stock (unités)',
       data: periods.map(function(w) { return w.stock; }),
       borderColor: '#10b981', backgroundColor: 'transparent',
-      tension: 0.3, pointRadius: 2, yAxisID: 'yCA', order: 2
+      tension: 0.3, pointRadius: 2, yAxisID: 'yStock', order: 2
     }
   ];
   if (n1) {
@@ -3215,9 +3217,10 @@ function buildDashWeeklyChartConfig(periods, c, isMonthly) {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       scales: {
-        yCA: { type:'linear', position:'left', grid:{color:gridColor}, ticks:{color:tickColor, callback:function(v){return fmtEur(v);}} },
-        yGV: { type:'linear', position:'right', grid:{drawOnChartArea:false}, ticks:{color:tickColor} },
-        x:   { ticks:{color:tickColor, maxTicksLimit:14}, grid:{color:gridColor} }
+        yCA:    { type:'linear', position:'left',  grid:{color:gridColor}, ticks:{color:tickColor, callback:function(v){return Math.round(v/1000)+'k€';}} },
+        yGV:    { type:'linear', position:'right', grid:{drawOnChartArea:false}, ticks:{color:'#3b82f6', callback:function(v){return Math.round(v/1000)+'k';}} },
+        yStock: { type:'linear', position:'right', display:false },
+        x:      { ticks:{color:tickColor, maxTicksLimit:14}, grid:{color:gridColor} }
       },
       plugins: {
         legend: { position:'top', labels:{font:{size:11},color:tickColor} },
@@ -3242,6 +3245,8 @@ function initDashWeeklyChart() {
     ? buildMonthlyConsolidated(allAsins, c, 24, dashWeeklyActiveMkt)
     : buildWeeklyConsolidated(allAsins, c, 52, dashWeeklyActiveMkt);
   if (periods.length < 2) return;
+  const chartH = Math.min(280, Math.max(160, periods.length * (dashWeeklyView === 'semaines' ? 5 : 20)));
+  if (canvas.parentElement) canvas.parentElement.style.height = chartH + 'px';
   if (dashWeeklyChartInst) { dashWeeklyChartInst.destroy(); dashWeeklyChartInst = null; }
   dashWeeklyChartInst = new Chart(canvas.getContext('2d'), buildDashWeeklyChartConfig(periods, c, isMonthly));
 
