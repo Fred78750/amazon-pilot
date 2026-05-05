@@ -91,6 +91,8 @@ let selectedAsin = null;
 let chartInst = null;
 let historyChartInst = null;
 let dashWeeklyChartInst = null;
+let dashWeeklyActiveMkt = null;
+let dashWeeklyView = 'semaines';
 let debugLog = [];
 let historyView = 'weekly';
 let asinSort   = 'ca_desc';
@@ -3097,10 +3099,18 @@ function renderWeeklyReview() {
   h += `</div>`;
   return h;
 }
-function buildWeeklyConsolidated(asins, c, nbWeeks) {
+function _dwParseDate(s) {
+  if (!s) return 0;
+  if (s.indexOf('/') > -1) { const p = s.split('/'); return new Date(p[2], p[1]-1, p[0]); }
+  return new Date(s);
+}
+
+function buildWeeklyConsolidated(asins, c, nbWeeks, market) {
   const pref = c?.kpiPrimaireCA || 'ordered';
+  const mkt = market || c?.mainMarket || '.fr';
   const byWeek = {};
   asins.forEach(function(a) {
+    if ((a.market || '.fr') !== mkt) return;
     (a.history || []).forEach(function(h) {
       const key = h.periodStart || h.period;
       if (!key) return;
@@ -3112,21 +3122,35 @@ function buildWeeklyConsolidated(asins, c, nbWeeks) {
       byWeek[key].n++;
     });
   });
-  const sorted = Object.values(byWeek).sort(function(a, b) {
-    const p = function(s) {
-      if (!s) return 0;
-      if (s.indexOf('/') > -1) { const parts = s.split('/'); return new Date(parts[2], parts[1]-1, parts[0]); }
-      return new Date(s);
-    };
-    return p(a.key) - p(b.key);
-  });
-  return sorted.slice(-nbWeeks);
+  return Object.values(byWeek).sort(function(a,b){ return _dwParseDate(a.key)-_dwParseDate(b.key); }).slice(-nbWeeks);
 }
 
-function buildN1Series(c, weeks) {
+function buildMonthlyConsolidated(asins, c, nbMonths, market) {
+  const weeks = buildWeeklyConsolidated(asins, c, 260, market);
+  const byMonth = {};
+  weeks.forEach(function(w) {
+    const d = _dwParseDate(w.key);
+    if (!d || isNaN(d)) return;
+    const mKey = ('0'+(d.getMonth()+1)).slice(-2) + '/' + d.getFullYear();
+    if (!byMonth[mKey]) byMonth[mKey] = { key: mKey, ca: 0, units: 0, gv: 0, stock: 0, n: 0 };
+    byMonth[mKey].ca    += w.ca;
+    byMonth[mKey].units += w.units;
+    byMonth[mKey].gv    += w.gv;
+    byMonth[mKey].stock  = Math.max(byMonth[mKey].stock, w.stock);
+    byMonth[mKey].n++;
+  });
+  return Object.values(byMonth).sort(function(a,b){
+    const pa = a.key.split('/'); const pb = b.key.split('/');
+    return (new Date(pa[1],pa[0]-1) - new Date(pb[1],pb[0]-1));
+  }).slice(-nbMonths);
+}
+
+function buildN1Series(c, weeks, market) {
   const n1Year = String(new Date().getFullYear() - 1);
-  const n1Weeks = {};
+  const mkt = market || c?.mainMarket || '.fr';
+  const n1Map = {};
   (c.asins || []).forEach(function(a) {
+    if ((a.market || '.fr') !== mkt) return;
     (a.history || []).forEach(function(h) {
       const key = h.periodStart || h.period;
       if (!key) return;
@@ -3134,102 +3158,73 @@ function buildN1Series(c, weeks) {
       if (key.indexOf('/') > -1) { year = key.split('/')[2]; }
       else if (key.length >= 4) { year = key.slice(0, 4); }
       if (year !== n1Year) return;
-      if (!n1Weeks[key]) n1Weeks[key] = 0;
-      n1Weeks[key] += (h.orderedRevenue || h.revenue || 0);
+      if (!n1Map[key]) n1Map[key] = 0;
+      n1Map[key] += (h.orderedRevenue || h.revenue || 0);
     });
   });
-  if (Object.keys(n1Weeks).length < 4) return null;
+  if (Object.keys(n1Map).length < 4) return null;
   return weeks.map(function(w) {
     const d = (w.key || '').split('/');
     if (d.length < 3) return null;
     const n1Key = d[0] + '/' + d[1] + '/' + n1Year;
-    return n1Weeks[n1Key] || null;
+    return n1Map[n1Key] || null;
   });
 }
 
-function buildDashWeeklyChartConfig(weeks, c) {
-  const n1 = buildN1Series(c, weeks);
+function buildDashWeeklyChartConfig(periods, c, isMonthly) {
+  const n1 = isMonthly ? null : buildN1Series(c, periods, dashWeeklyActiveMkt || c?.mainMarket || '.fr');
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const tickColor = isDark ? '#aaa' : '#666';
   const datasets = [
     {
       type: 'bar',
       label: c?.kpiPrimaireCA === 'shipped' ? 'CA Expédié (€)' : 'CA Commandé (€)',
-      data: weeks.map(function(w) { return w.ca; }),
+      data: periods.map(function(w) { return w.ca; }),
       backgroundColor: 'rgba(255,153,0,0.7)',
-      yAxisID: 'yCA',
-      order: 3
+      yAxisID: 'yCA', order: 3
     },
     {
-      type: 'line',
-      label: 'Glance Views',
-      data: weeks.map(function(w) { return w.gv; }),
-      borderColor: '#3b82f6',
-      backgroundColor: 'transparent',
-      tension: 0.3,
-      pointRadius: 2,
-      yAxisID: 'yGV',
-      order: 1
+      type: 'line', label: 'Glance Views',
+      data: periods.map(function(w) { return w.gv; }),
+      borderColor: '#3b82f6', backgroundColor: 'transparent',
+      tension: 0.3, pointRadius: 2, yAxisID: 'yGV', order: 1
     },
     {
-      type: 'line',
-      label: 'Stock (unités)',
-      data: weeks.map(function(w) { return w.stock; }),
-      borderColor: '#10b981',
-      backgroundColor: 'transparent',
-      tension: 0.3,
-      pointRadius: 2,
-      yAxisID: 'yCA',
-      order: 2
+      type: 'line', label: 'Stock (unités)',
+      data: periods.map(function(w) { return w.stock; }),
+      borderColor: '#10b981', backgroundColor: 'transparent',
+      tension: 0.3, pointRadius: 2, yAxisID: 'yCA', order: 2
     }
   ];
   if (n1) {
     datasets.push({
-      type: 'line',
-      label: 'CA N-1',
+      type: 'line', label: 'CA N-1',
       data: n1,
-      borderColor: 'rgba(150,150,150,0.5)',
-      borderDash: [4, 4],
-      backgroundColor: 'transparent',
-      pointRadius: 0,
-      yAxisID: 'yCA',
-      order: 4
+      borderColor: 'rgba(150,150,150,0.5)', borderDash: [4,4],
+      backgroundColor: 'transparent', pointRadius: 0, yAxisID: 'yCA', order: 4
     });
   }
-  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
-  const tickColor = isDark ? '#aaa' : '#666';
   return {
     type: 'bar',
     data: {
-      labels: weeks.map(function(w) { return (w.key || '').slice(0, 5); }),
+      labels: periods.map(function(w) { return (w.key||'').slice(0,5); }),
       datasets: datasets
     },
     options: {
-      responsive: true,
-      maintainAspectRatio: false,
+      responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       scales: {
-        yCA: {
-          type: 'linear', position: 'left',
-          grid: { color: gridColor },
-          ticks: { color: tickColor, callback: function(v) { return fmtEur(v); } }
-        },
-        yGV: {
-          type: 'linear', position: 'right',
-          grid: { drawOnChartArea: false },
-          ticks: { color: tickColor }
-        },
-        x: { ticks: { color: tickColor, maxTicksLimit: 12 }, grid: { color: gridColor } }
+        yCA: { type:'linear', position:'left', grid:{color:gridColor}, ticks:{color:tickColor, callback:function(v){return fmtEur(v);}} },
+        yGV: { type:'linear', position:'right', grid:{drawOnChartArea:false}, ticks:{color:tickColor} },
+        x:   { ticks:{color:tickColor, maxTicksLimit:14}, grid:{color:gridColor} }
       },
       plugins: {
-        legend: { position: 'top', labels: { font: { size: 11 }, color: tickColor } },
-        tooltip: {
-          callbacks: {
-            label: function(ctx) {
-              if (ctx.dataset.yAxisID === 'yCA') return ctx.dataset.label + ': ' + fmtEur(ctx.parsed.y);
-              return ctx.dataset.label + ': ' + fmt(ctx.parsed.y);
-            }
-          }
-        }
+        legend: { position:'top', labels:{font:{size:11},color:tickColor} },
+        tooltip: { callbacks: { label: function(ctx) {
+          if (ctx.dataset.yAxisID==='yCA') return ctx.dataset.label+': '+fmtEur(ctx.parsed.y);
+          return ctx.dataset.label+': '+fmt(ctx.parsed.y);
+        }}}
       }
     }
   };
@@ -3240,11 +3235,38 @@ function initDashWeeklyChart() {
   if (!canvas) return;
   const c = cl();
   if (!c) return;
-  const asins = getFilteredAsins(c);
-  const weeks = buildWeeklyConsolidated(asins, c, 52);
-  if (weeks.length < 4) return;
+  if (!dashWeeklyActiveMkt) dashWeeklyActiveMkt = c.mainMarket || '.fr';
+  const isMonthly = dashWeeklyView === 'mois';
+  const allAsins = getFilteredAsins(c);
+  const periods = isMonthly
+    ? buildMonthlyConsolidated(allAsins, c, 24, dashWeeklyActiveMkt)
+    : buildWeeklyConsolidated(allAsins, c, 52, dashWeeklyActiveMkt);
+  if (periods.length < 2) return;
   if (dashWeeklyChartInst) { dashWeeklyChartInst.destroy(); dashWeeklyChartInst = null; }
-  dashWeeklyChartInst = new Chart(canvas.getContext('2d'), buildDashWeeklyChartConfig(weeks, c));
+  dashWeeklyChartInst = new Chart(canvas.getContext('2d'), buildDashWeeklyChartConfig(periods, c, isMonthly));
+
+  // KPIs synthétiques
+  const kpiEl = document.getElementById('dash-weekly-kpis');
+  if (!kpiEl) return;
+  const total = periods.reduce(function(s,w){ return s+w.ca; }, 0);
+  const avg = Math.round(total / periods.length);
+  const half = Math.floor(periods.length / 2);
+  const s1avg = half > 0 ? periods.slice(0, half).reduce(function(s,w){return s+w.ca;},0)/half : 0;
+  const s2avg = half > 0 ? periods.slice(half).reduce(function(s,w){return s+w.ca;},0)/(periods.length-half) : 0;
+  const trend = s1avg > 0 ? Math.round((s2avg-s1avg)/s1avg*100) : 0;
+  const trendStr = trend > 0 ? '+'+trend+'%' : trend+'%';
+  const trendColor = trend > 0 ? 'var(--g)' : trend < 0 ? 'var(--a-r)' : 'var(--tx3)';
+  const n1arr = isMonthly ? null : buildN1Series(c, periods, dashWeeklyActiveMkt);
+  const n1total = n1arr ? n1arr.reduce(function(s,v){return s+(v||0);},0) : 0;
+  const n1pct = n1total > 0 ? Math.round((total-n1total)/n1total*100) : null;
+  const n1str = n1pct !== null ? (n1pct>0?'+':'')+n1pct+'% vs N-1' : 'N-1 indisponible';
+  const n1color = n1pct !== null ? (n1pct>0?'var(--g)':n1pct<0?'var(--a-r)':'var(--tx3)') : 'var(--tx3)';
+  kpiEl.innerHTML = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:11px;">'
+    +'<span style="background:var(--s2);border-radius:6px;padding:4px 10px"><b>Moy. '+( isMonthly?'mensuelle':'hebdo' )+'</b> '+fmtEur(avg)+'</span>'
+    +'<span style="background:var(--s2);border-radius:6px;padding:4px 10px"><b>Tendance</b> <span style="color:'+trendColor+'">'+trendStr+'</span></span>'
+    +'<span style="background:var(--s2);border-radius:6px;padding:4px 10px"><b>Périodes</b> '+periods.length+'</span>'
+    +'<span style="background:var(--s2);border-radius:6px;padding:4px 10px;color:'+n1color+'">'+n1str+'</span>'
+    +'</div>';
 }
 
 function renderDashboard() {
@@ -3337,16 +3359,30 @@ function renderDashboard() {
   h += `<div class="kpi${lowStockN>0?' warn':''}"><div class="kpi-lb">Stock faible</div><div class="kpi-v">${lowStockN}</div></div>`;
   h += `</div>`;
 
-  const weeklyData = buildWeeklyConsolidated(asins, c, 52);
-  if (weeklyData.length >= 4) {
+  if (!dashWeeklyActiveMkt) dashWeeklyActiveMkt = c.mainMarket || '.fr';
+  const _dwMkts = c.markets && c.markets.length ? c.markets : [c.mainMarket || '.fr'];
+  const _dwTestData = buildWeeklyConsolidated(asins, c, 52, dashWeeklyActiveMkt);
+  if (_dwTestData.length >= 2) {
+    const _dwLabel = dashWeeklyView === 'mois' ? '24 mois' : '52 semaines';
     h += `<div class="cd" style="margin-bottom:16px">
-      <div class="cd-t space">
-        <span>📈 Tendance 52 semaines</span>
-        <span style="font-size:10px;color:var(--tx3)">${weeklyData.length} sem. · Consolidé tous ASINs</span>
-      </div>
+      <div class="cd-t space" style="flex-wrap:wrap;gap:8px">
+        <span>📈 Tendance ${_dwLabel}</span>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">`;
+    if (_dwMkts.length > 1) {
+      _dwMkts.forEach(function(mkt) {
+        const ml = typeof MARKET_LANG !== 'undefined' && MARKET_LANG[mkt];
+        const flag = ml ? ml.flag : mkt;
+        const active = mkt === dashWeeklyActiveMkt;
+        h += `<button class="btn btn-sm${active?' btn-p':''}" onclick="dashWeeklyActiveMkt='${mkt}';initDashWeeklyChart()" style="font-size:11px">${flag} ${mkt}</button>`;
+      });
+    }
+    h += `<button class="btn btn-sm${dashWeeklyView==='semaines'?' btn-p':''}" onclick="dashWeeklyView='semaines';initDashWeeklyChart()" style="font-size:11px">Semaines</button>`;
+    h += `<button class="btn btn-sm${dashWeeklyView==='mois'?' btn-p':''}" onclick="dashWeeklyView='mois';initDashWeeklyChart()" style="font-size:11px">Mois</button>`;
+    h += `</div></div>
       <div style="position:relative;height:220px">
         <canvas id="dash-weekly-chart"></canvas>
       </div>
+      <div id="dash-weekly-kpis"></div>
     </div>`;
   }
 
