@@ -863,14 +863,14 @@ function mergeImportData(client, parsedFiles) {
               period: ex.periodEnd || 'prev',
               periodStart: ex.periodStart || null,
               periodType: ex.periodType || 'weekly',
-              revenue: ex.revenue || 0,
-              orderedRevenue: ex.orderedRevenue || 0,
-              shippedRevenue: ex.shippedRevenue || ex.revenue || 0,
-              units: ex.units || 0,
-              glanceViews: ex.glanceViews || 0,
-              sellableUnits: ex.sellableUnits != null ? ex.sellableUnits : null,
-              retailPct: ex.retailPct || null,
-              returns: ex.returns || 0,
+              revenue: row.revenue || ex.revenue || 0,
+              orderedRevenue: row.orderedRevenue || ex.orderedRevenue || 0,
+              shippedRevenue: row.shippedRevenue || ex.shippedRevenue || row.revenue || 0,
+              units: row.units || ex.units || 0,
+              glanceViews: row.glanceViews || ex.glanceViews || 0,
+              sellableUnits: row.sellableUnits != null ? row.sellableUnits : (ex.sellableUnits != null ? ex.sellableUnits : null),
+              retailPct: row.retailPct || ex.retailPct || null,
+              returns: row.returns || ex.returns || 0,
               revenueDelta: ex.revenueDelta || null
             };
             const alreadyArchived = ex.history.some(h => h.period === snapshot.period);
