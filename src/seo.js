@@ -521,7 +521,7 @@ function renderAgentVC() {
         h += '<div style="margin-bottom:10px;font-size:12px;color:var(--tx2)">Vendor code(s) : <strong>' + vendorCodes.map(esc).join(', ') + '</strong></div>';
       }
       h += '<div style="margin-bottom:6px"><div style="font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:4px">SKU <span style="color:var(--r)">*</span></div>';
-      h += '<input id="avc-sku" class="inp" style="font-family:var(--mono);width:100%;max-width:260px" placeholder="Ex: 643416 ou ASIN" value="' + esc(s.sku||'') + '" oninput="agentVCState.sku=this.value.trim();render()">';
+      h += '<input id="avc-sku" class="inp" style="font-family:var(--mono);width:100%;max-width:260px" placeholder="Ex: 643416 ou ASIN" value="' + esc(s.sku||'') + '" onchange="agentVCState.sku=this.value.trim();render()">';
       h += '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Le SKU figure dans le catalogue VC (recherche par ASIN). Il peut être identique à l\'ASIN ou différent.</div></div>';
       h += '<button class="btn btn-p" style="margin-top:8px" ' + (!s.sku ? 'disabled' : '') + ' onclick="avcConfirmSKU()">Confirmer →</button>';
     }
@@ -547,6 +547,7 @@ function renderAgentVC() {
         h += '<div style="display:flex;gap:6px">';
         h += '<button class="btn btn-sm" onclick="go(\'agentseo\')">👁 Voir fiche complète</button>';
         h += '<button class="btn btn-sm" onclick="avcLaunchSEO()">🔄 Regénérer</button>';
+        h += '<button class="btn btn-p btn-sm" onclick="agentVCState.step=5;render()">📤 Script VC →</button>';
         h += '</div>';
       }
     }
@@ -572,7 +573,7 @@ function renderAgentVC() {
           h += '<span style="font-size:11px">' + (vcSt === 'success' ? '✅ Fait' : '⏳ En attente') + '</span>';
           h += '</div>';
           h += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:4px">SKU pour ce vendor code</div>';
-          h += '<input class="inp" style="font-family:var(--mono);width:100%;max-width:200px" value="' + esc(vcSku) + '" oninput="if(!agentVCState.skuByVC)agentVCState.skuByVC={};agentVCState.skuByVC[' + JSON.stringify(vc) + ']=this.value;render()"></div>';
+          h += '<input class="inp" style="font-family:var(--mono);width:100%;max-width:200px" value="' + esc(vcSku) + '" onchange="if(!agentVCState.skuByVC)agentVCState.skuByVC={};agentVCState.skuByVC[' + JSON.stringify(vc) + ']=this.value;render()"></div>';
           h += '<div style="display:flex;gap:6px">';
           h += '<button class="btn btn-p btn-sm" onclick="avcCopyScript(' + JSON.stringify(vc) + ')">📋 Copier le script</button>';
           if (vcSt !== 'success') {
