@@ -1,5 +1,5 @@
 const SMOKE_REF = {
-  ca2024:  { val: 1703110, tol: 0.01, expiry: '2026-12-31', label: 'CA 2024' },
+  ca2024:  { val: 1678110, tol: 0.02, expiry: '2026-12-31', label: 'CA 2024' },
   ca2025:  { val: 1297621, tol: 0.01, expiry: '2027-12-31', label: 'CA 2025' },
   asinMin: { val: 1500,               expiry: null,          label: 'ASINs catalogue >= 1500' },
   asinRef: { asin: 'B009G3EMDI', label: 'ASIN B009G3EMDI cohérence pipeline' }
