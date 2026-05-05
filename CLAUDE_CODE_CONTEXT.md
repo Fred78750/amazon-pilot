@@ -16,7 +16,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | v3.2.24 | https://amazon.foliow.app |
-| Recette (staging) | v3.4.4 | https://d9xny9istvl53.cloudfront.net |
+| Recette (staging) | v3.4.5 | https://d9xny9istvl53.cloudfront.net |
 
 ---
 
@@ -104,7 +104,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-## TÂCHES EN COURS (session v3.4.4 — toutes terminées)
+## TÂCHES EN COURS (session v3.4.5 — toutes terminées)
 
 - [x] Fix `parseSEOResponse` : strip `**` sur description → `src/seo.js`
 - [x] Fix `buildSEOPrompt` : directive DESCRIPTION HTML structurée 5 blocs → `src/seo.js`
@@ -113,6 +113,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 - [x] Strip `**` sur 4 champs synthèse (`positionnement`, `leviers`, `erreurs`, `opportunite`) → `src/seo.js`
 - [x] Guard `apiKey` dans `runSEOFiche` → `src/core.js`
 - [x] Refonte `renderAgentVC` : wizard 5 étapes, `avcStepWrap`, accordéon, SKU obligatoire étape 3, multi-VC étape 5 → `src/seo.js`
+- [x] Fix `renderOnboarding` : `c.` → `nc.` (wizStep 3, bloc PO) — `ReferenceError: c is not defined` → `src/core.js`
 
 ---
 
@@ -146,4 +147,4 @@ _(aucune tâche en attente — en attente du prochain brief de Fred)_
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 5 mai 2026 (v3.4.4)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 5 mai 2026 (v3.4.5)**
