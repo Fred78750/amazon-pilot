@@ -909,8 +909,8 @@ function mergeImportData(client, parsedFiles) {
         const monthSnap = {
           monthKey,
           label: mm + '/' + yyyy,
-          revenue: (existingIdx >= 0 ? a.historyMonthly[existingIdx].revenue : 0) + (getRevenue(a,c)||0),
-          units: (existingIdx >= 0 ? a.historyMonthly[existingIdx].units : 0) + (getUnits(a,c)||0),
+          revenue: (existingIdx >= 0 ? a.historyMonthly[existingIdx].revenue : 0) + (getRevenue(a,client)||0),
+          units: (existingIdx >= 0 ? a.historyMonthly[existingIdx].units : 0) + (getUnits(a,client)||0),
           glanceViews: (existingIdx >= 0 ? a.historyMonthly[existingIdx].glanceViews : 0) + (a.glanceViews || 0),
           weeks: (existingIdx >= 0 ? a.historyMonthly[existingIdx].weeks : 0) + 1,
           sellableUnitsLast: a.sellableUnits != null ? a.sellableUnits : (existingIdx >= 0 ? a.historyMonthly[existingIdx].sellableUnitsLast : null),
