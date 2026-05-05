@@ -138,10 +138,7 @@ function showVCConfirmModal(asin, market, fiche, c) {
 
   var vendorCode = (c && c.vendorCode) ? c.vendorCode : null;
   var bullets = fiche.bullets || [];
-  var backendKW = (c && c.ficheOptimisee && c.ficheOptimisee[asin] && c.ficheOptimisee[asin].backendKW)
-    ? c.ficheOptimisee[asin].backendKW
-    : ((typeof seoResults !== 'undefined' && seoResults[asin] && seoResults[asin].backendKW)
-      ? seoResults[asin].backendKW : '');
+  var backendKW = fiche.backendKW || '';
   var kwCount = backendKW ? backendKW.split(/\s+/).filter(Boolean).length : 0;
   var titrePreview = fiche.titre ? (fiche.titre.length > 60 ? fiche.titre.slice(0, 60) + '…' : fiche.titre) : '(vide)';
 
@@ -226,6 +223,8 @@ function seoGetScriptVerify(asin, market, fiche) {
 function seoLaunchModify(asin) {
   var c = cl();
   if (!c) return;
+  var vcs = (c.vendorCodes && c.vendorCodes.length) ? c.vendorCodes : (c.vendorCode ? [c.vendorCode] : []);
+  if (vcs.length > 1 && typeof goAgentVC === 'function') { goAgentVC(asin); return; }
   var activeMkt = (typeof seoActiveTab !== 'undefined' && seoActiveTab) || c.mainMarket || '.fr';
   var fiche = (typeof seoResults !== 'undefined' && seoResults[asin] && seoResults[asin][activeMkt])
     ? seoResults[asin][activeMkt]
@@ -455,7 +454,7 @@ function renderAgentVC() {
 
   var h = '<div style="padding:20px 24px;max-width:680px">';
   h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">';
-  h += '<button class="btn btn-sm" onclick="go(\'agentseo\')">← Retour</button>';
+  h += '<button class="btn btn-sm" onclick="go(\'seo\')">← Retour</button>';
   h += '<div style="font-size:16px;font-weight:700">🚀 Agent SEO + Vendor Central</div>';
   h += '</div>';
 
@@ -545,7 +544,7 @@ function renderAgentVC() {
         var r4 = seoResults[s.asin][s.market];
         h += '<div style="font-size:12px;padding:8px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd);margin-bottom:8px;line-height:1.5">' + esc((r4.titre||'').substring(0,80)) + '…</div>';
         h += '<div style="display:flex;gap:6px">';
-        h += '<button class="btn btn-sm" onclick="go(\'agentseo\')">👁 Voir fiche complète</button>';
+        h += '<button class="btn btn-sm" onclick="go(\'seo\')">👁 Voir fiche complète</button>';
         h += '<button class="btn btn-sm" onclick="avcLaunchSEO()">🔄 Regénérer</button>';
         h += '<button class="btn btn-p btn-sm" onclick="agentVCState.step=5;render()">📤 Script VC →</button>';
         h += '</div>';
