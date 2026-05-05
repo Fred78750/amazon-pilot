@@ -857,27 +857,6 @@ function mergeImportData(client, parsedFiles) {
                 if (ex.history.length > 52) ex.history.shift();
               }
             }
-          } else {
-            // Import hebdo normal — archiver la semaine précédente
-            const snapshot = {
-              period: ex.periodEnd || 'prev',
-              periodStart: ex.periodStart || null,
-              periodType: ex.periodType || 'weekly',
-              revenue: row.revenue || ex.revenue || 0,
-              orderedRevenue: row.orderedRevenue || ex.orderedRevenue || 0,
-              shippedRevenue: row.shippedRevenue || ex.shippedRevenue || row.revenue || 0,
-              units: row.units || ex.units || 0,
-              glanceViews: row.glanceViews || ex.glanceViews || 0,
-              sellableUnits: row.sellableUnits != null ? row.sellableUnits : (ex.sellableUnits != null ? ex.sellableUnits : null),
-              retailPct: row.retailPct || ex.retailPct || null,
-              returns: row.returns || ex.returns || 0,
-              revenueDelta: ex.revenueDelta || null
-            };
-            const alreadyArchived = ex.history.some(h => h.period === snapshot.period);
-            if (!alreadyArchived) {
-              ex.history.push(snapshot);
-              if (ex.history.length > 52) ex.history.shift();
-            }
           }
         }
         for (const [k, v] of Object.entries(row)) { if (v !== '' && v !== 0 && v != null) ex[k] = v; }
@@ -888,6 +867,33 @@ function mergeImportData(client, parsedFiles) {
       if (file.type === 'trafic') totalGV += row.glanceViews || 0;
     }
     client.imports.push({ date: new Date().toISOString(), type: file.type, market: file.market, distributorView: file.distributorView || 'fab', periodStart: file.periodStart, periodEnd: file.periodEnd, periodType: file.periodType, filename: file.filename, rowCount: file.rowCount });
+  }
+
+  // Snapshot hebdo sur état final fusionné (après toutes les fusions de fichiers)
+  if (periodType === 'weekly' && periodLabel) {
+    for (const [, ex] of asinMap.entries()) {
+      if (!ex.revenue && !ex.orderedRevenue && !ex.shippedRevenue) continue;
+      if (!ex.history) ex.history = [];
+      const snapshot = {
+        period: periodLabel,
+        periodStart: parsedFiles.find(f => f?.periodStart)?.periodStart || null,
+        periodType: 'weekly',
+        revenue: ex.revenue || 0,
+        orderedRevenue: ex.orderedRevenue || 0,
+        shippedRevenue: ex.shippedRevenue || ex.revenue || 0,
+        units: ex.units || 0,
+        glanceViews: ex.glanceViews || 0,
+        sellableUnits: ex.sellableUnits != null ? ex.sellableUnits : null,
+        retailPct: ex.retailPct || null,
+        returns: ex.returns || 0,
+        revenueDelta: ex.revenueDelta || null
+      };
+      const alreadyArchived = ex.history.some(h => h.period === snapshot.period);
+      if (!alreadyArchived) {
+        ex.history.push(snapshot);
+        if (ex.history.length > 52) ex.history.shift();
+      }
+    }
   }
 
   client.asins = Array.from(asinMap.values());
