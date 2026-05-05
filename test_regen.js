@@ -3,7 +3,7 @@ const { chromium } = require('playwright');
 const path = require('path');
 
 (async () => {
-  const file = 'file://' + path.resolve(__dirname, 'amazon-pilot-v3.2.14.html').replace(/\\/g, '/');
+  const file = 'file://' + path.resolve(__dirname, 'amazon-pilot-v3.2.16.html').replace(/\\/g, '/');
   console.log('Opening:', file);
 
   const browser = await chromium.launch({ headless: true });
@@ -214,6 +214,52 @@ const path = require('path');
   if (mergeErrors.length) {
     console.log('❌ Page errors:', mergeErrors);
   }
+
+  // --- Test structurel getRevenue/getUnits sourcingOnly (v3.2.16) ---
+  console.log('\n--- Test getRevenue/getUnits sourcingOnly ---');
+
+  const sourcing = await page.evaluate(() => {
+    // ASIN FAB normal
+    const fab = {
+      asin: 'B000FAB001', sourcingOnly: false,
+      orderedRevenue: 21339, orderedUnits: 85,
+      shippedRevenue: 20800, shippedUnits: 83,
+      revenue: 21339, units: 85
+    };
+    // ASIN Appro-only (sourcingOnly)
+    const appro = {
+      asin: 'B000APPRO01', sourcingOnly: true,
+      orderedRevenue: 0, orderedUnits: 0,
+      shippedRevenue: 4000, shippedUnits: 20,
+      revenue: 4000, units: 20
+    };
+    const cOrdered  = { kpiPrimaireCA: 'ordered' };
+    const cShipped  = { kpiPrimaireCA: 'shipped' };
+
+    const r1 = getRevenue(appro, cOrdered);   // doit être 0
+    const r2 = getRevenue(appro, cShipped);   // doit être 4000
+    const r3 = getUnits(appro,   cOrdered);   // doit être 0
+    const r4 = getUnits(appro,   cShipped);   // doit être 20
+    const r5 = getRevenue(fab,   cOrdered);   // doit être 21339
+    const r6 = getRevenue(fab,   cShipped);   // doit être 20800
+
+    // CA total Ordered = FAB uniquement
+    const asins = [fab, appro];
+    const totalOrdered = asins.reduce((s, a) => s + (getRevenue(a, cOrdered) || 0), 0);
+
+    return { r1, r2, r3, r4, r5, r6, totalOrdered };
+  });
+
+  const checks = [
+    [sourcing.r1 === 0,     `getRevenue(appro, ordered) = ${sourcing.r1} (attendu 0)`],
+    [sourcing.r2 === 4000,  `getRevenue(appro, shipped) = ${sourcing.r2} (attendu 4000)`],
+    [sourcing.r3 === 0,     `getUnits(appro, ordered)   = ${sourcing.r3} (attendu 0)`],
+    [sourcing.r4 === 20,    `getUnits(appro, shipped)   = ${sourcing.r4} (attendu 20)`],
+    [sourcing.r5 === 21339, `getRevenue(fab, ordered)   = ${sourcing.r5} (attendu 21339)`],
+    [sourcing.r6 === 20800, `getRevenue(fab, shipped)   = ${sourcing.r6} (attendu 20800)`],
+    [sourcing.totalOrdered === 21339, `CA total Ordered (FAB only) = ${sourcing.totalOrdered} (attendu 21339)`],
+  ];
+  checks.forEach(([ok, label]) => console.log(ok ? '✅' : '❌', label));
 
   await browser.close();
 

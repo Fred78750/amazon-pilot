@@ -985,12 +985,14 @@ function calcSegment(a, totalCA, c) {
 // ── Helpers KPI Ordered/Shipped ──────────────────────────────────
 function getRevenue(a, c) {
   const pref = c?.kpiPrimaireCA || 'ordered';
-  if (pref === 'shipped' && a.shippedRevenue != null) return a.shippedRevenue;
+  if (pref === 'shipped') return a.shippedRevenue ?? a.revenue ?? 0;
+  if (a.sourcingOnly) return 0; // Appro-only : pas de données Ordered
   return a.orderedRevenue ?? a.revenue ?? 0;
 }
 function getUnits(a, c) {
   const pref = c?.kpiPrimaireCA || 'ordered';
-  if (pref === 'shipped' && a.shippedUnits != null) return a.shippedUnits;
+  if (pref === 'shipped') return a.shippedUnits ?? a.units ?? 0;
+  if (a.sourcingOnly) return 0; // Appro-only : pas de données Ordered
   return a.orderedUnits ?? a.units ?? 0;
 }
 

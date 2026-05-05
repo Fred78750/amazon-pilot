@@ -451,7 +451,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.2.15';
+const APP_VERSION = '3.2.16';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -1674,12 +1674,14 @@ function calcSegment(a, totalCA, c) {
 // ── Helpers KPI Ordered/Shipped ──────────────────────────────────
 function getRevenue(a, c) {
   const pref = c?.kpiPrimaireCA || 'ordered';
-  if (pref === 'shipped' && a.shippedRevenue != null) return a.shippedRevenue;
+  if (pref === 'shipped') return a.shippedRevenue ?? a.revenue ?? 0;
+  if (a.sourcingOnly) return 0; // Appro-only : pas de données Ordered
   return a.orderedRevenue ?? a.revenue ?? 0;
 }
 function getUnits(a, c) {
   const pref = c?.kpiPrimaireCA || 'ordered';
-  if (pref === 'shipped' && a.shippedUnits != null) return a.shippedUnits;
+  if (pref === 'shipped') return a.shippedUnits ?? a.units ?? 0;
+  if (a.sourcingOnly) return 0; // Appro-only : pas de données Ordered
   return a.orderedUnits ?? a.units ?? 0;
 }
 
