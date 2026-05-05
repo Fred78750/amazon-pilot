@@ -43,6 +43,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 - Frontend : HTML5 + CSS3 + JS vanilla — **build via `build.py`** depuis `src/`
 - Architecture : modulaire — `src/core.js`, `src/seo.js`, etc. — **jamais modifier le HTML directement**
 - Dépôt local : `C:\AmazonPilot\`
+- Repo Cowork : `C:\AmazonPilot\repo` — clone de staging, **à synchroniser après chaque push** : `git -C C:\AmazonPilot\repo pull origin staging`
 - Repo GitHub : `Fred78750/amazon-pilot`
 - Branche staging : `staging` | Branche prod : `main`
 - **Jamais de commit direct sur `main`** — toujours staging → validation Fred → merge
@@ -60,8 +61,9 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 7. `node --check src/[fichier]` après chaque patch
 8. `python build.py` → `node --check amazon-pilot-vX.Y.Z.html`
 9. Exposer résultat à Fred — attendre GO pour dépôt
-10. Déposer en local + commiter sur staging
-11. Mettre à jour ce fichier — commiter
+10. Déposer en local + commiter sur staging + cherry-pick preprod si nécessaire
+11. `git -C C:\AmazonPilot\repo pull origin staging` — synchroniser le repo Cowork
+12. Mettre à jour ce fichier — commiter
 
 ---
 
