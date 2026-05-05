@@ -31,6 +31,10 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Lambda imports | `https://hue3u3z5ghbi4tcj2lxqewk4ua0nrbyx.lambda-url.eu-west-3.on.aws` |
 | Lambda API prod | `https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws` |
 | Cognito | `eu-west-3_8P9UzCONx` / `5nnllolhnc3572800bvce94682` |
+| S3 preprod | `amazon-pilot-preprod` |
+| CloudFront preprod | `E3CODYJ437XKU5` |
+| URL preprod | `https://preprod.amazon.foliow.app` |
+| Branche preprod | `preprod` → `deploy-preprod.yml` |
 
 ---
 
