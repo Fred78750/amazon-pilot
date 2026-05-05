@@ -76,6 +76,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 - Jamais inventer de spec produit dans un prompt SEO — uniquement ce que `seoFetchFiche` retourne
 - ASINs `sourcingOnly` = 0 en CA Ordered — ne jamais revenir dessus sans mesure d'impact
 - Livrable nommé `amazon-pilot-vX.Y.Z.html` — jamais `amazon-pilot-latest.html` (Fred fait la copie)
+- **Après chaque push staging : synchroniser le repo Cowork** — `git -C C:\AmazonPilot\repo pull origin staging` — obligatoire pour que Cowork travaille sur le code à jour
 
 ### Règles d'architecture
 - `seoResults[asin][market]` = chemin correct avec market — jamais le chemin plat `ficheOptimisee[asin].backendKW`
