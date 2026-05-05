@@ -410,7 +410,378 @@ function renderSEODrawer() {
   refreshSEODrawer();
 }
 
+// ── Agent VC State ─────────────────────────────────────────────
+var agentVCState = {
+  asin: null, title: '', market: null, vcCode: '', sku: '',
+  step: 1, isNew: false,
+  newRef: '', newBrand: '', newName: '', newCat: '', newEan: '',
+  newFormVisible: false
+};
+
+function renderAgentVC() {
+  var c = cl();
+  if (!c) return '<div style="padding:24px" class="alr alr-r">Aucun client sélectionné.</div>';
+
+  if (agentVCParam !== null) {
+    var initAsin = agentVCParam;
+    agentVCParam = null;
+    agentVCState = { asin: null, title: '', market: null, vcCode: '', sku: '', step: 1, isNew: false, newRef: '', newBrand: '', newName: '', newCat: '', newEan: '', newFormVisible: false };
+    if (initAsin) {
+      agentVCState.asin = initAsin;
+      var _a = c.asins.find(function(x){ return x.asin === initAsin; });
+      if (_a) {
+        agentVCState.title = _a.title || initAsin;
+        agentVCState.sku = _a.sku || (c.catalogue && c.catalogue.find && c.catalogue.find(function(x){ return x.asin === initAsin; }))?.sku || '';
+        agentVCState.step = 2;
+        var _mkts = c.markets && c.markets.length ? c.markets : [c.mainMarket || '.fr'];
+        agentVCState.market = _mkts[0];
+        if (_mkts.length === 1) {
+          agentVCState.step = 3;
+          if (c.vendorCode) { agentVCState.vcCode = c.vendorCode; agentVCState.step = 4; }
+        }
+      }
+    }
+  }
+
+  var mkts = c.markets && c.markets.length ? c.markets : [c.mainMarket || '.fr'];
+  var step = agentVCState.step;
+  var asin = agentVCState.asin;
+
+  var fiche4 = null;
+  if (asin && agentVCState.market) {
+    var _res = (typeof seoResults !== 'undefined' && seoResults[asin]) || {};
+    var _mkt = agentVCState.market;
+    if (_res[_mkt] && !_res[_mkt].error) {
+      fiche4 = _res[_mkt];
+    } else if (c.ficheOptimisee && c.ficheOptimisee[asin] && c.ficheOptimisee[asin][_mkt] && !c.ficheOptimisee[asin][_mkt].error) {
+      fiche4 = c.ficheOptimisee[asin][_mkt];
+    }
+  }
+  var prog4 = asin ? ((typeof seoResults !== 'undefined' && seoResults[asin] && seoResults[asin]._progress) || null) : null;
+  var isGenerating = (typeof seoLoading !== 'undefined' && seoLoading && (typeof seoDrawerAsin !== 'undefined' && seoDrawerAsin === asin));
+  var vcStatus = asin && c.ficheOptimisee && c.ficheOptimisee[asin] ? c.ficheOptimisee[asin].vcUpdateStatus : null;
+  var bkw = asin ? (
+    (typeof seoResults !== 'undefined' && seoResults[asin] && seoResults[asin].backendKW) ||
+    (c.ficheOptimisee && c.ficheOptimisee[asin] && c.ficheOptimisee[asin].backendKW) || ''
+  ) : '';
+
+  var h = '';
+  h += '<style>';
+  h += '.avc-wrap{display:flex;flex-direction:column;height:100%;}';
+  h += '.avc-topbar{background:var(--bg2,#fff);border-bottom:1px solid var(--bd);padding:0 18px;display:flex;align-items:center;gap:10px;height:46px;flex-shrink:0;}';
+  h += '.avc-main{padding:18px 28px;max-width:700px;width:100%;margin:0 auto;overflow-y:auto;flex:1;}';
+  h += '.avc-sw{display:flex;align-items:flex-start;gap:12px;margin-bottom:10px;}';
+  h += '.avc-si{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;margin-top:2px;}';
+  h += '.avc-si.pending{background:var(--bg2);border:2px solid var(--bd);color:var(--tx3);}';
+  h += '.avc-si.active{background:var(--or);border:2px solid var(--or);color:#000;}';
+  h += '.avc-si.done{background:var(--g);border:2px solid var(--g);color:#fff;}';
+  h += '.avc-sc{flex:1;background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden;min-width:0;}';
+  h += '.avc-sc.active-card{border-color:var(--or);box-shadow:0 0 0 3px rgba(255,153,0,.12);}';
+  h += '.avc-sc.done-card .avc-sh{background:var(--s2);border-bottom:none;}';
+  h += '.avc-sh{padding:11px 14px;display:flex;align-items:center;gap:8px;}';
+  h += '.avc-st{font-size:12px;font-weight:700;}';
+  h += '.avc-ss{font-size:11px;color:var(--tx3);margin-top:1px;}';
+  h += '.avc-sb{padding:14px 16px;border-top:1px solid var(--bd);}';
+  h += '.avc-mkt-pill{font-size:11px;padding:5px 11px;border-radius:20px;border:1.5px solid var(--bd2);cursor:pointer;background:var(--bg2);color:var(--tx2);font-family:inherit;font-weight:500;display:inline-block;margin:2px;}';
+  h += '.avc-mkt-pill.on{background:var(--or);color:#000;border-color:var(--or);font-weight:700;}';
+  h += '.avc-pb{height:4px;background:var(--bd);border-radius:2px;overflow:hidden;margin-bottom:6px;}';
+  h += '.avc-pf{height:100%;background:var(--or);border-radius:2px;transition:width .4s;}';
+  h += '.avc-ft{font-size:11px;padding:9px 11px;border-radius:7px;border:1px solid var(--bd);background:var(--s2);line-height:1.5;margin-bottom:8px;}';
+  h += '.avc-bl{font-size:11px;padding:7px 9px;border-radius:7px;background:var(--s2);border:1px solid var(--bd);line-height:1.4;display:flex;gap:7px;margin-bottom:4px;}';
+  h += '.avc-kw{font-size:10px;padding:7px 9px;border-radius:7px;border:1px solid var(--bd);background:var(--s2);color:var(--tx2);line-height:1.5;margin-bottom:8px;}';
+  h += '.avc-sb-box{background:#1C1C1A;border-radius:7px;padding:12px;margin-bottom:10px;}';
+  h += '.avc-sb-box pre{color:#A8E6CF;font-size:9px;font-family:var(--mono,monospace);white-space:pre-wrap;word-break:break-all;line-height:1.6;max-height:180px;overflow-y:auto;}';
+  h += '.avc-done{display:flex;align-items:center;gap:8px;padding:10px 12px;background:#D1FAE5;border:1px solid #6EE7B7;border-radius:7px;font-size:11px;color:#065F46;font-weight:500;}';
+  h += '.avc-pc{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:7px;}';
+  h += '.avc-warn{background:#FEF3C7;border:1px solid #F59E0B;border-radius:7px;padding:8px 10px;font-size:11px;color:#78350F;display:flex;gap:6px;margin-bottom:10px;}';
+  h += '</style>';
+
+  h += '<div class="avc-wrap">';
+  h += '<div class="avc-topbar">';
+  h += '<button class="btn btn-xs" onclick="go(\'asins\')">← Retour</button>';
+  h += '<div style="width:1px;height:16px;background:var(--bd)"></div>';
+  h += '<div style="font-size:13px;font-weight:700">🚀 Agent SEO + Vendor Central</div>';
+  h += '<div style="margin-left:auto;font-size:11px;color:var(--tx3)">' + esc(c.name) + '</div>';
+  h += '</div>';
+  h += '<div class="avc-main">';
+
+  // Étape 1
+  var s1done = step > 1;
+  var s1sub = s1done ? (agentVCState.isNew ? 'Nouvel article · ' + agentVCState.newBrand + ' ' + agentVCState.newRef : asin + (agentVCState.title ? ' · ' + agentVCState.title.substring(0,45) + (agentVCState.title.length > 45 ? '…' : '') : '')) : 'ASIN existant ou nouvelle référence à créer';
+  h += _avcRenderStep(1, 'Sélectionner l\'ASIN', s1sub, step, _avcBody1(c));
+
+  // Étape 2
+  if (step >= 2) {
+    var s2sub = step > 2 ? 'amazon' + agentVCState.market : 'Sur quel Amazon modifier la fiche ?';
+    h += _avcRenderStep(2, 'Marché cible', s2sub, step, _avcBody2(mkts));
+  }
+
+  // Étape 3
+  if (step >= 3) {
+    var s3sub = step > 3 ? 'VC: ' + agentVCState.vcCode + (agentVCState.sku ? ' · SKU: ' + agentVCState.sku : '') : 'Identifiants Vendor Central';
+    h += _avcRenderStep(3, 'Paramètres Vendor Central', s3sub, step, _avcBody3(c));
+  }
+
+  // Étape 4
+  if (step >= 4) {
+    var s4sub = step > 4 ? 'Fiche générée — ' + ((fiche4 && fiche4.bullets) ? fiche4.bullets.filter(Boolean).length : 0) + ' bullets · ' + (bkw ? bkw.split(/\s+/).filter(Boolean).length : 0) + ' KW' : 'L\'Agent génère la fiche complète';
+    h += _avcRenderStep(4, 'Fiche SEO optimisée', s4sub, step, _avcBody4(asin, fiche4, isGenerating, prog4, bkw));
+  }
+
+  // Étape 5
+  if (step >= 5) {
+    h += _avcRenderStep(5, 'Pousser dans Vendor Central', 'Script pour Claude in Chrome', step, _avcBody5(asin, fiche4, vcStatus, bkw, c));
+  }
+
+  h += '</div></div>';
+  return h;
+}
+
+function _avcRenderStep(n, title, subtitle, currentStep, body) {
+  var st = n < currentStep ? 'done' : n === currentStep ? 'active' : 'pending';
+  var h = '<div class="avc-sw">';
+  h += '<div class="avc-si ' + st + '">' + (st === 'done' ? '✓' : n) + '</div>';
+  h += '<div class="avc-sc' + (st === 'active' ? ' active-card' : st === 'done' ? ' done-card' : '') + '">';
+  h += '<div class="avc-sh"><div><div class="avc-st">' + esc(title) + '</div><div class="avc-ss">' + esc(subtitle) + '</div></div></div>';
+  if (st === 'active') h += '<div class="avc-sb">' + body + '</div>';
+  h += '</div></div>';
+  return h;
+}
+
+function _avcBody1(c) {
+  var h = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">';
+  h += '<input id="avc-asin-in" style="flex:1;min-width:0;font-family:var(--mono,monospace);font-size:13px;padding:9px 12px;border:2px solid var(--bd2);border-radius:var(--rd);background:var(--bg2);color:var(--tx);outline:none;letter-spacing:.05em;" placeholder="B0XXXXXXXXX" maxlength="10" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key===\'Enter\')avcLookupAsin()">';
+  h += '<button class="btn btn-p" onclick="avcLookupAsin()">🔍 Rechercher</button>';
+  h += '</div>';
+  h += '<div id="avc-asin-err" style="display:none;font-size:11px;color:var(--r);margin-bottom:8px">❌ ASIN non trouvé dans le catalogue.</div>';
+  h += '<div style="border-top:1px solid var(--bd);padding-top:10px;display:flex;align-items:center;gap:8px">';
+  h += '<span style="font-size:11px;color:var(--tx3)">Pas encore dans VC ?</span>';
+  h += '<button class="btn btn-xs" style="border-style:dashed" onclick="avcToggleNewForm()">➕ Créer un nouvel article</button>';
+  h += '</div>';
+  if (agentVCState.newFormVisible) {
+    h += '<div style="margin-top:12px;padding:12px;background:#FFF8E6;border:1.5px dashed var(--or);border-radius:7px">';
+    h += '<div style="font-size:12px;font-weight:700;margin-bottom:10px">📦 Informations du nouvel article</div>';
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">';
+    h += '<div><div style="font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Référence *</div><input id="avc-new-ref" style="font-family:var(--mono,monospace);width:100%;font-size:11px;padding:6px 9px;border:1.5px solid var(--bd);border-radius:6px;background:var(--bg2);color:var(--tx);outline:none;" value="' + esc(agentVCState.newRef) + '" placeholder="Ex: 043902" oninput="agentVCState.newRef=this.value;avcCheckNewForm()"></div>';
+    h += '<div><div style="font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Marque *</div><input id="avc-new-brand" style="width:100%;font-size:11px;padding:6px 9px;border:1.5px solid var(--bd);border-radius:6px;background:var(--bg2);color:var(--tx);outline:none;font-family:inherit;" value="' + esc(agentVCState.newBrand) + '" placeholder="Ex: RHINO, COGEX" oninput="agentVCState.newBrand=this.value;avcCheckNewForm()"></div>';
+    h += '</div>';
+    h += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Nom du produit *</div><input id="avc-new-name" style="width:100%;font-size:11px;padding:6px 9px;border:1.5px solid var(--bd);border-radius:6px;background:var(--bg2);color:var(--tx);outline:none;font-family:inherit;" value="' + esc(agentVCState.newName) + '" placeholder="Ex: Tenaille Russe 200mm" oninput="agentVCState.newName=this.value;avcCheckNewForm()"></div>';
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">';
+    h += '<div><div style="font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Catégorie Amazon</div><input id="avc-new-cat" style="width:100%;font-size:11px;padding:6px 9px;border:1.5px solid var(--bd);border-radius:6px;background:var(--bg2);color:var(--tx);outline:none;font-family:inherit;" value="' + esc(agentVCState.newCat) + '" placeholder="Outillage à main" oninput="agentVCState.newCat=this.value"></div>';
+    h += '<div><div style="font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">EAN (optionnel)</div><input id="avc-new-ean" style="font-family:var(--mono,monospace);width:100%;font-size:11px;padding:6px 9px;border:1.5px solid var(--bd);border-radius:6px;background:var(--bg2);color:var(--tx);outline:none;" value="' + esc(agentVCState.newEan) + '" placeholder="3700000000000" oninput="agentVCState.newEan=this.value"></div>';
+    h += '</div>';
+    h += '<button class="btn btn-p" id="avc-new-go" ' + (!agentVCState.newRef || !agentVCState.newBrand || !agentVCState.newName ? 'disabled' : '') + ' onclick="avcConfirmNewArticle()">✨ Créer et générer la fiche SEO</button>';
+    h += '</div>';
+  }
+  return h;
+}
+
+function _avcBody2(mkts) {
+  var flags = { '.fr':'🇫🇷', '.es':'🇪🇸', '.de':'🇩🇪', '.nl':'🇳🇱', '.it':'🇮🇹', '.be':'🇧🇪', '.uk':'🇬🇧', '.pl':'🇵🇱', '.se':'🇸🇪' };
+  var h = '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px">';
+  mkts.forEach(function(m) {
+    h += '<button class="avc-mkt-pill' + (agentVCState.market === m ? ' on' : '') + '" onclick="avcSetMarket(\'' + m + '\')">' + (flags[m] || '') + ' ' + esc(m) + '</button>';
+  });
+  h += '</div>';
+  h += '<div style="display:flex;justify-content:flex-end"><button class="btn btn-p" onclick="avcConfirmMarket()">Confirmer le marché →</button></div>';
+  return h;
+}
+
+function _avcBody3(c) {
+  var h = '';
+  if (!c.vendorCode) h += '<div class="avc-warn">⚠️ <span>Vendor Code non renseigné sur ce client. Complétez la fiche client ou saisissez-le ci-dessous.</span></div>';
+  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
+  h += '<div><div style="font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Vendor Code</div>';
+  h += '<input id="avc-vc-code" style="font-family:var(--mono,monospace);width:100%;font-size:12px;padding:7px 9px;border:1.5px solid var(--bd2);border-radius:6px;background:var(--bg2);color:var(--tx);outline:none;" value="' + esc(agentVCState.vcCode || c.vendorCode || '') + '" placeholder="Ex: COGE3"></div>';
+  h += '<div><div style="font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">SKU (optionnel)</div>';
+  h += '<input id="avc-sku" style="font-family:var(--mono,monospace);width:100%;font-size:12px;padding:7px 9px;border:1.5px solid var(--bd2);border-radius:6px;background:var(--bg2);color:var(--tx);outline:none;" value="' + esc(agentVCState.sku || '') + '" placeholder="Laisser vide si inconnu"></div>';
+  h += '</div>';
+  h += '<div style="display:flex;justify-content:flex-end"><button class="btn btn-p" onclick="avcConfirmParams()">Suivant →</button></div>';
+  return h;
+}
+
+function _avcBody4(asin, fiche, isGenerating, prog, bkw) {
+  var h = '';
+  if (isGenerating) {
+    var pct = (prog && prog.pct) || 0;
+    var phase = (prog && prog.phase) || '⏳ Traitement en cours…';
+    h += '<div class="avc-pb"><div class="avc-pf" style="width:' + pct + '%"></div></div>';
+    h += '<div style="font-size:11px;color:var(--tx3)">' + esc(phase) + '</div>';
+    return h;
+  }
+  if (fiche) {
+    var tl = fiche.titre ? fiche.titre.length : 0;
+    h += '<div style="font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">📝 Titre (' + tl + ' car.)</div>';
+    h += '<div class="avc-ft">' + esc(fiche.titre || '') + '</div>';
+    h += '<div style="font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">• Bullets</div>';
+    (fiche.bullets || []).forEach(function(b, i) {
+      if (!b) return;
+      h += '<div class="avc-bl"><span style="font-size:10px;font-weight:700;color:var(--tx3);flex-shrink:0;min-width:14px">' + (i+1) + '</span><span>' + esc(b) + '</span></div>';
+    });
+    if (bkw) {
+      var kwCount = bkw.split(/\s+/).filter(Boolean).length;
+      h += '<div style="font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px">🔑 Backend KW (' + kwCount + ' mots)</div>';
+      h += '<div class="avc-kw">' + esc(bkw) + '</div>';
+    }
+    if (fiche.images && fiche.images.length) {
+      h += '<div style="font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">🖼 Préconisations images</div>';
+      fiche.images.forEach(function(img) {
+        var txt = typeof img === 'string' ? img : ((img.emplacement || '') + (img.scene ? ' — ' + img.scene : ''));
+        h += '<div style="font-size:10px;padding:5px 8px;border-radius:5px;background:var(--s2);border:1px solid var(--bd);color:var(--tx2);margin-bottom:3px">📷 ' + esc(txt) + '</div>';
+      });
+    }
+    h += '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">';
+    h += '<button class="btn btn-sm" onclick="avcStartGeneration()">🔄 Régénérer</button>';
+    h += '<button class="btn btn-p" style="flex:1" onclick="avcGoToVC()">📤 Valider et pousser dans VC →</button>';
+    h += '</div>';
+    return h;
+  }
+  h += '<div style="text-align:center;padding:14px 0">';
+  h += '<div style="font-size:26px;margin-bottom:10px">🤖</div>';
+  h += '<div style="font-size:13px;font-weight:700;margin-bottom:5px">Prêt à générer</div>';
+  h += '<div style="font-size:11px;color:var(--tx3);margin-bottom:16px;line-height:1.5">Analyse de la fiche Amazon + concurrents<br>→ titre · bullets · backend KW · préconisations images</div>';
+  h += '<button class="btn btn-p" onclick="avcStartGeneration()">✨ Générer la fiche SEO</button>';
+  h += '</div>';
+  return h;
+}
+
+function _avcBody5(asin, fiche, vcStatus, bkw, c) {
+  var asinJ = JSON.stringify(asin);
+  if (vcStatus === 'success') {
+    var ld = c.ficheOptimisee && c.ficheOptimisee[asin] && c.ficheOptimisee[asin].lastVCUpdate ? new Date(c.ficheOptimisee[asin].lastVCUpdate).toLocaleDateString('fr-FR') : '';
+    return '<div class="avc-done">✅ Fiche mise à jour dans Vendor Central · amazon' + esc(agentVCState.market || '.fr') + (ld ? ' · ' + ld : '') + '</div>';
+  }
+  var h = '';
+  if (vcStatus !== 'pending') {
+    h += '<button class="btn btn-p" style="width:100%;margin-bottom:10px" onclick="avcGenerateScript()">📋 Générer le script Claude in Chrome</button>';
+  } else {
+    h += '<div style="display:flex;gap:8px;margin-bottom:10px;align-items:center">';
+    h += '<button class="btn btn-sm" onclick="avcGenerateScript()">🔄 Regénérer</button>';
+    h += '<span style="font-size:11px;color:var(--g);font-weight:600">✅ Script copié !</span>';
+    h += '<span style="margin-left:auto;font-size:10px;padding:2px 8px;border-radius:20px;background:#FEF3C7;color:#78350F;font-weight:700">⏳ En cours</span>';
+    h += '</div>';
+    if (fiche) {
+      var preview = buildVCModifyPrompt(asin, agentVCState.market, fiche, c);
+      h += '<div class="avc-sb-box"><pre>' + esc(preview.substring(0, 900)) + (preview.length > 900 ? '\n…[tronqué]' : '') + '</pre></div>';
+    }
+    h += '<button class="btn btn-g" style="width:100%" onclick="seoMarkVCDone(' + asinJ + ')">✅ Confirmer — fiche mise à jour dans VC</button>';
+  }
+  return h;
+}
+
+function avcLookupAsin() {
+  var input = document.getElementById('avc-asin-in');
+  var val = input ? input.value.trim().toUpperCase() : '';
+  if (!val) return;
+  var c = cl();
+  if (!c) return;
+  var found = c.asins.find(function(x){ return x.asin === val; });
+  var errEl = document.getElementById('avc-asin-err');
+  if (!found) {
+    if (errEl) errEl.style.display = 'block';
+    if (input) input.style.borderColor = 'var(--r)';
+    return;
+  }
+  agentVCState.asin = val;
+  agentVCState.title = found.title || val;
+  agentVCState.sku = found.sku || '';
+  agentVCState.step = 2;
+  var mkts = c.markets && c.markets.length ? c.markets : [c.mainMarket || '.fr'];
+  agentVCState.market = mkts[0];
+  if (mkts.length === 1) {
+    agentVCState.step = 3;
+    if (c.vendorCode) { agentVCState.vcCode = c.vendorCode; agentVCState.step = 4; }
+  }
+  render();
+}
+
+function avcToggleNewForm() {
+  agentVCState.newFormVisible = !agentVCState.newFormVisible;
+  render();
+}
+
+function avcCheckNewForm() {
+  var btn = document.getElementById('avc-new-go');
+  if (btn) btn.disabled = !(agentVCState.newRef && agentVCState.newBrand && agentVCState.newName);
+}
+
+function avcConfirmNewArticle() {
+  if (!agentVCState.newRef || !agentVCState.newBrand || !agentVCState.newName) return;
+  agentVCState.isNew = true;
+  agentVCState.asin = 'NEW-' + agentVCState.newRef;
+  agentVCState.title = agentVCState.newBrand + ' ' + agentVCState.newRef + ' — ' + agentVCState.newName;
+  agentVCState.sku = agentVCState.newRef;
+  agentVCState.step = 2;
+  var c = cl();
+  var mkts = c && c.markets && c.markets.length ? c.markets : [(c && c.mainMarket) || '.fr'];
+  agentVCState.market = mkts[0];
+  if (mkts.length === 1) {
+    agentVCState.step = 3;
+    if (c && c.vendorCode) { agentVCState.vcCode = c.vendorCode; agentVCState.step = 4; }
+  }
+  render();
+}
+
+function avcSetMarket(mkt) {
+  agentVCState.market = mkt;
+  render();
+}
+
+function avcConfirmMarket() {
+  if (!agentVCState.market) return;
+  var c = cl();
+  if (c && c.vendorCode) { agentVCState.vcCode = c.vendorCode; agentVCState.step = 4; }
+  else { agentVCState.step = 3; }
+  render();
+}
+
+function avcConfirmParams() {
+  var vcEl = document.getElementById('avc-vc-code');
+  var skuEl = document.getElementById('avc-sku');
+  agentVCState.vcCode = (vcEl ? vcEl.value.trim() : '') || '[À_COMPLÉTER]';
+  agentVCState.sku = skuEl ? skuEl.value.trim() : '';
+  agentVCState.step = 4;
+  render();
+}
+
+function avcStartGeneration() {
+  var asin = agentVCState.asin;
+  var market = agentVCState.market;
+  if (!asin || !market) return;
+  var c = cl();
+  var motcle = (typeof seoMotcle !== 'undefined' && seoMotcle[asin]) || (typeof extractSearchKeyword === 'function' ? extractSearchKeyword(asin, c) : '');
+  seoDrawerAsin = asin;
+  runSEOFiche(asin, market, motcle);
+}
+
+function avcGoToVC() {
+  agentVCState.step = 5;
+  render();
+}
+
+function avcGenerateScript() {
+  var c = cl();
+  if (!c) return;
+  var asin = agentVCState.asin;
+  var market = agentVCState.market;
+  var fiche = (typeof seoResults !== 'undefined' && seoResults[asin] && seoResults[asin][market] && !seoResults[asin][market].error)
+    ? seoResults[asin][market]
+    : (c.ficheOptimisee && c.ficheOptimisee[asin] && c.ficheOptimisee[asin][market]);
+  if (!fiche) { showToast('Fiche introuvable pour ce marché.', 'alr-r'); return; }
+  var prompt = buildVCModifyPrompt(asin, market, fiche, c);
+  navigator.clipboard.writeText(prompt).then(function() {
+    if (!c.ficheOptimisee) c.ficheOptimisee = {};
+    if (!c.ficheOptimisee[asin]) c.ficheOptimisee[asin] = {};
+    c.ficheOptimisee[asin].vcUpdateStatus = 'pending';
+    c.ficheOptimisee[asin].vcUpdateAt = new Date().toISOString();
+    save();
+    showToast('✅ Script copié ! Collez-le dans Claude in Chrome.', 'alr-g');
+    render();
+  }).catch(function() { showToast('Erreur clipboard — copiez manuellement.', 'alr-r'); });
+}
+
 function refreshSEODrawer() {
+  if (typeof screen !== 'undefined' && screen === 'agentvc') { render(); return; }
   var drawer = document.getElementById('seo-drawer');
   if (!drawer) return;
   var asin = seoDrawerAsin;
@@ -778,7 +1149,10 @@ function renderSEOScreen() {
       h += '<div style="font-size:10px;color:var(--tx3);font-family:var(--mono)">' + esc(a.asin) + ' · ' + fmtEur(getRevenue(a,c)||0) + '</div>';
       h += '</div>';
       h += '<div style="flex-shrink:0;font-size:10px;color:var(--tx3)">' + icon + ' ' + label + '</div>';
-      h += '<button class="btn btn-xs btn-p" onclick="openSEODrawer('+asinJ+')">✍️ Générer</button>';
+      h += '<div style="display:flex;gap:4px">';
+      h += '<button class="btn btn-xs" onclick="openSEODrawer('+asinJ+')">🔍 SEO</button>';
+      h += '<button class="btn btn-xs btn-p" onclick="goAgentVC('+asinJ+')">📤 VC</button>';
+      h += '</div>';
       h += '</div>';
     });
     h += '</div>';
