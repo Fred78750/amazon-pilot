@@ -20,7 +20,9 @@ jobs:
 
       - name: Deploy to S3 (Recette)
         run: |
-          aws s3 cp amazon-pilot-latest.html s3://amazon-pilot-recette/index.html \
+          LATEST=$(ls amazon-pilot-v*.html | sort -V | tail -1)
+          echo "Deploying $LATEST"
+          aws s3 cp "$LATEST" s3://amazon-pilot-recette/index.html \
             --cache-control "no-cache,no-store,must-revalidate"
 
       - name: Invalidate CloudFront (Recette)
