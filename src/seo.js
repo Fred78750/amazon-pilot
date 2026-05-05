@@ -69,16 +69,18 @@ function seoRecordAction(asin, route, supplierCodes, markets) {
   render();
 }
 
-function buildVCModifyPrompt(asin, market, fiche, c) {
+function buildVCModifyPrompt(asin, market, fiche, c, sku) {
   var vendorCode = (c && c.vendorCode) ? c.vendorCode : '[À_COMPLÉTER]';
-  var bullets = fiche.bullets || ['', '', '', '', ''];
-  var backendKW = (c && c.ficheOptimisee && c.ficheOptimisee[asin] && c.ficheOptimisee[asin].backendKW)
-    ? c.ficheOptimisee[asin].backendKW
-    : ((typeof seoResults !== 'undefined' && seoResults[asin] && seoResults[asin].backendKW)
-      ? seoResults[asin].backendKW : '');
+  var mkt = market || '.fr';
+  var ficheData = (typeof seoResults !== 'undefined' && seoResults[asin] && seoResults[asin][mkt])
+    ? seoResults[asin][mkt] : (c && c.ficheOptimisee && c.ficheOptimisee[asin] && c.ficheOptimisee[asin][mkt] ? c.ficheOptimisee[asin][mkt] : {});
+  var backendKW = ficheData.backendKW || fiche.backendKW || '';
+  var description = ficheData.description || fiche.description || '';
+  var bullets = fiche.bullets || ficheData.bullets || ['', '', '', '', ''];
+  var vcUrl = 'https://vendorcentral.amazon' + mkt + '/abis/listing/edit/product_details?sku=' + (sku || asin) + '&asin=' + asin + '&vendorCode=' + vendorCode + '#product_details';
   var lines = [
     'Bonjour. Je suis Fred, propriétaire du compte Amazon Pilot.',
-    'Tu vas modifier la fiche produit ' + asin + ' sur Vendor Central France.',
+    'Tu vas modifier la fiche produit ' + asin + ' sur Vendor Central' + (mkt !== '.fr' ? ' amazon' + mkt : ' France') + '.',
     '',
     'RÈGLES ABSOLUES :',
     '- Demande-moi confirmation avant de cliquer "Enregistrer et terminer"',
@@ -87,13 +89,13 @@ function buildVCModifyPrompt(asin, market, fiche, c) {
     '',
     'ÉTAPE 1 — Navigation',
     'Navigue vers :',
-    'https://vendorcentral.amazon.fr/abis/listing/edit/product_details?asin=' + asin + '&vendorCode=' + vendorCode + '#product_details',
+    vcUrl,
     'Attends le chargement complet (les textareas doivent être visibles).',
     '',
     'ÉTAPE 2 — Remplir le titre',
     'Sélecteur : textarea[name="item_name-0-value"]',
     'Contenu EXACT à saisir :',
-    fiche.titre || '',
+    fiche.titre || ficheData.titre || '',
     '',
     'ÉTAPE 3 — Remplir les bullets',
     'bullet_point-0-value : ' + (bullets[0] || ''),
@@ -105,7 +107,7 @@ function buildVCModifyPrompt(asin, market, fiche, c) {
     'ÉTAPE 4 — Remplir la description',
     'Sélecteur : textarea[name="rtip_product_description-0-value"]',
     'Contenu EXACT :',
-    fiche.description || '',
+    description,
     '',
     'ÉTAPE 5 — Remplir les mots-clés',
     'Sélecteur : input[name="generic_keyword-0-value"]',
@@ -415,8 +417,16 @@ var agentVCState = {
   asin: null, title: '', market: null, vcCode: '', sku: '',
   step: 1, isNew: false,
   newRef: '', newBrand: '', newName: '', newCat: '', newEan: '',
-  newFormVisible: false
+  newFormVisible: false,
+  expandedSteps: new Set()
 };
+
+function avcToggleStep(n) {
+  if (!agentVCState.expandedSteps) agentVCState.expandedSteps = new Set();
+  if (agentVCState.expandedSteps.has(n)) agentVCState.expandedSteps.delete(n);
+  else agentVCState.expandedSteps.add(n);
+  render();
+}
 
 function renderAgentVC() {
   var c = cl();
@@ -425,7 +435,7 @@ function renderAgentVC() {
   if (agentVCParam !== null) {
     var initAsin = agentVCParam;
     agentVCParam = null;
-    agentVCState = { asin: null, title: '', market: null, vcCode: '', sku: '', step: 1, isNew: false, newRef: '', newBrand: '', newName: '', newCat: '', newEan: '', newFormVisible: false };
+    agentVCState = { asin: null, title: '', market: null, vcCode: '', sku: '', step: 1, isNew: false, newRef: '', newBrand: '', newName: '', newCat: '', newEan: '', newFormVisible: false, expandedSteps: new Set() };
     if (initAsin) {
       agentVCState.asin = initAsin;
       var _a = c.asins.find(function(x){ return x.asin === initAsin; });
@@ -539,11 +549,14 @@ function renderAgentVC() {
 
 function _avcRenderStep(n, title, subtitle, currentStep, body) {
   var st = n < currentStep ? 'done' : n === currentStep ? 'active' : 'pending';
+  var expanded = st === 'done' && agentVCState.expandedSteps && agentVCState.expandedSteps.has(n);
+  var chevron = st === 'done' ? ' <span style="font-size:10px;color:var(--tx3);margin-left:auto">' + (expanded ? '▼' : '▶') + '</span>' : '';
+  var headerClick = st === 'done' ? ' onclick="avcToggleStep(' + n + ')" style="cursor:pointer"' : '';
   var h = '<div class="avc-sw">';
   h += '<div class="avc-si ' + st + '">' + (st === 'done' ? '✓' : n) + '</div>';
   h += '<div class="avc-sc' + (st === 'active' ? ' active-card' : st === 'done' ? ' done-card' : '') + '">';
-  h += '<div class="avc-sh"><div><div class="avc-st">' + esc(title) + '</div><div class="avc-ss">' + esc(subtitle) + '</div></div></div>';
-  if (st === 'active') h += '<div class="avc-sb">' + body + '</div>';
+  h += '<div class="avc-sh"' + headerClick + '><div style="flex:1"><div class="avc-st">' + esc(title) + '</div><div class="avc-ss">' + esc(subtitle) + '</div></div>' + chevron + '</div>';
+  if (st === 'active' || expanded) h += '<div class="avc-sb">' + body + '</div>';
   h += '</div></div>';
   return h;
 }
@@ -768,7 +781,7 @@ function avcGenerateScript() {
     ? seoResults[asin][market]
     : (c.ficheOptimisee && c.ficheOptimisee[asin] && c.ficheOptimisee[asin][market]);
   if (!fiche) { showToast('Fiche introuvable pour ce marché.', 'alr-r'); return; }
-  var prompt = buildVCModifyPrompt(asin, market, fiche, c);
+  var prompt = buildVCModifyPrompt(asin, market, fiche, c, agentVCState.sku);
   navigator.clipboard.writeText(prompt).then(function() {
     if (!c.ficheOptimisee) c.ficheOptimisee = {};
     if (!c.ficheOptimisee[asin]) c.ficheOptimisee[asin] = {};
