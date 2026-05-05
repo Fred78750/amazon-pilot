@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 5 mai 2026
+**Dernière mise à jour :** 5 mai 2026 (v3.4.4)
 
 ---
 
@@ -16,7 +16,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | v3.2.24 | https://amazon.foliow.app |
-| Recette (staging) | v3.4.3 | https://d9xny9istvl53.cloudfront.net |
+| Recette (staging) | v3.4.4 | https://d9xny9istvl53.cloudfront.net |
 
 ---
 
@@ -77,6 +77,11 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 - ISO week numbers (`targetWeek = currentWeek - 1`) pour détection données manquantes
 - Deploy : `--cache-control "no-cache,no-store,must-revalidate"` sur tout upload S3
 
+### Localisation des fonctions SEO (gravée — ne pas chercher dans core.js)
+- `buildSEOPrompt`, `parseSEOResponse`, `renderAgentVC` → **`src/seo.js`**
+- Tous les helpers `avc*` (`avcStepWrap`, `avcToggleStep`, `avcLookupAsin`, `avcConfirmMarket`, `avcConfirmSKU`, `avcLaunchSEO`, `avcCopyScript`, `avcMarkDone`, etc.) → **`src/seo.js`**
+- `runSEOFiche`, `callAPI`, `askClaude` → **`src/core.js`**
+
 ### Règles patches
 - Chaque modification = un `str_replace` avec ancien texte exact et nouveau texte exact
 - Si la ligne exacte n'est pas identifiable → STOP et demander à Fred
@@ -95,24 +100,21 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-## TÂCHES EN COURS (session v3.4.3)
+## TÂCHES EN COURS (session v3.4.4 — toutes terminées)
 
-- [x] Bug URL `buildVCModifyPrompt` → CORRIGÉ dans v3.4.1
-- [x] Bug chemins `backendKW`/`description` → CORRIGÉ dans v3.4.1
-- [x] Fix `parseSEOResponse` : `.replace(/\*\*/g, '')` sur `result.description` → `src/seo.js` (pas core.js)
-- [x] Fix `buildSEOPrompt` : directive DESCRIPTION HTML structurée (5 blocs) → `src/seo.js`
+- [x] Fix `parseSEOResponse` : strip `**` sur description → `src/seo.js`
+- [x] Fix `buildSEOPrompt` : directive DESCRIPTION HTML structurée 5 blocs → `src/seo.js`
 - [x] Fix `buildSEOPrompt` : directive BACKEND_KEYWORDS 5 blocs + liste INTERDIT → `src/seo.js`
-- [x] Fix bloc INTERDIT : ajout termes "incassable", "homologué", "certifié", "compatible tous modèles" → `src/seo.js`
-
-**Note architecture :** les fonctions SEO (`buildSEOPrompt` ×2 + bloc INTERDIT + `parseSEOResponse`) sont dans `src/seo.js`, pas `src/core.js`.
+- [x] Fix bloc INTERDIT : ajout "incassable", "homologué", "certifié", "compatible tous modèles" → `src/seo.js`
+- [x] Strip `**` sur 4 champs synthèse (`positionnement`, `leviers`, `erreurs`, `opportunite`) → `src/seo.js`
+- [x] Guard `apiKey` dans `runSEOFiche` → `src/core.js`
+- [x] Refonte `renderAgentVC` : wizard 5 étapes, `avcStepWrap`, accordéon, SKU obligatoire étape 3, multi-VC étape 5 → `src/seo.js`
 
 ---
 
-## TÂCHES SUIVANTES (ne pas toucher avant GO Fred)
+## TÂCHES SUIVANTES
 
-- Accordéon étapes validées (clic déplier/replier sur étapes ✓) → `src/seo.js`
-- SKU obligatoire étape 3 (bouton Suivant bloqué si vide) → `src/seo.js`
-- Multi-vendor codes étape 5 (un script par VC, SKU éditable par VC) → `src/seo.js`
+_(aucune tâche en attente — en attente du prochain brief de Fred)_
 
 ---
 
@@ -124,16 +126,20 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Chemin `seoResults[asin][market]` avec market | backendKW et description stockés par marché, pas à plat | mai 2026 |
 | `amazon-pilot-latest.html` hors `.gitignore` | CI déployait ancienne version — fix `ls amazon-pilot-v*.html | sort -V | tail -1` dans deploy.yml | mai 2026 |
 | Plus de livraison HTML par Claude chat | Fichiers trop gros — Claude Code génère et dépose | mai 2026 |
+| Fonctions SEO dans `src/seo.js` pas `src/core.js` | buildSEOPrompt, parseSEOResponse, renderAgentVC, helpers avc* | mai 2026 |
 
 ---
 
-## TESTS À FAIRE AVANT MERGE MAIN (v3.4.3)
+## TESTS À FAIRE AVANT MERGE MAIN (v3.4.4)
 
 - [ ] Générer fiche SEO sur B07DPCH7XC → vérifier description = HTML structuré (`<p>`, `<strong>`, `<ul><li>`) sans `**`
-- [ ] Vérifier backend KW présents dans le script VC généré
+- [ ] Vérifier champs synthèse (positionnement, leviers, erreurs, opportunite) sans `**`
+- [ ] Tester guard apiKey vide → message `__ERR_NOKEY__` (pas d'erreur 401 muette)
+- [ ] Wizard Agent VC : étape 3 bouton Confirmer bloqué si SKU vide
+- [ ] Wizard Agent VC : étape 5 multi-VC → un script par vendor code (COGEX + 3J6MN)
 - [ ] Tester URL VC : COGEX + SKU `B07DPCH7XC` → URL correcte
 - [ ] Tester URL VC : 3J6MN + SKU `643416` → URL correcte
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 5 mai 2026 (v3.4.3)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 5 mai 2026 (v3.4.4)**
