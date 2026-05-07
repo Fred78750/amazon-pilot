@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 5 mai 2026 (v3.4.8)
+**Dernière mise à jour :** 7 mai 2026 (v3.4.9)
 
 ---
 
@@ -16,7 +16,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | v3.2.24 | https://amazon.foliow.app |
-| Recette (staging) | v3.4.8 | https://d9xny9istvl53.cloudfront.net |
+| Recette (staging) | v3.4.9 | https://d9xny9istvl53.cloudfront.net |
 
 ---
 
@@ -108,7 +108,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-## TÂCHES EN COURS (session v3.4.8 — toutes terminées)
+## TÂCHES EN COURS (session v3.4.9 — toutes terminées)
 
 - [x] Fix `parseSEOResponse` : strip `**` sur description → `src/seo.js`
 - [x] Fix `buildSEOPrompt` : directive DESCRIPTION HTML structurée 5 blocs → `src/seo.js`
@@ -123,6 +123,9 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 - [x] Fix `go('agentseo')` → `go('seo')` : écran vide sur "Voir fiche complète" et "← Retour" → `src/seo.js`
 - [x] Fix R1 (Cowork) : `backendKW` per-market dans `showVCConfirmModal` → `src/seo.js`
 - [x] Fix R2 (Cowork) : `seoLaunchModify` route vers `goAgentVC` si multi-VC → `src/seo.js`
+- [x] PATCH 1–4 : wizard Agent VC complet (seoLaunchModify, _doVCCopy supprimé, showVCConfirmModal supprimé, bouton Optimiser+Publier VC dans renderSEOSection) → `src/seo.js` + `src/core.js`
+- [x] PATCH 5 : "Voir fiche complète" → `selectedAsin=agentVCState.asin;go('asins')` (était `go('seo')`) → `src/seo.js`
+- [x] PATCH 6 : Boutons "SEO"+"VC" fusionnés en "🚀 Optimiser" → `goAgentVC(asin)` pour ASINs "À surveiller" — suppression auto-génération drawer → `src/seo.js`
 
 ---
 
@@ -141,10 +144,13 @@ _(aucune tâche en attente — en attente du prochain brief de Fred)_
 | `amazon-pilot-latest.html` hors `.gitignore` | CI déployait ancienne version — fix `ls amazon-pilot-v*.html | sort -V | tail -1` dans deploy.yml | mai 2026 |
 | Plus de livraison HTML par Claude chat | Fichiers trop gros — Claude Code génère et dépose | mai 2026 |
 | Fonctions SEO dans `src/seo.js` pas `src/core.js` | buildSEOPrompt, parseSEOResponse, renderAgentVC, helpers avc* | mai 2026 |
+| `git add -f amazon-pilot-vX.Y.Z.html` obligatoire | `.gitignore` a `amazon-pilot-v*.html` — force-add systématique pour CI | mai 2026 |
+| Boutons SEO+VC fusionnés → "🚀 Optimiser" → `goAgentVC` | Pour ASINs "À surveiller" : plus d'auto-génération via drawer — tout passe par wizard | mai 2026 |
+| "Voir fiche complète" → `selectedAsin=agentVCState.asin;go('asins')` | `go('seo')` perdait le contexte ASIN — fix PATCH 5 | mai 2026 |
 
 ---
 
-## TESTS À FAIRE AVANT MERGE MAIN (v3.4.4)
+## TESTS À FAIRE AVANT MERGE MAIN (v3.4.9)
 
 - [ ] Générer fiche SEO sur B07DPCH7XC → vérifier description = HTML structuré (`<p>`, `<strong>`, `<ul><li>`) sans `**`
 - [ ] Vérifier champs synthèse (positionnement, leviers, erreurs, opportunite) sans `**`
@@ -156,4 +162,4 @@ _(aucune tâche en attente — en attente du prochain brief de Fred)_
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 5 mai 2026 (v3.4.8)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 7 mai 2026 (v3.4.9)**
