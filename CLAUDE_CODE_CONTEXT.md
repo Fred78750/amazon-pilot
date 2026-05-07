@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 7 mai 2026 (v3.4.9)
+**Dernière mise à jour :** 7 mai 2026 (v3.4.10)
 
 ---
 
@@ -16,7 +16,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | v3.2.24 | https://amazon.foliow.app |
-| Recette (staging) | v3.4.9 | https://d9xny9istvl53.cloudfront.net |
+| Recette (staging) | v3.4.10 | https://d9xny9istvl53.cloudfront.net |
 
 ---
 
@@ -108,7 +108,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-## TÂCHES EN COURS (session v3.4.9 — toutes terminées)
+## TÂCHES EN COURS (session v3.4.10 — toutes terminées)
 
 - [x] Fix `parseSEOResponse` : strip `**` sur description → `src/seo.js`
 - [x] Fix `buildSEOPrompt` : directive DESCRIPTION HTML structurée 5 blocs → `src/seo.js`
@@ -150,7 +150,7 @@ _(aucune tâche en attente — en attente du prochain brief de Fred)_
 
 ---
 
-## TESTS À FAIRE AVANT MERGE MAIN (v3.4.9)
+## TESTS À FAIRE AVANT MERGE MAIN (v3.4.10)
 
 - [ ] Générer fiche SEO sur B07DPCH7XC → vérifier description = HTML structuré (`<p>`, `<strong>`, `<ul><li>`) sans `**`
 - [ ] Vérifier champs synthèse (positionnement, leviers, erreurs, opportunite) sans `**`
@@ -162,4 +162,4 @@ _(aucune tâche en attente — en attente du prochain brief de Fred)_
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 7 mai 2026 (v3.4.9)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 7 mai 2026 (v3.4.10)**
