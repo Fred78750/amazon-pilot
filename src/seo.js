@@ -602,22 +602,22 @@ function avcCopyScript(vc) {
   if (!fiche) { showToast('Fiche introuvable — régénérez la fiche SEO.', 'alr-r'); return; }
   var sku = (agentVCState.skuByVC && agentVCState.skuByVC[vc]) || agentVCState.sku || '';
   var prompt = buildVCModifyPrompt(agentVCState.asin, agentVCState.market, fiche, c, sku);
-  var _avcDone = function() {
-    if (!agentVCState.vcStatus) agentVCState.vcStatus = {};
-    agentVCState.vcStatus[vc] = agentVCState.vcStatus[vc] || 'pending';
-    agentVCState.step = 5;
-    showToast('Script copié — collez dans Claude in Chrome', 'alr-g');
-    render();
-  };
-  navigator.clipboard.writeText(prompt).then(_avcDone).catch(function() {
-    var ta = document.createElement('textarea');
-    ta.value = prompt;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    _avcDone();
-  });
+  var ta = document.createElement('textarea');
+  ta.value = prompt;
+  ta.style.position = 'fixed';
+  ta.style.top = '0';
+  ta.style.left = '0';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  var ok = document.execCommand('copy');
+  document.body.removeChild(ta);
+  if (!agentVCState.vcStatus) agentVCState.vcStatus = {};
+  agentVCState.vcStatus[vc] = agentVCState.vcStatus[vc] || 'pending';
+  agentVCState.step = 5;
+  showToast(ok ? '✅ Script copié — collez dans Claude in Chrome' : '⚠️ Copie manuelle requise', ok ? 'alr-g' : 'alr-y');
+  render();
 }
 
 function avcMarkDone(vc) {
