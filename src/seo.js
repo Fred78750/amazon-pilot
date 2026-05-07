@@ -74,7 +74,7 @@ function buildVCModifyPrompt(asin, market, fiche, c, sku) {
   var mkt = market || '.fr';
   var ficheData = (typeof seoResults !== 'undefined' && seoResults[asin] && seoResults[asin][mkt])
     ? seoResults[asin][mkt] : (c && c.ficheOptimisee && c.ficheOptimisee[asin] && c.ficheOptimisee[asin][mkt] ? c.ficheOptimisee[asin][mkt] : {});
-  var backendKW = ficheData.backendKW || fiche.backendKW || '';
+  var backendKW = (ficheData.backendKW || fiche.backendKW || '').replace(/\*\*/g, '').trim();
   var description = ficheData.description || fiche.description || '';
   var bullets = fiche.bullets || ficheData.bullets || ['', '', '', '', ''];
   var vcUrl = 'https://vendorcentral.amazon' + mkt + '/abis/listing/edit/product_details?sku=' + (sku || asin) + '&asin=' + asin + '&vendorCode=' + vendorCode + '#product_details';
@@ -106,7 +106,8 @@ function buildVCModifyPrompt(asin, market, fiche, c, sku) {
     '',
     'ÉTAPE 4 — Remplir la description',
     'Sélecteur : textarea[name="rtip_product_description-0-value"]',
-    'Contenu EXACT :',
+    'INSTRUCTION CRITIQUE : utilise fillField() avec le contenu ci-dessous VERBATIM —',
+    'ne jamais reformuler, résumer ou interpréter — copier chaque caractère HTML exactement :',
     description,
     '',
     'ÉTAPE 5 — Remplir les mots-clés',
