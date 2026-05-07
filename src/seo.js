@@ -595,8 +595,11 @@ function avcCopyScript(vc) {
   var c = cl();
   if (!c) return;
   var fiche = (typeof seoResults !== 'undefined' && seoResults[agentVCState.asin] && seoResults[agentVCState.asin][agentVCState.market])
-    ? seoResults[agentVCState.asin][agentVCState.market] : null;
-  if (!fiche) { showToast('Fiche introuvable.', 'alr-r'); return; }
+    ? seoResults[agentVCState.asin][agentVCState.market]
+    : (c.ficheOptimisee && c.ficheOptimisee[agentVCState.asin] && c.ficheOptimisee[agentVCState.asin][agentVCState.market])
+    ? c.ficheOptimisee[agentVCState.asin][agentVCState.market]
+    : null;
+  if (!fiche) { showToast('Fiche introuvable — régénérez la fiche SEO.', 'alr-r'); return; }
   var sku = (agentVCState.skuByVC && agentVCState.skuByVC[vc]) || agentVCState.sku || '';
   var prompt = buildVCModifyPrompt(agentVCState.asin, agentVCState.market, fiche, c, sku);
   var _avcDone = function() {
