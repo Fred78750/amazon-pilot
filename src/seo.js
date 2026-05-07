@@ -1076,7 +1076,7 @@ function seoSearchGo() {
     a = c.asins.find(function(x){ return (x.title||'').toUpperCase().includes(q); });
   }
   if (!a) { showToast('ASIN non trouvé dans le catalogue', 'alr-r'); return; }
-  openSEODrawer(a.asin);
+  goAgentVC(a.asin);
 }
 
 function seoLaunchNewRef() {
