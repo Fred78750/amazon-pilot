@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 7 mai 2026 (v3.4.16)
+**Dernière mise à jour :** 7 mai 2026 (v3.4.18)
 
 ---
 
@@ -15,8 +15,9 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | v3.2.24 | https://amazon.foliow.app |
-| Recette (staging) | v3.4.16 | https://d9xny9istvl53.cloudfront.net |
+| Production (main) | v3.4.18 | https://amazon.foliow.app |
+| Recette (staging) | v3.4.18 | https://d9xny9istvl53.cloudfront.net |
+| Preprod | v3.4.18 | https://preprod.amazon.foliow.app |
 
 ---
 
@@ -77,6 +78,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 - ASINs `sourcingOnly` = 0 en CA Ordered — ne jamais revenir dessus sans mesure d'impact
 - Livrable nommé `amazon-pilot-vX.Y.Z.html` — jamais `amazon-pilot-latest.html` (Fred fait la copie)
 - **Après chaque push staging : synchroniser le repo Cowork** — `git -C C:\AmazonPilot\repo pull origin staging` — obligatoire pour que Cowork travaille sur le code à jour
+- **Ordre de déploiement ABSOLU : staging d'abord, preprod ensuite — toujours, sauf instruction explicite contraire de Fred**
 
 ### Règles d'architecture
 - `seoResults[asin][market]` = chemin correct avec market — jamais le chemin plat `ficheOptimisee[asin].backendKW`
@@ -173,4 +175,4 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 7 mai 2026 (v3.4.16)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 7 mai 2026 (v3.4.18)**
