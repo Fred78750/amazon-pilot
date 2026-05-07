@@ -474,7 +474,7 @@ function renderAgentVC() {
         var r4 = seoResults[s.asin][s.market];
         h += '<div style="font-size:12px;padding:8px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd);margin-bottom:8px;line-height:1.5">' + esc((r4.titre||'').substring(0,80)) + '…</div>';
         h += '<div style="display:flex;gap:6px">';
-        h += '<button class="btn btn-sm" onclick="go(\'seo\')">👁 Voir fiche complète</button>';
+        h += '<button class="btn btn-sm" onclick="selectedAsin=agentVCState.asin;go(\'asins\')">👁 Voir fiche complète</button>';
         h += '<button class="btn btn-sm" onclick="avcLaunchSEO()">🔄 Regénérer</button>';
         h += '<button class="btn btn-p btn-sm" onclick="agentVCState.step=5;render()">📤 Script VC →</button>';
         h += '</div>';
@@ -990,8 +990,7 @@ function renderSEOScreen() {
       h += '</div>';
       h += '<div style="flex-shrink:0;font-size:10px;color:var(--tx3)">' + icon + ' ' + label + '</div>';
       h += '<div style="display:flex;gap:4px">';
-      h += '<button class="btn btn-xs" onclick="openSEODrawer('+asinJ+')">🔍 SEO</button>';
-      h += '<button class="btn btn-xs btn-p" onclick="goAgentVC('+asinJ+')">📤 VC</button>';
+      h += '<button class="btn btn-xs btn-p" onclick="goAgentVC('+asinJ+')">🚀 Optimiser</button>';
       h += '</div>';
       h += '</div>';
     });
