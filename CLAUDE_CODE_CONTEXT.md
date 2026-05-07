@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 7 mai 2026 (v3.4.10)
+**Dernière mise à jour :** 7 mai 2026 (v3.4.15)
 
 ---
 
@@ -16,7 +16,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | v3.2.24 | https://amazon.foliow.app |
-| Recette (staging) | v3.4.10 | https://d9xny9istvl53.cloudfront.net |
+| Recette (staging) | v3.4.15 | https://d9xny9istvl53.cloudfront.net |
 
 ---
 
@@ -108,7 +108,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-## TÂCHES EN COURS (session v3.4.10 — toutes terminées)
+## TÂCHES EN COURS (session v3.4.15 — toutes terminées)
 
 - [x] Fix `parseSEOResponse` : strip `**` sur description → `src/seo.js`
 - [x] Fix `buildSEOPrompt` : directive DESCRIPTION HTML structurée 5 blocs → `src/seo.js`
@@ -126,12 +126,19 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 - [x] PATCH 1–4 : wizard Agent VC complet (seoLaunchModify, _doVCCopy supprimé, showVCConfirmModal supprimé, bouton Optimiser+Publier VC dans renderSEOSection) → `src/seo.js` + `src/core.js`
 - [x] PATCH 5 : "Voir fiche complète" → `selectedAsin=agentVCState.asin;go('asins')` (était `go('seo')`) → `src/seo.js`
 - [x] PATCH 6 : Boutons "SEO"+"VC" fusionnés en "🚀 Optimiser" → `goAgentVC(asin)` pour ASINs "À surveiller" — suppression auto-génération drawer → `src/seo.js`
+- [x] v3.4.11 : `btn-p` → `btn-or` sur boutons "Optimiser + Publier VC" (core.js L.7877 + L.7979)
+- [x] v3.4.12 : `seoSearchGo` — `openSEODrawer` → `goAgentVC` → `src/seo.js`
+- [x] v3.4.13 : `render()` après `refreshSEODrawer()` dans `runSEOFiche` (UI bloquée post-génération) → `src/core.js`
+- [x] v3.4.13 : champ SKU étape 3 — `onchange` → `oninput` → `src/seo.js`
+- [x] v3.4.14 : `avcCopyScript` — fallback `execCommand` + pattern `_avcDone` (clipboard silencieux) → `src/seo.js`
+- [x] v3.4.15 : `avcCopyScript` — fallback `ficheOptimisee` si `seoResults` vide (après reload) → `src/seo.js`
 
 ---
 
 ## TÂCHES SUIVANTES
 
-_(aucune tâche en attente — en attente du prochain brief de Fred)_
+- [ ] (optionnel) Aligner rendu étape 5 wizard sur `ficheOptimisee` : afficher bouton "Copier" même si `seoResults` vide (actuellement affiche "Générez d'abord la fiche SEO" mais `avcCopyScript` fonctionne quand même)
+- [ ] Tests pre-merge main restants (nécessitent API key + données multi-VC) : description HTML, synthèse sans `**`, multi-VC Cogex
 
 ---
 
@@ -147,6 +154,8 @@ _(aucune tâche en attente — en attente du prochain brief de Fred)_
 | `git add -f amazon-pilot-vX.Y.Z.html` obligatoire | `.gitignore` a `amazon-pilot-v*.html` — force-add systématique pour CI | mai 2026 |
 | Boutons SEO+VC fusionnés → "🚀 Optimiser" → `goAgentVC` | Pour ASINs "À surveiller" : plus d'auto-génération via drawer — tout passe par wizard | mai 2026 |
 | "Voir fiche complète" → `selectedAsin=agentVCState.asin;go('asins')` | `go('seo')` perdait le contexte ASIN — fix PATCH 5 | mai 2026 |
+| `avcCopyScript` fallback `ficheOptimisee` | `seoResults` session-only — après reload, fiche lue dans IndexedDB | mai 2026 |
+| Tous points d'entrée wizard cartographiés avant refacto | `seoSearchGo` oublié → `openSEODrawer` au lieu de `goAgentVC` — corrigé v3.4.12 | mai 2026 |
 
 ---
 
@@ -162,4 +171,4 @@ _(aucune tâche en attente — en attente du prochain brief de Fred)_
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 7 mai 2026 (v3.4.10)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 7 mai 2026 (v3.4.15)**
