@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 7 mai 2026 (v3.4.15)
+**Dernière mise à jour :** 7 mai 2026 (v3.4.16)
 
 ---
 
@@ -16,7 +16,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | v3.2.24 | https://amazon.foliow.app |
-| Recette (staging) | v3.4.15 | https://d9xny9istvl53.cloudfront.net |
+| Recette (staging) | v3.4.16 | https://d9xny9istvl53.cloudfront.net |
 
 ---
 
@@ -108,7 +108,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-## TÂCHES EN COURS (session v3.4.15 — toutes terminées)
+## TÂCHES EN COURS (session v3.4.16 — toutes terminées)
 
 - [x] Fix `parseSEOResponse` : strip `**` sur description → `src/seo.js`
 - [x] Fix `buildSEOPrompt` : directive DESCRIPTION HTML structurée 5 blocs → `src/seo.js`
@@ -132,6 +132,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 - [x] v3.4.13 : champ SKU étape 3 — `onchange` → `oninput` → `src/seo.js`
 - [x] v3.4.14 : `avcCopyScript` — fallback `execCommand` + pattern `_avcDone` (clipboard silencieux) → `src/seo.js`
 - [x] v3.4.15 : `avcCopyScript` — fallback `ficheOptimisee` si `seoResults` vide (après reload) → `src/seo.js`
+- [x] v3.4.16 : `avcCopyScript` — `navigator.clipboard` → `execCommand` pur (textarea fixed+opacity:0), toast ✅/⚠️ différencié → `src/seo.js`
 
 ---
 
@@ -171,4 +172,4 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 7 mai 2026 (v3.4.15)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 7 mai 2026 (v3.4.16)**
