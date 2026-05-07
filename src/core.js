@@ -7975,6 +7975,9 @@ function renderSEOSection(a, c) {
 
   // Tout copier
   h += '<button class="btn btn-sm btn-p" onclick="copySEOField(' + asinJson + ',' + mktJson + ',\'all\')">📋 Tout copier (' + (MARKET_LANG[activeMkt]?.label || activeMkt) + ')</button>';
+  h += '<div style="margin-top:10px;display:flex;gap:8px">';
+  h += '<button class="btn btn-p" onclick="goAgentVC(' + _asinJ + ')">📤 Optimiser + Publier VC</button>';
+  h += '</div>';
   h += '</div>';
   return h;
 }
