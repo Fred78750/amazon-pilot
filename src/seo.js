@@ -502,11 +502,11 @@ function renderAgentVC() {
           h += '<span style="font-size:11px">' + (vcSt === 'success' ? '✅ Fait' : '⏳ En attente') + '</span>';
           h += '</div>';
           h += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:4px">SKU pour ce vendor code</div>';
-          h += '<input class="inp" style="font-family:var(--mono);width:100%;max-width:200px" value="' + esc(vcSku) + '" onchange="if(!agentVCState.skuByVC)agentVCState.skuByVC={};agentVCState.skuByVC[' + JSON.stringify(vc) + ']=this.value;render()"></div>';
+          h += '<input class="inp" style="font-family:var(--mono);width:100%;max-width:200px" value="' + esc(vcSku) + '" onchange="if(!agentVCState.skuByVC)agentVCState.skuByVC={};agentVCState.skuByVC[\'' + vc + '\']=this.value;render()"></div>';
           h += '<div style="display:flex;gap:6px">';
-          h += '<button class="btn btn-p btn-sm" onclick="avcCopyScript(' + JSON.stringify(vc) + ')">📋 Copier le script</button>';
+          h += '<button class="btn btn-p btn-sm" onclick="avcCopyScript(\'' + vc + '\')">📋 Copier le script</button>';
           if (vcSt !== 'success') {
-            h += '<button class="btn btn-sm" onclick="avcMarkDone(' + JSON.stringify(vc) + ')">✅ Confirmer publié</button>';
+            h += '<button class="btn btn-sm" onclick="avcMarkDone(\'' + vc + '\')">✅ Confirmer publié</button>';
           }
           h += '</div></div>';
         });
