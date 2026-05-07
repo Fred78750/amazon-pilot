@@ -1261,7 +1261,8 @@ function buildSEOPrompt(a, c, lang, isBackendKW, enrichies, motsExclure) {
     + '- Ton adapté au niveau réel du produit — jamais sur-promettre\n'
     + '- Paragraphes courts (1-2 phrases) — lisible sur mobile\n'
     + '- Ne pas répéter les bullets — compléter et rassurer\n'
-    + '- 400 à 800 caractères — specs uniquement issues des DONNÉES MARCHÉ]\n\n'
+    + '- 400 à 800 caractères — specs uniquement issues des DONNÉES MARCHÉ\n'
+    + '- Ne JAMAIS inclure REFERENCE_MANQUANTE, OPPORTUNITE_SEO, POSITIONNEMENT_AMAZON, LEVIERS_RANKING ou tout autre bloc stratégique dans la description\n\n'
     + 'PRECONISATIONS_IMAGES:\n'
     + 'Toutes les images Amazon doivent faire 1500×1500 px minimum, fond blanc pur RGB(255,255,255) pour l\'image principale, produit ≥85% du cadre pour la principale.\n\n'
     + 'Génère N préconisations (3 ≤ N ≤ 7, viser 5) — chaque préconisation au format STRICT :\n\n'
@@ -1424,7 +1425,7 @@ function parseSEOResponse(text, lang) {
     for (let i = 1; i <= 5; i++) {
       result.bullets[i-1] = extractField(text, 'BULLET_' + i).replace(/\*\*/g, '').trim();
     }
-    const descMatch = text.match(/DESCRIPTION:\s*([\s\S]+?)(?=\n(?:PRECONISATIONS_IMAGES|BACKEND_KEYWORDS|POSITIONNEMENT_AMAZON|LEVIERS_RANKING|ERREURS_A_EVITER|OPPORTUNITE_SEO|ÉTAPE|---)|$)/);
+    const descMatch = text.match(/DESCRIPTION:\s*([\s\S]+?)(?=\n(?:PRECONISATIONS_IMAGES|BACKEND_KEYWORDS|POSITIONNEMENT_AMAZON|LEVIERS_RANKING|ERREURS_A_EVITER|OPPORTUNITE_SEO|REFERENCE_MANQUANTE|ÉTAPE|---)|$)/);
     if (descMatch) result.description = descMatch[1].trim().replace(/```html|```/g, '').replace(/\*\*/g, '').trim();
 
     // Parse PRECONISATIONS_IMAGES
