@@ -133,6 +133,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 - [x] v3.4.14 : `avcCopyScript` — fallback `execCommand` + pattern `_avcDone` (clipboard silencieux) → `src/seo.js`
 - [x] v3.4.15 : `avcCopyScript` — fallback `ficheOptimisee` si `seoResults` vide (après reload) → `src/seo.js`
 - [x] v3.4.16 : `avcCopyScript` — `navigator.clipboard` → `execCommand` pur (textarea fixed+opacity:0), toast ✅/⚠️ différencié → `src/seo.js`
+- [x] v3.4.16 : boutons étape 5 — `JSON.stringify(vc)` → `'\'' + vc + '\''` (guillemets doubles cassaient l'attribut onclick sur 3 lignes : L.505 onchange, L.507 avcCopyScript, L.509 avcMarkDone) → `src/seo.js`
 
 ---
 
