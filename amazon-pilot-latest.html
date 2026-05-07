@@ -451,7 +451,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.2.21';
+const APP_VERSION = '3.4.9';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -772,6 +772,7 @@ let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
 let activeId = null;
 let screen = 'welcome';
+let agentVCParam = null;
 let wizStep = 0;
 let newClient = freshClient();
 let aiResult = '';
@@ -896,6 +897,22 @@ function openDB() {
   });
 }
 
+function migrateSnapshotRevenue(clients) {
+  clients.forEach(function(c) {
+    (c.asins || []).forEach(function(a) {
+      if (!a.history || !a.history.length) return;
+      const lastSnap = a.history[a.history.length - 1];
+      if (lastSnap && Math.abs(lastSnap.revenue - getRevenue(a, c)) > 100 && getRevenue(a, c) > 0) {
+        lastSnap.revenue = getRevenue(a, c) || a.revenue || 0;
+        lastSnap.orderedRevenue = a.orderedRevenue || 0;
+        lastSnap.shippedRevenue = a.shippedRevenue || a.revenue || 0;
+        lastSnap.units = getUnits(a, c) || a.units || lastSnap.units || 0;
+      }
+    });
+  });
+  return clients;
+}
+
 async function save() {
   try {
     const db = await openDB();
@@ -962,6 +979,8 @@ async function load() {
       activeId = clients[0].id;
       screen = 'dashboard';
       log(`✓ IndexedDB: ${clients.length} client(s), ${clients.reduce((s,c)=>s+(c.asins?.length||0),0)} ASINs`, 'ok');
+      migrateSnapshotRevenue(clients);
+      await save();
     } else {
       // Migration depuis localStorage v3.1 ou v3.0
       const lsNew = localStorage.getItem('ap-v31');
@@ -1561,7 +1580,7 @@ function mergeImportData(client, parsedFiles) {
   // Snapshot hebdo sur état final fusionné (après toutes les fusions de fichiers)
   if (periodType === 'weekly' && periodLabel) {
     for (const [, ex] of asinMap.entries()) {
-      if (!ex.revenue && !ex.orderedRevenue && !ex.shippedRevenue) continue;
+      if (!ex.asin) continue;
       if (!ex.history) ex.history = [];
       const snapshot = {
         period: periodLabel,
@@ -1577,6 +1596,7 @@ function mergeImportData(client, parsedFiles) {
         returns: ex.returns || 0,
         revenueDelta: ex.revenueDelta || null
       };
+      log('📸 Snapshot ' + ex.asin + ' revenue=' + snapshot.revenue + ' ordered=' + snapshot.orderedRevenue, 'ok');
       const alreadyArchived = ex.history.some(h => h.period === snapshot.period);
       if (!alreadyArchived) {
         ex.history.push(snapshot);
@@ -2917,7 +2937,8 @@ function renderContent() {
     dashboard: renderDashboard, fiche: renderFiche, asins: renderAsins,
     pompier: renderPompier, buybox: renderBuyBox, config: renderConfig, weekly: renderWeeklyReview,
     appros: renderAppros, forecast: renderApprosForecast, agent: renderAgent, potentiel: renderPotentiel,
-    seo: renderSEOScreen
+    seo: renderSEOScreen,
+    agentvc: renderAgentVC
   };
   try {
     el.innerHTML = (map[screen] || renderWelcome)();
@@ -3038,10 +3059,10 @@ function renderOnboarding() {
     </div>`;
 
     // Zone PO
-    const poImportDate = c.poImportDate ? new Date(c.poImportDate).toLocaleDateString('fr-FR') : null;
-    const poCount = c.poData ? Object.keys(c.poData).length : 0;
-    const poLowFill = c.poData ? Object.values(c.poData).filter(d => d.fillRate < 80).length : 0;
-    const poDiscontinued = c.poData ? Object.values(c.poData).filter(d => d.isDiscontinued).length : 0;
+    const poImportDate = nc.poImportDate ? new Date(nc.poImportDate).toLocaleDateString('fr-FR') : null;
+    const poCount = nc.poData ? Object.keys(nc.poData).length : 0;
+    const poLowFill = nc.poData ? Object.values(nc.poData).filter(d => d.fillRate < 80).length : 0;
+    const poDiscontinued = nc.poData ? Object.values(nc.poData).filter(d => d.isDiscontinued).length : 0;
     h += `<div class="cd" style="margin-top:12px">
       <div class="cd-t space">
         <span>1.5 — Purchase Orders <span style="font-size:11px;color:var(--tx3);font-weight:400">optionnel</span></span>
@@ -9275,35 +9296,70 @@ function seoRecordAction(asin, route, supplierCodes, markets) {
   render();
 }
 
-function seoGetScriptModify(asin, supplierCode, market, fiche) {
-  var mkt = fiche[market] || fiche['.fr'] || {};
-  var bullets = mkt.bullets || ['', '', '', '', ''];
+function buildVCModifyPrompt(asin, market, fiche, c, sku) {
+  var vendorCode = (c && c.vendorCode) ? c.vendorCode : '[À_COMPLÉTER]';
+  var mkt = market || '.fr';
+  var ficheData = (typeof seoResults !== 'undefined' && seoResults[asin] && seoResults[asin][mkt])
+    ? seoResults[asin][mkt] : (c && c.ficheOptimisee && c.ficheOptimisee[asin] && c.ficheOptimisee[asin][mkt] ? c.ficheOptimisee[asin][mkt] : {});
+  var backendKW = ficheData.backendKW || fiche.backendKW || '';
+  var description = ficheData.description || fiche.description || '';
+  var bullets = fiche.bullets || ficheData.bullets || ['', '', '', '', ''];
+  var vcUrl = 'https://vendorcentral.amazon' + mkt + '/abis/listing/edit/product_details?sku=' + (sku || asin) + '&asin=' + asin + '&vendorCode=' + vendorCode + '#product_details';
   var lines = [
-    'Tu es l\'agent SEO Amazon Pilot.',
-    'ASIN : ' + asin,
-    'Supplier Code : ' + supplierCode,
-    'Marche : ' + market,
+    'Bonjour. Je suis Fred, propriétaire du compte Amazon Pilot.',
+    'Tu vas modifier la fiche produit ' + asin + ' sur Vendor Central' + (mkt !== '.fr' ? ' amazon' + mkt : ' France') + '.',
     '',
-    'Donnees a appliquer :',
-    'Titre : ' + (mkt.titre || ''),
-    'Bullet 1 : ' + (bullets[0] || ''),
-    'Bullet 2 : ' + (bullets[1] || ''),
-    'Bullet 3 : ' + (bullets[2] || ''),
-    'Bullet 4 : ' + (bullets[3] || ''),
-    'Bullet 5 : ' + (bullets[4] || ''),
-    'Description : ' + (mkt.description || ''),
-    'Backend Keywords : ' + (fiche.backendKW || ''),
+    'RÈGLES ABSOLUES :',
+    '- Demande-moi confirmation avant de cliquer "Enregistrer et terminer"',
+    '- Si un champ est verrouillé (grisé), passe au suivant sans erreur',
+    '- Si une erreur VC apparaît, STOP et signale-la moi',
     '',
-    'Instructions :',
-    '1. Ouvre Vendor Central > Catalogue > Gerer le catalogue',
-    '2. Recherche l\'ASIN ' + asin + ' sous le supplier code ' + supplierCode,
-    '3. Ouvre la fiche en mode edition',
-    '4. Remplace le titre, les 5 bullets, la description et les backend keywords',
-    '5. Confirme la soumission',
-    '6. Rapporte : succes ou erreur'
+    'ÉTAPE 1 — Navigation',
+    'Navigue vers :',
+    vcUrl,
+    'Attends le chargement complet (les textareas doivent être visibles).',
+    '',
+    'ÉTAPE 2 — Remplir le titre',
+    'Sélecteur : textarea[name="item_name-0-value"]',
+    'Contenu EXACT à saisir :',
+    fiche.titre || ficheData.titre || '',
+    '',
+    'ÉTAPE 3 — Remplir les bullets',
+    'bullet_point-0-value : ' + (bullets[0] || ''),
+    'bullet_point-1-value : ' + (bullets[1] || ''),
+    'bullet_point-2-value : ' + (bullets[2] || ''),
+    'bullet_point-3-value : ' + (bullets[3] || ''),
+    'bullet_point-4-value : ' + (bullets[4] || ''),
+    '',
+    'ÉTAPE 4 — Remplir la description',
+    'Sélecteur : textarea[name="rtip_product_description-0-value"]',
+    'Contenu EXACT :',
+    description,
+    '',
+    'ÉTAPE 5 — Remplir les mots-clés',
+    'Sélecteur : input[name="generic_keyword-0-value"]',
+    'Contenu EXACT :',
+    backendKW,
+    '',
+    'ÉTAPE 6 — Confirmation',
+    'Affiche-moi un récapitulatif de ce qui a été rempli.',
+    'Attends mon GO avant de cliquer "Enregistrer et terminer".',
+    '',
+    'Pour remplir chaque champ, utilise ce code JS (React-compatible) :',
+    'function fillField(selector, value) {',
+    '  const el = document.querySelector(selector);',
+    '  if (!el) { console.warn(\'Champ non trouvé :\', selector); return; }',
+    '  const proto = el.tagName === \'TEXTAREA\' ? HTMLTextAreaElement : HTMLInputElement;',
+    '  const setter = Object.getOwnPropertyDescriptor(proto.prototype, \'value\').set;',
+    '  setter.call(el, value);',
+    '  el.dispatchEvent(new Event(\'input\', { bubbles: true }));',
+    '  el.dispatchEvent(new Event(\'change\', { bubbles: true }));',
+    '}'
   ];
   return lines.join('\n');
 }
+
+
 function seoGetScriptVerify(asin, market, fiche) {
   var mkt = fiche[market] || fiche['.fr'] || {};
   var bullets = mkt.bullets || [];
@@ -9330,16 +9386,8 @@ function seoGetScriptVerify(asin, market, fiche) {
 function seoLaunchModify(asin) {
   var c = cl();
   if (!c) return;
-  var fiche = c.ficheOptimisee && c.ficheOptimisee[asin];
-  if (!fiche) { showToast('Générez d\'abord la fiche SEO', 'alr-r'); return; }
-  var markets = c.markets && c.markets.length ? c.markets : [c.mainMarket || '.fr'];
-  var supplierCodes = [...new Set(c.asins.filter(function(x) { return x.asin === asin && x.vendorCode; }).map(function(x) { return x.vendorCode; }))];
-  if (!supplierCodes.length) supplierCodes.push('(supplier code non détecté)');
-  var script = seoGetScriptModify(asin, supplierCodes.join(' + '), markets[0], fiche);
-  navigator.clipboard.writeText(script).then(function() {
-    showToast('Script Route B copié — collez dans Claude in Chrome sur Vendor Central', 'alr-g');
-    seoRecordAction(asin, 'update', supplierCodes, markets);
-  });
+  var vcs = (c.vendorCodes && c.vendorCodes.length) ? c.vendorCodes : (c.vendorCode ? [c.vendorCode] : []);
+  if (typeof goAgentVC === 'function') { goAgentVC(asin); return; }
 }
 
 
@@ -9520,7 +9568,287 @@ function renderSEODrawer() {
   refreshSEODrawer();
 }
 
+// ── Agent VC State ─────────────────────────────────────────────
+var agentVCState = {
+  asin: null, title: '', market: null, vcCode: '', sku: '',
+  step: 1, isNew: false,
+  newRef: '', newBrand: '', newName: '', newCat: '', newEan: '',
+  newFormVisible: false,
+  expandedSteps: new Set()
+};
+
+function avcToggleStep(n) {
+  if (!agentVCState.expandedSteps) agentVCState.expandedSteps = new Set();
+  if (agentVCState.expandedSteps.has(n)) agentVCState.expandedSteps.delete(n);
+  else agentVCState.expandedSteps.add(n);
+  render();
+}
+
+function renderAgentVC() {
+  var c = cl();
+  if (!c) return '<div style="padding:24px" class="alr alr-r">Aucun client sélectionné.</div>';
+
+  if (agentVCParam !== null) {
+    var initAsin = agentVCParam;
+    agentVCParam = null;
+    agentVCState = { asin: null, title: '', market: null, vcCode: '', sku: '',
+      step: 1, isNew: false, newRef: '', newBrand: '', newName: '',
+      newCat: '', newEan: '', newFormVisible: false, expandedSteps: new Set() };
+    if (initAsin) {
+      agentVCState.asin = initAsin;
+      var _a = c.asins.find(function(x){ return x.asin === initAsin; });
+      if (_a) {
+        agentVCState.title = _a.title || initAsin;
+        agentVCState.market = c.mainMarket || '.fr';
+        agentVCState.vcCode = c.vendorCode || '';
+        agentVCState.step = (agentVCState.market && agentVCState.vcCode) ? 3 : 2;
+      }
+    }
+  }
+
+  var s = agentVCState;
+  var vendorCodes = (c.vendorCodes && c.vendorCodes.length) ? c.vendorCodes : (c.vendorCode ? [c.vendorCode] : []);
+
+  var h = '<div style="padding:20px 24px;max-width:680px">';
+  h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">';
+  h += '<button class="btn btn-sm" onclick="go(\'seo\')">← Retour</button>';
+  h += '<div style="font-size:16px;font-weight:700">🚀 Agent SEO + Vendor Central</div>';
+  h += '</div>';
+
+  // ── ÉTAPE 1 — ASIN ──
+  var step1Done = !!s.asin;
+  var step1Open = s.step === 1 || (step1Done && s.expandedSteps && s.expandedSteps.has(1));
+  h += avcStepWrap(1, s.step, 'Saisir l\'ASIN', step1Done ? (s.isNew ? '✨ Nouvel article — ' : '') + s.asin + (s.title ? ' — ' + s.title.substring(0,40) + '…' : '') : 'ASIN existant ou nouvelle référence à créer', step1Open);
+  if (step1Open) {
+    h += '<div style="display:flex;gap:8px;margin-bottom:10px">';
+    h += '<input id="avc-asin-input" class="inp" style="flex:1;font-family:var(--mono);letter-spacing:.05em" placeholder="B0XXXXXXXXX" maxlength="10" value="' + esc(s.asin || '') + '" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key===\'Enter\')avcLookupAsin()">';
+    h += '<button class="btn btn-p" onclick="avcLookupAsin()">🔍 Rechercher</button>';
+    h += '</div>';
+    h += '<div id="avc-asin-error" style="display:none;font-size:11px;color:var(--r);margin-bottom:8px">❌ ASIN non trouvé. Vérifiez ou créez un nouvel article.</div>';
+    h += '<button class="btn btn-sm" style="border-style:dashed" onclick="avcToggleNewForm()">➕ Créer un nouvel article</button>';
+    if (s.newFormVisible) {
+      h += '<div style="margin-top:12px;padding:14px;background:var(--s2);border:1.5px dashed var(--bd2);border-radius:var(--rd)">';
+      h += '<div style="font-size:12px;font-weight:700;margin-bottom:10px">📦 Nouvel article</div>';
+      h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">';
+      h += '<div><div style="font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:4px">RÉFÉRENCE *</div><input class="inp" id="avc-new-ref" placeholder="Ex: 043902" value="' + esc(s.newRef||'') + '" oninput="agentVCState.newRef=this.value;avcCheckNew()"></div>';
+      h += '<div><div style="font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:4px">MARQUE *</div><input class="inp" id="avc-new-brand" placeholder="Ex: COGEX" value="' + esc(s.newBrand||'') + '" oninput="agentVCState.newBrand=this.value;avcCheckNew()"></div>';
+      h += '</div>';
+      h += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:4px">NOM PRODUIT *</div><input class="inp" id="avc-new-name" placeholder="Ex: Tenaille Russe 200mm" style="width:100%" value="' + esc(s.newName||'') + '" oninput="agentVCState.newName=this.value;avcCheckNew()"></div>';
+      h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">';
+      h += '<div><div style="font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:4px">CATÉGORIE</div><input class="inp" id="avc-new-cat" placeholder="Ex: Outillage à main" value="' + esc(s.newCat||'') + '" oninput="agentVCState.newCat=this.value"></div>';
+      h += '<div><div style="font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:4px">EAN (optionnel)</div><input class="inp" id="avc-new-ean" style="font-family:var(--mono)" placeholder="3700000000000" value="' + esc(s.newEan||'') + '" oninput="agentVCState.newEan=this.value"></div>';
+      h += '</div>';
+      h += '<button class="btn btn-p" id="avc-new-go" disabled onclick="avcConfirmNew()">✨ Créer et générer la fiche SEO</button>';
+      h += '</div>';
+    }
+  }
+  h += '</div></div>';
+
+  // ── ÉTAPE 2 — MARCHÉ ──
+  if (s.step >= 2) {
+    var step2Done = !!s.market;
+    var step2Open = s.step === 2 || (step2Done && s.expandedSteps && s.expandedSteps.has(2));
+    var mktLabel = s.market ? ((MARKET_LANG[s.market] && MARKET_LANG[s.market].flag) || '') + ' ' + s.market : '';
+    h += avcStepWrap(2, s.step, 'Marché cible', step2Done ? mktLabel : 'Sur quel Amazon modifier la fiche ?', step2Open);
+    if (step2Open) {
+      var markets = c.markets && c.markets.length ? c.markets : [c.mainMarket || '.fr'];
+      h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">';
+      markets.forEach(function(mkt) {
+        var ml = MARKET_LANG[mkt];
+        h += '<button class="btn' + (s.market === mkt ? ' btn-p' : '') + '" onclick="agentVCState.market=' + JSON.stringify(mkt) + ';render()">';
+        h += (ml && ml.flag ? ml.flag : '') + ' ' + mkt + '</button>';
+      });
+      h += '</div>';
+      h += '<button class="btn btn-p" ' + (!s.market ? 'disabled' : '') + ' onclick="avcConfirmMarket()">Confirmer →</button>';
+    }
+    h += '</div></div>';
+  }
+
+  // ── ÉTAPE 3 — VENDOR CODE + SKU ──
+  if (s.step >= 3) {
+    var step3Done = !!s.sku;
+    var step3Open = s.step === 3 || (step3Done && s.expandedSteps && s.expandedSteps.has(3));
+    var vcLabel = step3Done ? vendorCodes.map(function(vc){ return vc; }).join(' + ') + ' — SKU : ' + s.sku : 'Vendor code et SKU requis';
+    h += avcStepWrap(3, s.step, 'Vendor Code & SKU', vcLabel, step3Open);
+    if (step3Open) {
+      if (!vendorCodes.length) {
+        h += '<div class="alr alr-y" style="margin-bottom:10px">⚠️ Aucun vendor code configuré sur ce client. Renseignez-le dans Fiche client.</div>';
+      } else {
+        h += '<div style="margin-bottom:10px;font-size:12px;color:var(--tx2)">Vendor code(s) : <strong>' + vendorCodes.map(esc).join(', ') + '</strong></div>';
+      }
+      h += '<div style="margin-bottom:6px"><div style="font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:4px">SKU <span style="color:var(--r)">*</span></div>';
+      h += '<input id="avc-sku" class="inp" style="font-family:var(--mono);width:100%;max-width:260px" placeholder="Ex: 643416 ou ASIN" value="' + esc(s.sku||'') + '" onchange="agentVCState.sku=this.value.trim();render()">';
+      h += '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Le SKU figure dans le catalogue VC (recherche par ASIN). Il peut être identique à l\'ASIN ou différent.</div></div>';
+      h += '<button class="btn btn-p" style="margin-top:8px" ' + (!s.sku ? 'disabled' : '') + ' onclick="avcConfirmSKU()">Confirmer →</button>';
+    }
+    h += '</div></div>';
+  }
+
+  // ── ÉTAPE 4 — GÉNÉRATION SEO ──
+  if (s.step >= 4) {
+    var progress = (typeof seoResults !== 'undefined' && seoResults[s.asin]) ? seoResults[s.asin]._progress : null;
+    var ficheReady = (typeof seoResults !== 'undefined' && seoResults[s.asin] && seoResults[s.asin][s.market] && !seoResults[s.asin][s.market].error);
+    var step4Done = ficheReady;
+    var step4Open = s.step === 4 || (step4Done && s.expandedSteps && s.expandedSteps.has(4));
+    h += avcStepWrap(4, s.step, 'Génération fiche SEO', step4Done ? '✓ Fiche générée' : 'Optimisation IA titre, bullets, description, keywords', step4Open);
+    if (step4Open) {
+      if (progress && !ficheReady) {
+        h += '<div style="margin-bottom:8px"><div style="height:4px;background:var(--bd);border-radius:2px;overflow:hidden"><div style="height:100%;background:var(--accent);border-radius:2px;width:' + (progress.pct||0) + '%"></div></div>';
+        h += '<div style="font-size:11px;color:var(--tx3);margin-top:4px">' + esc(progress.phase||'') + '</div></div>';
+      } else if (!ficheReady) {
+        h += '<button class="btn btn-p" onclick="avcLaunchSEO()">✨ Générer la fiche SEO</button>';
+      } else {
+        var r4 = seoResults[s.asin][s.market];
+        h += '<div style="font-size:12px;padding:8px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd);margin-bottom:8px;line-height:1.5">' + esc((r4.titre||'').substring(0,80)) + '…</div>';
+        h += '<div style="display:flex;gap:6px">';
+        h += '<button class="btn btn-sm" onclick="go(\'seo\')">👁 Voir fiche complète</button>';
+        h += '<button class="btn btn-sm" onclick="avcLaunchSEO()">🔄 Regénérer</button>';
+        h += '<button class="btn btn-p btn-sm" onclick="agentVCState.step=5;render()">📤 Script VC →</button>';
+        h += '</div>';
+      }
+    }
+    h += '</div></div>';
+  }
+
+  // ── ÉTAPE 5 — SCRIPT VC ──
+  if (s.step >= 5) {
+    var step5Done = vendorCodes.every(function(vc){ return s.vcStatus && s.vcStatus[vc] === 'success'; });
+    var step5Open = s.step === 5 || (step5Done && s.expandedSteps && s.expandedSteps.has(5));
+    h += avcStepWrap(5, s.step, 'Publier sur Vendor Central', step5Done ? '✅ Tous les vendor codes mis à jour' : 'Script(s) à coller dans Claude in Chrome', step5Open);
+    if (step5Open) {
+      var fiche5 = (typeof seoResults !== 'undefined' && seoResults[s.asin] && seoResults[s.asin][s.market]) ? seoResults[s.asin][s.market] : null;
+      if (!fiche5) {
+        h += '<div class="alr alr-y">Générez d\'abord la fiche SEO (étape 4).</div>';
+      } else {
+        vendorCodes.forEach(function(vc, idx) {
+          var vcSku = (s.skuByVC && s.skuByVC[vc]) || s.sku || '';
+          var vcSt = (s.vcStatus && s.vcStatus[vc]) || 'pending';
+          h += '<div style="margin-bottom:14px;padding:12px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd)">';
+          h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+          h += '<div style="font-size:12px;font-weight:700">Script ' + (idx+1) + '/' + vendorCodes.length + ' — ' + esc(vc) + '</div>';
+          h += '<span style="font-size:11px">' + (vcSt === 'success' ? '✅ Fait' : '⏳ En attente') + '</span>';
+          h += '</div>';
+          h += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:4px">SKU pour ce vendor code</div>';
+          h += '<input class="inp" style="font-family:var(--mono);width:100%;max-width:200px" value="' + esc(vcSku) + '" onchange="if(!agentVCState.skuByVC)agentVCState.skuByVC={};agentVCState.skuByVC[' + JSON.stringify(vc) + ']=this.value;render()"></div>';
+          h += '<div style="display:flex;gap:6px">';
+          h += '<button class="btn btn-p btn-sm" onclick="avcCopyScript(' + JSON.stringify(vc) + ')">📋 Copier le script</button>';
+          if (vcSt !== 'success') {
+            h += '<button class="btn btn-sm" onclick="avcMarkDone(' + JSON.stringify(vc) + ')">✅ Confirmer publié</button>';
+          }
+          h += '</div></div>';
+        });
+      }
+    }
+    h += '</div></div>';
+  }
+
+  h += '</div>';
+  return h;
+}
+
+function avcStepWrap(n, currentStep, title, sub, isOpen) {
+  var isDone = n < currentStep;
+  var isActive = n === currentStep;
+  var iconContent = isDone ? '✓' : String(n);
+  var h = '<div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:10px">';
+  h += '<div style="width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;';
+  if (isDone) h += 'background:var(--g);color:#fff;border:2px solid var(--g)';
+  else if (isActive) h += 'background:var(--accent);color:#000;border:2px solid var(--accent)';
+  else h += 'background:var(--bg);color:var(--tx3);border:2px solid var(--bd)';
+  h += '">' + iconContent + '</div>';
+  h += '<div style="flex:1;background:var(--bg2);border:1px solid ' + (isActive ? 'var(--accent)' : 'var(--bd)') + ';border-radius:var(--rdl);overflow:hidden' + (isActive ? ';box-shadow:0 0 0 3px rgba(255,153,0,.1)' : '') + '">';
+  h += '<div style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between;' + (isDone ? 'cursor:pointer;background:var(--s2)' : '') + '"' + (isDone ? ' onclick="avcToggleStep(' + n + ')"' : '') + '>';
+  h += '<div><div style="font-size:13px;font-weight:700">' + esc(title) + '</div><div style="font-size:11px;color:var(--tx3);margin-top:1px">' + esc(sub) + '</div></div>';
+  if (isDone) h += '<span style="font-size:11px;color:var(--tx3)">' + (isOpen ? '▼' : '▶') + '</span>';
+  h += '</div>';
+  if (isOpen) h += '<div style="padding:14px;border-top:1px solid var(--bd)">';
+  return h;
+}
+
+function avcLookupAsin() {
+  var val = ((document.getElementById('avc-asin-input') || {}).value || '').trim().toUpperCase();
+  var errEl = document.getElementById('avc-asin-error');
+  if (!val) return;
+  var c = cl();
+  var found = c && c.asins.find(function(x){ return x.asin === val; });
+  if (!found) { if (errEl) errEl.style.display = 'block'; return; }
+  if (errEl) errEl.style.display = 'none';
+  agentVCState.asin = found.asin;
+  agentVCState.title = found.title || val;
+  agentVCState.step = 2;
+  render();
+}
+
+function avcToggleNewForm() {
+  agentVCState.newFormVisible = !agentVCState.newFormVisible;
+  render();
+}
+
+function avcCheckNew() {
+  var btn = document.getElementById('avc-new-go');
+  if (btn) btn.disabled = !(agentVCState.newRef && agentVCState.newBrand && agentVCState.newName);
+}
+
+function avcConfirmNew() {
+  agentVCState.isNew = true;
+  agentVCState.asin = 'NEW-' + agentVCState.newRef;
+  agentVCState.title = agentVCState.newBrand + ' ' + agentVCState.newName;
+  agentVCState.step = 2;
+  render();
+}
+
+function avcConfirmMarket() {
+  if (!agentVCState.market) return;
+  agentVCState.step = 3;
+  render();
+}
+
+function avcConfirmSKU() {
+  if (!agentVCState.sku) return;
+  agentVCState.step = 4;
+  render();
+}
+
+function avcLaunchSEO() {
+  var c = cl();
+  if (!c || !agentVCState.asin || !agentVCState.market) return;
+  var keyword = seoMotcle[agentVCState.asin] || extractSearchKeyword(agentVCState.asin, c);
+  runSEOFiche(agentVCState.asin, agentVCState.market, keyword);
+  agentVCState.step = 4;
+  render();
+}
+
+function avcCopyScript(vc) {
+  var c = cl();
+  if (!c) return;
+  var fiche = (typeof seoResults !== 'undefined' && seoResults[agentVCState.asin] && seoResults[agentVCState.asin][agentVCState.market])
+    ? seoResults[agentVCState.asin][agentVCState.market] : null;
+  if (!fiche) { showToast('Fiche introuvable.', 'alr-r'); return; }
+  var sku = (agentVCState.skuByVC && agentVCState.skuByVC[vc]) || agentVCState.sku || '';
+  var prompt = buildVCModifyPrompt(agentVCState.asin, agentVCState.market, fiche, c, sku);
+  navigator.clipboard.writeText(prompt).then(function() {
+    if (!agentVCState.vcStatus) agentVCState.vcStatus = {};
+    agentVCState.vcStatus[vc] = agentVCState.vcStatus[vc] || 'pending';
+    agentVCState.step = 5;
+    showToast('Script copié — collez dans Claude in Chrome', 'alr-g');
+    render();
+  });
+}
+
+function avcMarkDone(vc) {
+  if (!agentVCState.vcStatus) agentVCState.vcStatus = {};
+  agentVCState.vcStatus[vc] = 'success';
+  var c = cl();
+  if (c && c.ficheOptimisee && c.ficheOptimisee[agentVCState.asin]) {
+    c.ficheOptimisee[agentVCState.asin].vcUpdateStatus = 'success';
+    c.ficheOptimisee[agentVCState.asin].lastVCUpdate = new Date().toISOString();
+    save();
+  }
+  render();
+}
+
 function refreshSEODrawer() {
+  if (typeof screen !== 'undefined' && screen === 'agentvc') { render(); return; }
   var drawer = document.getElementById('seo-drawer');
   if (!drawer) return;
   var asin = seoDrawerAsin;
@@ -9680,10 +10008,20 @@ function refreshSEODrawer() {
   // ── Footer actions ──
   if (!seoLoading) {
     var _safeMarket = activeMkt || ctrlMkt || (c.mainMarket || '.fr');
+    var _vcStatus = c.ficheOptimisee && c.ficheOptimisee[asin] ? c.ficheOptimisee[asin].vcUpdateStatus : null;
+    var _vcDate   = c.ficheOptimisee && c.ficheOptimisee[asin] ? c.ficheOptimisee[asin].lastVCUpdate : null;
     h += '<div style="padding:12px 16px;border-top:1px solid var(--bd);display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">';
     if (r && !r.error) {
       h += '<button class="btn btn-sm btn-p" onclick="copySEOTitreMkt('+asinJ+','+JSON.stringify(activeMkt)+')">📋 Tout copier</button>';
-      h += '<button class="btn btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)" onclick="seoLaunchModify('+asinJ+')">📤 Modifier VC</button>';
+      var _vcBtnLabel = _vcStatus === 'pending' ? '⏳ En cours' : _vcStatus === 'success' ? '✅ VC à jour' : '📤 Modifier VC';
+      h += '<button class="btn btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)" onclick="seoLaunchModify('+asinJ+')">' + _vcBtnLabel + '</button>';
+      if (_vcStatus === 'pending') {
+        h += '<button class="btn btn-sm" style="background:var(--g);color:#fff;border-color:var(--g)" onclick="seoMarkVCDone('+asinJ+')">✅ Confirmer mise à jour VC</button>';
+      }
+      if (_vcStatus === 'success' && _vcDate) {
+        var _vcDateStr = new Date(_vcDate).toLocaleDateString('fr-FR');
+        h += '<span style="font-size:10px;color:var(--g);align-self:center">Mis à jour le ' + _vcDateStr + '</span>';
+      }
       if (status==='submitted'||status==='overdue') {
         h += '<button class="btn btn-sm" style="background:var(--or);color:#fff;border-color:var(--or)" onclick="seoLaunchVerify('+asinJ+')">🔍 Vérifier</button>';
       }
@@ -9804,6 +10142,18 @@ function seoMarkVerified(asin, actionIndex, isVerified) {
   refreshSEODrawer();
 }
 
+function seoMarkVCDone(asin) {
+  var c = cl();
+  if (!c) return;
+  if (!c.ficheOptimisee) c.ficheOptimisee = {};
+  if (!c.ficheOptimisee[asin]) c.ficheOptimisee[asin] = {};
+  c.ficheOptimisee[asin].vcUpdateStatus = 'success';
+  c.ficheOptimisee[asin].lastVCUpdate = new Date().toISOString();
+  save();
+  showToast('✅ Mise à jour VC confirmée', 'alr-g');
+  refreshSEODrawer();
+}
+
 // ── renderSEOScreen — nouvelle UX ──────────────────────────────
 function renderSEOScreen() {
   var c = cl();
@@ -9866,7 +10216,10 @@ function renderSEOScreen() {
       h += '<div style="font-size:10px;color:var(--tx3);font-family:var(--mono)">' + esc(a.asin) + ' · ' + fmtEur(getRevenue(a,c)||0) + '</div>';
       h += '</div>';
       h += '<div style="flex-shrink:0;font-size:10px;color:var(--tx3)">' + icon + ' ' + label + '</div>';
-      h += '<button class="btn btn-xs btn-p" onclick="openSEODrawer('+asinJ+')">✍️ Générer</button>';
+      h += '<div style="display:flex;gap:4px">';
+      h += '<button class="btn btn-xs" onclick="openSEODrawer('+asinJ+')">🔍 SEO</button>';
+      h += '<button class="btn btn-xs btn-p" onclick="goAgentVC('+asinJ+')">📤 VC</button>';
+      h += '</div>';
       h += '</div>';
     });
     h += '</div>';
@@ -10069,7 +10422,10 @@ function buildSEOPrompt(a, c, lang, isBackendKW, enrichies, motsExclure) {
     + '- "garantie à vie", "à vie", "garantie illimitée", "lifetime warranty"\n'
     + '- Une durée de garantie chiffrée si elle n\'est PAS présente dans les DONNÉES MARCHÉ ci-dessous\n'
     + '- Une date de création de marque, un effectif, un volume de ventes, un classement, une certification non sourcée\n'
-    + '- Un matériau, traitement, dimension non présent dans la fiche actuelle ou les données catalogue\n\n'
+    + '- Un matériau, traitement, dimension non présent dans la fiche actuelle ou les données catalogue\n'
+    + '- "incassable", "indestructible", "universel" si non vérifiable\n'
+    + '- "homologué", "certifié", "conforme" si document non disponible\n'
+    + '- "compatible tous modèles" si non prouvé\n\n'
     + 'SOURCE DE VÉRITÉ pour les SPECS FACTUELLES :\n'
     + '- Reprends UNIQUEMENT les specs présentes dans le bloc DONNÉES MARCHÉ (titre actuel, bullets actuels, description actuelle, données catalogue)\n'
     + '- Si une spec n\'est pas dans la source de vérité : NE LA MENTIONNE PAS. Préférer le silence à l\'invention.\n'
@@ -10108,7 +10464,19 @@ function buildSEOPrompt(a, c, lang, isBackendKW, enrichies, motsExclure) {
     + '- MINIMUM 200 caractères par bullet, idéalement 250-300 — style narratif : bénéfice + usage terrain + preuve — éviter les adjectifs creux, les prouver\n'
     + '- Mélanger : bénéfice client + usage concret + mot-clé secondaire + réassurance\n'
     + '- Pas de HTML, pas de prix, pas de référence interne\n\n'
-    + 'DESCRIPTION: [HTML pédagogique UNIQUEMENT — utiliser <b>, <br>, <ul><li> — structure : pour qui / dans quel contexte / pourquoi choisir ce produit / quelles limites éventuelles / liste technique lisible — INTERDIT de mélanger description et synthèse stratégique — la description est un texte vendeur pour le CLIENT, pas pour le consultant]\n\n'
+    + 'DESCRIPTION: [HTML STRICT — balises autorisées : <p> <strong> <ul> <li> uniquement — JAMAIS de ** markdown — JAMAIS de tableau, emoji, style CSS, majuscules excessives]\n'
+    + 'Structure OBLIGATOIRE dans cet ordre :\n'
+    + '1. <p><strong>[Nom exact du produit + usage principal]</strong> est conçu pour [usage réel].</p>\n'
+    + '2. <p>Grâce à [caractéristique clé], il permet de [bénéfice concret client].</p>\n'
+    + '3. <p>Il convient pour [contextes d\'utilisation principaux], adapté à [niveau réel du produit].</p>\n'
+    + '4. <p>[Phrase anti-déception si une limite existe : compatibilité, dimension, accessoire non fourni, usage restreint — OBLIGATOIRE si pertinent]</p>\n'
+    + '5. <ul><li>Type : ...</li><li>Dimensions : ...</li><li>Matière : ...</li><li>Compatibilité : ...</li><li>Utilisation : ...</li></ul>\n'
+    + 'RÈGLES STRICTES :\n'
+    + '- Commencer par le produit exact — jamais par une phrase générique\n'
+    + '- Ton adapté au niveau réel du produit — jamais sur-promettre\n'
+    + '- Paragraphes courts (1-2 phrases) — lisible sur mobile\n'
+    + '- Ne pas répéter les bullets — compléter et rassurer\n'
+    + '- 400 à 800 caractères — specs uniquement issues des DONNÉES MARCHÉ]\n\n'
     + 'PRECONISATIONS_IMAGES:\n'
     + 'Toutes les images Amazon doivent faire 1500×1500 px minimum, fond blanc pur RGB(255,255,255) pour l\'image principale, produit ≥85% du cadre pour la principale.\n\n'
     + 'Génère N préconisations (3 ≤ N ≤ 7, viser 5) — chaque préconisation au format STRICT :\n\n'
@@ -10124,7 +10492,21 @@ function buildSEOPrompt(a, c, lang, isBackendKW, enrichies, motsExclure) {
     + '- Au moins 1 image "infographie-spec" si dimensions/matériaux/specs sont des arguments forts\n'
     + '- Le "pourquoi_cette_image" doit citer EXPLICITEMENT : un avis client ou un manque concurrent ou un bénéfice difficile à comprendre par le titre seul\n'
     + '- Chaque image doit être actionnable par un graphiste sans question\n\n'
-    + 'BACKEND_KEYWORDS: [espaces uniquement — CIBLE 40 à 60 mots maximum — JAMAIS plus de 60 — zéro mot du titre ou des bullets — zéro adjectif vague (robuste, polyvalent, etc.) — zéro substantif générique (matériaux, produits, etc.) — zéro marque concurrente — chaque mot doit passer le test : "Un acheteur tape ce mot dans la barre Amazon" — partir du TYPE de produit et de ses USAGES RÉELS : synonymes métier, fautes courantes de recherche, variantes de taille/matériau, longue traîne qualifiée]\n\n'
+    + 'BACKEND_KEYWORDS: [mots séparés par des espaces UNIQUEMENT — jamais de virgules — CIBLE 40 à 60 mots — JAMAIS plus de 60]\n'
+    + 'Structure en 5 blocs mentaux dans cet ordre :\n'
+    + '1. Synonymes du produit (autres appellations usuelles)\n'
+    + '2. Usages concrets (actions : serrage, fixation, découpe...)\n'
+    + '3. Contextes (chantier, atelier, jardin, auto, rénovation...)\n'
+    + '4. Matériaux / compatibilités absents du titre\n'
+    + '5. Longue traîne qualifiée\n'
+    + 'INTERDIT dans les backend keywords :\n'
+    + '- Tout mot déjà dans le titre ou les bullets\n'
+    + '- Adjectifs vagues : robuste, polyvalent, pratique, universel, professionnel, solide, durable\n'
+    + '- Substantifs génériques seuls : maison, outil, produit, accessoire, matériaux\n'
+    + '- Marques concurrentes, ASIN, EAN, références concurrentes\n'
+    + '- Claims : meilleur, n°1, garanti, incassable, homologué, certifié\n'
+    + '- Fautes volontaires\n'
+    + '- Ponctuation de toute nature]\n\n'
     + '━━━━━━━━━━━━━━━━━━\n'
     + 'ÉTAPE 4 — SYNTHÈSE STRATÉGIQUE\n'
     + '━━━━━━━━━━━━━━━━━━\n'
@@ -10249,16 +10631,16 @@ function parseSEOResponse(text, lang) {
     result.nomType      = extractField(text, 'NOM_TYPE_PRODUIT').replace(/\*\*/g, '').trim();
     result.titre        = extractField(text, 'TITRE').replace(/\*\*/g, '').trim();
     result.backendKW    = extractField(text, 'BACKEND_KEYWORDS');
-    result.positionnement = extractField(text, 'POSITIONNEMENT_AMAZON');
-    result.leviers      = extractField(text, 'LEVIERS_RANKING');
-    result.erreurs      = extractField(text, 'ERREURS_A_EVITER');
-    result.opportunite  = extractField(text, 'OPPORTUNITE_SEO');
+    result.positionnement = extractField(text, 'POSITIONNEMENT_AMAZON').replace(/\*\*/g, '').trim();
+    result.leviers      = extractField(text, 'LEVIERS_RANKING').replace(/\*\*/g, '').trim();
+    result.erreurs      = extractField(text, 'ERREURS_A_EVITER').replace(/\*\*/g, '').trim();
+    result.opportunite  = extractField(text, 'OPPORTUNITE_SEO').replace(/\*\*/g, '').trim();
 
     for (let i = 1; i <= 5; i++) {
       result.bullets[i-1] = extractField(text, 'BULLET_' + i).replace(/\*\*/g, '').trim();
     }
     const descMatch = text.match(/DESCRIPTION:\s*([\s\S]+?)(?=\n(?:PRECONISATIONS_IMAGES|BACKEND_KEYWORDS|POSITIONNEMENT_AMAZON|LEVIERS_RANKING|ERREURS_A_EVITER|OPPORTUNITE_SEO|ÉTAPE|---)|$)/);
-    if (descMatch) result.description = descMatch[1].trim().replace(/```html|```/g, '').trim();
+    if (descMatch) result.description = descMatch[1].trim().replace(/```html|```/g, '').replace(/\*\*/g, '').trim();
 
     // Parse PRECONISATIONS_IMAGES
     const imgSection = text.match(/PRECONISATIONS_IMAGES:[\s\S]*?(?=BACKEND_KEYWORDS:|$)/);
@@ -10284,6 +10666,14 @@ function parseSEOResponse(text, lang) {
 async function runSEOFiche(asin, market, motcle) {
   const c = cl();
   if (!c) return;
+  if (!apiKey) {
+    if (!seoResults[asin]) seoResults[asin] = {};
+    const mkt = market || (c.markets && c.markets.length ? c.markets[0] : (c.mainMarket || '.fr'));
+    seoResults[asin][mkt] = { error: '__ERR_NOKEY__' };
+    seoLoading = false;
+    render();
+    return;
+  }
   const a = c.asins.find(x => x.asin === asin);
   if (!a) return;
 
@@ -10397,7 +10787,10 @@ function renderSEOSection(a, c) {
     h += '<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Génère la fiche optimisée pour les ' + marketsToProcess.length + ' marché(s) : ';
     h += marketsToProcess.map(function(m) { return (MARKET_LANG[m]?.flag || '') + ' ' + (MARKET_LANG[m]?.label || m); }).join(', ');
     h += '.</p>';
+    h += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
     h += '<button class="btn btn-p" onclick="runSEOFiche(' + _asinJ + ',seoActiveTab||(cl()&&(cl().mainMarket||\'.fr\')),seoMotcle[' + _asinJ + ']||extractSearchKeyword(' + _asinJ + ',cl()))" ' + (seoLoading ? 'disabled' : '') + '>✍️ Générer la fiche (' + marketsToProcess.length + ' langue' + (marketsToProcess.length > 1 ? 's' : '') + ')</button>';
+    h += '<button class="btn btn-p" onclick="goAgentVC(' + _asinJ + ')">📤 Optimiser + Publier VC</button>';
+    h += '</div>';
     h += '</div>';
     return h;
   }
@@ -10497,6 +10890,9 @@ function renderSEOSection(a, c) {
 
   // Tout copier
   h += '<button class="btn btn-sm btn-p" onclick="copySEOField(' + asinJson + ',' + mktJson + ',\'all\')">📋 Tout copier (' + (MARKET_LANG[activeMkt]?.label || activeMkt) + ')</button>';
+  h += '<div style="margin-top:10px;display:flex;gap:8px">';
+  h += '<button class="btn btn-p" onclick="goAgentVC(' + _asinJ + ')">📤 Optimiser + Publier VC</button>';
+  h += '</div>';
   h += '</div>';
   return h;
 }
@@ -10602,6 +10998,7 @@ function go(s) {
   if (s !== 'asins') { selectedAsin = null; asinView = 'all'; asinViewAsins = null; }
   render();
 }
+function goAgentVC(asin) { agentVCParam = asin; go('agentvc'); }
 
 
 

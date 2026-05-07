@@ -132,71 +132,7 @@ function buildVCModifyPrompt(asin, market, fiche, c, sku) {
   return lines.join('\n');
 }
 
-function showVCConfirmModal(asin, market, fiche, c) {
-  var existing = document.getElementById('vc-confirm-modal');
-  if (existing) existing.remove();
 
-  var vendorCode = (c && c.vendorCode) ? c.vendorCode : null;
-  var bullets = fiche.bullets || [];
-  var backendKW = fiche.backendKW || '';
-  var kwCount = backendKW ? backendKW.split(/\s+/).filter(Boolean).length : 0;
-  var titrePreview = fiche.titre ? (fiche.titre.length > 60 ? fiche.titre.slice(0, 60) + '…' : fiche.titre) : '(vide)';
-
-  var warnHtml = '';
-  if (!vendorCode) {
-    warnHtml = '<div style="margin-bottom:10px;padding:8px 10px;background:#fff3cd;border:1px solid #ffc107;border-radius:6px;font-size:11px;color:#856404">'
-      + '⚠️ <strong>vendorCode non défini</strong> sur ce client — le lien VC contiendra [À_COMPLÉTER]. Pensez à le renseigner dans les paramètres client.'
-      + '</div>';
-  }
-
-  var asinJ = JSON.stringify(asin);
-  var mktJ  = JSON.stringify(market);
-  var modalHtml = '<div id="vc-confirm-modal" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5)">'
-    + '<div style="background:var(--bg,#fff);border:1px solid var(--bd,#ddd);border-radius:10px;padding:20px 24px;max-width:460px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.2)">'
-    + '<div style="font-size:15px;font-weight:700;margin-bottom:12px">📤 Modifier Vendor Central</div>'
-    + warnHtml
-    + '<div style="font-size:12px;margin-bottom:4px;color:var(--tx3,#888)">ASIN · marché</div>'
-    + '<div style="font-size:13px;font-weight:600;margin-bottom:12px">' + esc(asin) + ' · amazon' + esc(market) + '</div>'
-    + '<div style="font-size:12px;color:var(--tx3,#888);margin-bottom:4px">TITRE</div>'
-    + '<div style="font-size:12px;margin-bottom:10px;padding:6px 8px;background:var(--s2,#f5f5f5);border-radius:5px">' + esc(titrePreview) + '</div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;font-size:12px">'
-    + '<div style="padding:6px 8px;background:var(--s2,#f5f5f5);border-radius:5px"><span style="color:var(--tx3,#888)">Bullets</span><br><strong>' + bullets.filter(Boolean).length + ' / 5</strong></div>'
-    + '<div style="padding:6px 8px;background:var(--s2,#f5f5f5);border-radius:5px"><span style="color:var(--tx3,#888)">Description</span><br><strong>' + (fiche.description ? 'HTML ✓' : 'Vide') + '</strong></div>'
-    + '<div style="padding:6px 8px;background:var(--s2,#f5f5f5);border-radius:5px"><span style="color:var(--tx3,#888)">Backend KW</span><br><strong>' + (kwCount ? kwCount + ' mots' : 'Vide') + '</strong></div>'
-    + '<div style="padding:6px 8px;background:var(--s2,#f5f5f5);border-radius:5px"><span style="color:var(--tx3,#888)">Vendor code</span><br><strong>' + esc(vendorCode || '⚠️ manquant') + '</strong></div>'
-    + '</div>'
-    + '<div style="display:flex;gap:8px;justify-content:flex-end">'
-    + '<button class="btn btn-sm" onclick="document.getElementById(\'vc-confirm-modal\').remove()">Annuler</button>'
-    + '<button class="btn btn-sm" style="background:var(--accent,#e07b00);color:#fff;border-color:var(--accent,#e07b00)" onclick="document.getElementById(\'vc-confirm-modal\').remove();_doVCCopy(' + asinJ + ',' + mktJ + ')">✅ Générer le script Claude in Chrome</button>'
-    + '</div>'
-    + '</div>'
-    + '</div>';
-
-  var wrapper = document.createElement('div');
-  wrapper.innerHTML = modalHtml;
-  document.body.appendChild(wrapper.firstChild);
-}
-
-function _doVCCopy(asin, market) {
-  var c = cl();
-  if (!c) return;
-  var fiche = (typeof seoResults !== 'undefined' && seoResults[asin] && seoResults[asin][market])
-    ? seoResults[asin][market]
-    : (c.ficheOptimisee && c.ficheOptimisee[asin] && c.ficheOptimisee[asin][market]);
-  if (!fiche) { showToast('Fiche introuvable pour ce marché.', 'alr-r'); return; }
-  var prompt = buildVCModifyPrompt(asin, market, fiche, c);
-  navigator.clipboard.writeText(prompt).then(function() {
-    if (!c.ficheOptimisee) c.ficheOptimisee = {};
-    if (!c.ficheOptimisee[asin]) c.ficheOptimisee[asin] = {};
-    c.ficheOptimisee[asin].vcUpdateStatus = 'pending';
-    c.ficheOptimisee[asin].vcUpdateAt = new Date().toISOString();
-    save();
-    showToast('✅ Script copié ! Collez-le dans Claude in Chrome.', 'alr-g');
-    refreshSEODrawer();
-  }).catch(function() {
-    showToast('Erreur clipboard — copiez manuellement.', 'alr-r');
-  });
-}
 function seoGetScriptVerify(asin, market, fiche) {
   var mkt = fiche[market] || fiche['.fr'] || {};
   var bullets = mkt.bullets || [];
@@ -224,13 +160,7 @@ function seoLaunchModify(asin) {
   var c = cl();
   if (!c) return;
   var vcs = (c.vendorCodes && c.vendorCodes.length) ? c.vendorCodes : (c.vendorCode ? [c.vendorCode] : []);
-  if (vcs.length > 1 && typeof goAgentVC === 'function') { goAgentVC(asin); return; }
-  var activeMkt = (typeof seoActiveTab !== 'undefined' && seoActiveTab) || c.mainMarket || '.fr';
-  var fiche = (typeof seoResults !== 'undefined' && seoResults[asin] && seoResults[asin][activeMkt])
-    ? seoResults[asin][activeMkt]
-    : (c.ficheOptimisee && c.ficheOptimisee[asin] && c.ficheOptimisee[asin][activeMkt]);
-  if (!fiche || fiche.error) { alert('Aucune fiche générée pour cet ASIN.'); return; }
-  showVCConfirmModal(asin, activeMkt, fiche, c);
+  if (typeof goAgentVC === 'function') { goAgentVC(asin); return; }
 }
 
 
