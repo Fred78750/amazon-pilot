@@ -868,9 +868,10 @@ function drawSEOContent(asin, activeMkt, res, mtp, compact) {
       h += '</div>';
     }
 
-    if (res.backendKW) {
+    var _bkw = res.backendKW || (activeMkt && res[activeMkt] && res[activeMkt].backendKW) || '';
+    if (_bkw) {
       h += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:4px">BACKEND KEYWORDS</div>';
-      h += '<div style="padding:7px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd);font-size:10px;color:var(--tx2);line-height:1.5">' + esc(res.backendKW) + '</div>';
+      h += '<div style="padding:7px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd);font-size:10px;color:var(--tx2);line-height:1.5">' + esc(_bkw) + '</div>';
       h += '<button class="btn btn-xs" style="margin-top:3px" onclick="copySEOBkwMkt('+asinJ+')">📋 Copier</button>';
       h += '</div>';
     }
