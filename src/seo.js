@@ -1438,7 +1438,7 @@ function parseSEOResponse(text, lang) {
     for (let i = 1; i <= 5; i++) {
       result.bullets[i-1] = extractField(text, 'BULLET_' + i).replace(/\*\*/g, '').trim();
     }
-    const descMatch = text.match(/DESCRIPTION:\s*([\s\S]+?)(?=\n(?:PRECONISATIONS_IMAGES|BACKEND_KEYWORDS|POSITIONNEMENT_AMAZON|LEVIERS_RANKING|ERREURS_A_EVITER|OPPORTUNITE_SEO|REFERENCE_MANQUANTE|ÉTAPE|---)|$)/);
+    const descMatch = text.match(/DESCRIPTION:\s*([\s\S]+?)(?=\n?(?:PRECONISATIONS_IMAGES|BACKEND_KEYWORDS|POSITIONNEMENT_AMAZON|LEVIERS_RANKING|ERREURS_A_EVITER|OPPORTUNITE_SEO|REFERENCE_MANQUANTE|ÉTAPE|---)|$)/);
     if (descMatch) result.description = descMatch[1].trim().replace(/```html|```/g, '').replace(/\*\*/g, '').trim();
 
     // Parse PRECONISATIONS_IMAGES
