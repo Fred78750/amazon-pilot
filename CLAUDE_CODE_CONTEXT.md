@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 5 mai 2026 (v3.4.4)
+**Dernière mise à jour :** 7 mai 2026 (v3.4.18)
 
 ---
 
@@ -15,8 +15,9 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | v3.2.24 | https://amazon.foliow.app |
-| Recette (staging) | v3.4.5 | https://d9xny9istvl53.cloudfront.net |
+| Production (main) | v3.4.18 | https://amazon.foliow.app |
+| Recette (staging) | v3.4.18 | https://d9xny9istvl53.cloudfront.net |
+| Preprod | v3.4.18 | https://preprod.amazon.foliow.app |
 
 ---
 
@@ -43,6 +44,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 - Frontend : HTML5 + CSS3 + JS vanilla — **build via `build.py`** depuis `src/`
 - Architecture : modulaire — `src/core.js`, `src/seo.js`, etc. — **jamais modifier le HTML directement**
 - Dépôt local : `C:\AmazonPilot\`
+- Repo Cowork : `C:\AmazonPilot\repo` — clone de staging, **à synchroniser après chaque push** : `git -C C:\AmazonPilot\repo pull origin staging`
 - Repo GitHub : `Fred78750/amazon-pilot`
 - Branche staging : `staging` | Branche prod : `main`
 - **Jamais de commit direct sur `main`** — toujours staging → validation Fred → merge
@@ -60,8 +62,9 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 7. `node --check src/[fichier]` après chaque patch
 8. `python build.py` → `node --check amazon-pilot-vX.Y.Z.html`
 9. Exposer résultat à Fred — attendre GO pour dépôt
-10. Déposer en local + commiter sur staging
-11. Mettre à jour ce fichier — commiter
+10. Déposer en local + commiter sur staging + cherry-pick preprod si nécessaire
+11. `git -C C:\AmazonPilot\repo pull origin staging` — synchroniser le repo Cowork
+12. Mettre à jour ce fichier — commiter
 
 ---
 
@@ -74,6 +77,8 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 - Jamais inventer de spec produit dans un prompt SEO — uniquement ce que `seoFetchFiche` retourne
 - ASINs `sourcingOnly` = 0 en CA Ordered — ne jamais revenir dessus sans mesure d'impact
 - Livrable nommé `amazon-pilot-vX.Y.Z.html` — jamais `amazon-pilot-latest.html` (Fred fait la copie)
+- **Après chaque push staging : synchroniser le repo Cowork** — `git -C C:\AmazonPilot\repo pull origin staging` — obligatoire pour que Cowork travaille sur le code à jour
+- **Ordre de déploiement ABSOLU : staging d'abord, preprod ensuite — toujours, sauf instruction explicite contraire de Fred**
 
 ### Règles d'architecture
 - `seoResults[asin][market]` = chemin correct avec market — jamais le chemin plat `ficheOptimisee[asin].backendKW`
@@ -85,6 +90,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 - `buildSEOPrompt`, `parseSEOResponse`, `renderAgentVC` → **`src/seo.js`**
 - Tous les helpers `avc*` (`avcStepWrap`, `avcToggleStep`, `avcLookupAsin`, `avcConfirmMarket`, `avcConfirmSKU`, `avcLaunchSEO`, `avcCopyScript`, `avcMarkDone`, etc.) → **`src/seo.js`**
 - `runSEOFiche`, `callAPI`, `askClaude` → **`src/core.js`**
+- `buildSEOPrompt`, `parseSEOResponse` → **`src/seo.js`** (pas `core.js` — corrigé audit Cowork)
 
 ### Règles patches
 - Chaque modification = un `str_replace` avec ancien texte exact et nouveau texte exact
@@ -104,7 +110,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-## TÂCHES EN COURS (session v3.4.5 — toutes terminées)
+## TÂCHES EN COURS (session v3.4.16 — toutes terminées)
 
 - [x] Fix `parseSEOResponse` : strip `**` sur description → `src/seo.js`
 - [x] Fix `buildSEOPrompt` : directive DESCRIPTION HTML structurée 5 blocs → `src/seo.js`
@@ -114,12 +120,29 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 - [x] Guard `apiKey` dans `runSEOFiche` → `src/core.js`
 - [x] Refonte `renderAgentVC` : wizard 5 étapes, `avcStepWrap`, accordéon, SKU obligatoire étape 3, multi-VC étape 5 → `src/seo.js`
 - [x] Fix `renderOnboarding` : `c.` → `nc.` (wizStep 3, bloc PO) — `ReferenceError: c is not defined` → `src/core.js`
+- [x] Fix wizard SKU : `oninput` → `onchange` (BUG1 — 1er char seulement) → `src/seo.js`
+- [x] Fix wizard étape 5 : bouton "📤 Script VC →" dans branche ficheReady (BUG2 — étape 5 jamais atteinte) → `src/seo.js`
+- [x] Fix `go('agentseo')` → `go('seo')` : écran vide sur "Voir fiche complète" et "← Retour" → `src/seo.js`
+- [x] Fix R1 (Cowork) : `backendKW` per-market dans `showVCConfirmModal` → `src/seo.js`
+- [x] Fix R2 (Cowork) : `seoLaunchModify` route vers `goAgentVC` si multi-VC → `src/seo.js`
+- [x] PATCH 1–4 : wizard Agent VC complet (seoLaunchModify, _doVCCopy supprimé, showVCConfirmModal supprimé, bouton Optimiser+Publier VC dans renderSEOSection) → `src/seo.js` + `src/core.js`
+- [x] PATCH 5 : "Voir fiche complète" → `selectedAsin=agentVCState.asin;go('asins')` (était `go('seo')`) → `src/seo.js`
+- [x] PATCH 6 : Boutons "SEO"+"VC" fusionnés en "🚀 Optimiser" → `goAgentVC(asin)` pour ASINs "À surveiller" — suppression auto-génération drawer → `src/seo.js`
+- [x] v3.4.11 : `btn-p` → `btn-or` sur boutons "Optimiser + Publier VC" (core.js L.7877 + L.7979)
+- [x] v3.4.12 : `seoSearchGo` — `openSEODrawer` → `goAgentVC` → `src/seo.js`
+- [x] v3.4.13 : `render()` après `refreshSEODrawer()` dans `runSEOFiche` (UI bloquée post-génération) → `src/core.js`
+- [x] v3.4.13 : champ SKU étape 3 — `onchange` → `oninput` → `src/seo.js`
+- [x] v3.4.14 : `avcCopyScript` — fallback `execCommand` + pattern `_avcDone` (clipboard silencieux) → `src/seo.js`
+- [x] v3.4.15 : `avcCopyScript` — fallback `ficheOptimisee` si `seoResults` vide (après reload) → `src/seo.js`
+- [x] v3.4.16 : `avcCopyScript` — `navigator.clipboard` → `execCommand` pur (textarea fixed+opacity:0), toast ✅/⚠️ différencié → `src/seo.js`
+- [x] v3.4.16 : boutons étape 5 — `JSON.stringify(vc)` → `'\'' + vc + '\''` (guillemets doubles cassaient l'attribut onclick sur 3 lignes : L.505 onchange, L.507 avcCopyScript, L.509 avcMarkDone) → `src/seo.js`
 
 ---
 
 ## TÂCHES SUIVANTES
 
-_(aucune tâche en attente — en attente du prochain brief de Fred)_
+- [ ] (optionnel) Aligner rendu étape 5 wizard sur `ficheOptimisee` : afficher bouton "Copier" même si `seoResults` vide (actuellement affiche "Générez d'abord la fiche SEO" mais `avcCopyScript` fonctionne quand même)
+- [ ] Tests pre-merge main restants (nécessitent API key + données multi-VC) : description HTML, synthèse sans `**`, multi-VC Cogex
 
 ---
 
@@ -132,10 +155,15 @@ _(aucune tâche en attente — en attente du prochain brief de Fred)_
 | `amazon-pilot-latest.html` hors `.gitignore` | CI déployait ancienne version — fix `ls amazon-pilot-v*.html | sort -V | tail -1` dans deploy.yml | mai 2026 |
 | Plus de livraison HTML par Claude chat | Fichiers trop gros — Claude Code génère et dépose | mai 2026 |
 | Fonctions SEO dans `src/seo.js` pas `src/core.js` | buildSEOPrompt, parseSEOResponse, renderAgentVC, helpers avc* | mai 2026 |
+| `git add -f amazon-pilot-vX.Y.Z.html` obligatoire | `.gitignore` a `amazon-pilot-v*.html` — force-add systématique pour CI | mai 2026 |
+| Boutons SEO+VC fusionnés → "🚀 Optimiser" → `goAgentVC` | Pour ASINs "À surveiller" : plus d'auto-génération via drawer — tout passe par wizard | mai 2026 |
+| "Voir fiche complète" → `selectedAsin=agentVCState.asin;go('asins')` | `go('seo')` perdait le contexte ASIN — fix PATCH 5 | mai 2026 |
+| `avcCopyScript` fallback `ficheOptimisee` | `seoResults` session-only — après reload, fiche lue dans IndexedDB | mai 2026 |
+| Tous points d'entrée wizard cartographiés avant refacto | `seoSearchGo` oublié → `openSEODrawer` au lieu de `goAgentVC` — corrigé v3.4.12 | mai 2026 |
 
 ---
 
-## TESTS À FAIRE AVANT MERGE MAIN (v3.4.4)
+## TESTS À FAIRE AVANT MERGE MAIN (v3.4.10)
 
 - [ ] Générer fiche SEO sur B07DPCH7XC → vérifier description = HTML structuré (`<p>`, `<strong>`, `<ul><li>`) sans `**`
 - [ ] Vérifier champs synthèse (positionnement, leviers, erreurs, opportunite) sans `**`
@@ -147,4 +175,4 @@ _(aucune tâche en attente — en attente du prochain brief de Fred)_
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 5 mai 2026 (v3.4.5)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 7 mai 2026 (v3.4.18)**
