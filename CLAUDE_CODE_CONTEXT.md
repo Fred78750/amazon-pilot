@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 7 mai 2026 (v3.4.18)
+**Dernière mise à jour :** 8 mai 2026 (v3.4.24)
 
 ---
 
@@ -15,9 +15,9 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | v3.4.18 | https://amazon.foliow.app |
-| Recette (staging) | v3.4.18 | https://d9xny9istvl53.cloudfront.net |
-| Preprod | v3.4.18 | https://preprod.amazon.foliow.app |
+| Production (main) | v3.4.24 | https://amazon.foliow.app |
+| Recette (staging) | v3.4.24 | https://d9xny9istvl53.cloudfront.net |
+| Preprod | v3.4.24 | https://preprod.amazon.foliow.app |
 
 ---
 
@@ -110,39 +110,22 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-## TÂCHES EN COURS (session v3.4.16 — toutes terminées)
+## TÂCHES EN COURS (session v3.4.24 — toutes terminées)
 
-- [x] Fix `parseSEOResponse` : strip `**` sur description → `src/seo.js`
-- [x] Fix `buildSEOPrompt` : directive DESCRIPTION HTML structurée 5 blocs → `src/seo.js`
-- [x] Fix `buildSEOPrompt` : directive BACKEND_KEYWORDS 5 blocs + liste INTERDIT → `src/seo.js`
-- [x] Fix bloc INTERDIT : ajout "incassable", "homologué", "certifié", "compatible tous modèles" → `src/seo.js`
-- [x] Strip `**` sur 4 champs synthèse (`positionnement`, `leviers`, `erreurs`, `opportunite`) → `src/seo.js`
-- [x] Guard `apiKey` dans `runSEOFiche` → `src/core.js`
-- [x] Refonte `renderAgentVC` : wizard 5 étapes, `avcStepWrap`, accordéon, SKU obligatoire étape 3, multi-VC étape 5 → `src/seo.js`
-- [x] Fix `renderOnboarding` : `c.` → `nc.` (wizStep 3, bloc PO) — `ReferenceError: c is not defined` → `src/core.js`
-- [x] Fix wizard SKU : `oninput` → `onchange` (BUG1 — 1er char seulement) → `src/seo.js`
-- [x] Fix wizard étape 5 : bouton "📤 Script VC →" dans branche ficheReady (BUG2 — étape 5 jamais atteinte) → `src/seo.js`
-- [x] Fix `go('agentseo')` → `go('seo')` : écran vide sur "Voir fiche complète" et "← Retour" → `src/seo.js`
-- [x] Fix R1 (Cowork) : `backendKW` per-market dans `showVCConfirmModal` → `src/seo.js`
-- [x] Fix R2 (Cowork) : `seoLaunchModify` route vers `goAgentVC` si multi-VC → `src/seo.js`
-- [x] PATCH 1–4 : wizard Agent VC complet (seoLaunchModify, _doVCCopy supprimé, showVCConfirmModal supprimé, bouton Optimiser+Publier VC dans renderSEOSection) → `src/seo.js` + `src/core.js`
-- [x] PATCH 5 : "Voir fiche complète" → `selectedAsin=agentVCState.asin;go('asins')` (était `go('seo')`) → `src/seo.js`
-- [x] PATCH 6 : Boutons "SEO"+"VC" fusionnés en "🚀 Optimiser" → `goAgentVC(asin)` pour ASINs "À surveiller" — suppression auto-génération drawer → `src/seo.js`
-- [x] v3.4.11 : `btn-p` → `btn-or` sur boutons "Optimiser + Publier VC" (core.js L.7877 + L.7979)
-- [x] v3.4.12 : `seoSearchGo` — `openSEODrawer` → `goAgentVC` → `src/seo.js`
-- [x] v3.4.13 : `render()` après `refreshSEODrawer()` dans `runSEOFiche` (UI bloquée post-génération) → `src/core.js`
-- [x] v3.4.13 : champ SKU étape 3 — `onchange` → `oninput` → `src/seo.js`
-- [x] v3.4.14 : `avcCopyScript` — fallback `execCommand` + pattern `_avcDone` (clipboard silencieux) → `src/seo.js`
-- [x] v3.4.15 : `avcCopyScript` — fallback `ficheOptimisee` si `seoResults` vide (après reload) → `src/seo.js`
-- [x] v3.4.16 : `avcCopyScript` — `navigator.clipboard` → `execCommand` pur (textarea fixed+opacity:0), toast ✅/⚠️ différencié → `src/seo.js`
-- [x] v3.4.16 : boutons étape 5 — `JSON.stringify(vc)` → `'\'' + vc + '\''` (guillemets doubles cassaient l'attribut onclick sur 3 lignes : L.505 onchange, L.507 avcCopyScript, L.509 avcMarkDone) → `src/seo.js`
+- [x] v3.4.21 : `buildVCModifyPrompt` — contrainte no-screenshot + description via `JSON.stringify` + détection erreurs avant soumission → `src/seo.js`
+- [x] v3.4.22 : `buildVCModifyPrompt` — refonte full-JS, bloc unique console, no-screenshot → `src/seo.js`
+- [x] v3.4.22 : `parseSEOResponse` — `\n?` lookahead description (délimiteur sans saut de ligne obligatoire) → `src/seo.js`
+- [x] v3.4.23 : `buildVCModifyPrompt` — `fillField` → `kat-textarea`/`kat-input` par nom seul → `src/seo.js`
+- [x] v3.4.24 : `buildVCModifyPrompt` — `fillAndBlur` (execCommand shadow DOM) + XHR interceptor + `clickAddMore` bullets + auto-save + `backendKW` 249 chars → `src/seo.js`
 
 ---
 
 ## TÂCHES SUIVANTES
 
-- [ ] (optionnel) Aligner rendu étape 5 wizard sur `ficheOptimisee` : afficher bouton "Copier" même si `seoResults` vide (actuellement affiche "Générez d'abord la fiche SEO" mais `avcCopyScript` fonctionne quand même)
-- [ ] Tests pre-merge main restants (nécessitent API key + données multi-VC) : description HTML, synthèse sans `**`, multi-VC Cogex
+- [ ] Qualité prompt SEO — comparaison ChatGPT + refonte `buildSEOPrompt` → `src/seo.js`
+- [ ] Enrichissement web `seoFetchFiche` — vérifier lecture fiche Amazon réelle → `src/seo.js`
+- [ ] Gestion erreurs Amazon (2-3 messages courants) dans le script VC → `buildVCModifyPrompt` `src/seo.js`
+- [ ] Double clic "Enregistrer et terminer" si premier clic ignoré → `save()` dans `buildVCModifyPrompt` `src/seo.js`
 
 ---
 
@@ -175,4 +158,4 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 7 mai 2026 (v3.4.18)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 8 mai 2026 (v3.4.24)**
