@@ -531,7 +531,7 @@ function renderAgentVC() {
         h += '<div style="margin-bottom:10px;font-size:12px;color:var(--tx2)">Vendor code(s) : <strong>' + vendorCodes.map(esc).join(', ') + '</strong></div>';
       }
       h += '<div style="margin-bottom:6px"><div style="font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:4px">SKU <span style="color:var(--r)">*</span></div>';
-      h += '<input id="avc-sku" class="inp" style="font-family:var(--mono);width:100%;max-width:260px" placeholder="Ex: 643416 ou ASIN" value="' + esc(s.sku||'') + '" oninput="agentVCState.sku=this.value.trim();render()">';
+      h += '<input id="avc-sku" class="inp" style="font-family:var(--mono);width:100%;max-width:260px" placeholder="Ex: 643416 ou ASIN" value="' + esc(s.sku||'') + '" oninput="agentVCState.sku=this.value.trim()">';
       h += '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Le SKU figure dans le catalogue VC (recherche par ASIN). Il peut être identique à l\'ASIN ou différent.</div></div>';
       h += '<button class="btn btn-p" style="margin-top:8px" ' + (!s.sku ? 'disabled' : '') + ' onclick="avcConfirmSKU()">Confirmer →</button>';
     }
@@ -550,6 +550,20 @@ function renderAgentVC() {
         h += '<div style="margin-bottom:8px"><div style="height:4px;background:var(--bd);border-radius:2px;overflow:hidden"><div style="height:100%;background:var(--accent);border-radius:2px;width:' + (progress.pct||0) + '%"></div></div>';
         h += '<div style="font-size:11px;color:var(--tx3);margin-top:4px">' + esc(progress.phase||'') + '</div></div>';
       } else if (!ficheReady) {
+        var aObj4 = s.asin ? c.asins.find(function(x){ return x.asin === s.asin; }) : null;
+        h += `<div style="margin-bottom:12px">
+  <div class="fg-lb">📋 Fiche Amazon
+    <span style="color:var(--muted);font-size:11px;font-weight:400">
+      — coller pour enrichir la génération SEO et l'analyse IA
+    </span>
+    ${aObj4 && aObj4.ficheAmazon ? '<span style="color:var(--ok);font-size:11px">✓</span>' : ''}
+  </div>
+  <textarea class="fg-in"
+    style="height:100px;font-size:11px;margin-top:4px;resize:vertical"
+    placeholder="Collez ici le contenu de la page Amazon.fr (titre, bullets, avis, concurrents)..."
+    oninput="saveFicheAmazon('${s.asin}', this.value)"
+  >${esc(aObj4 && aObj4.ficheAmazon ? aObj4.ficheAmazon : '')}</textarea>
+</div>`;
         h += '<button class="btn btn-p" onclick="avcLaunchSEO()">✨ Générer la fiche SEO</button>';
       } else {
         var r4 = seoResults[s.asin][s.market];
