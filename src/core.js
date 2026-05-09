@@ -7885,19 +7885,29 @@ function renderSEOSection(a, c) {
     h += '<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Génère la fiche optimisée pour les ' + marketsToProcess.length + ' marché(s) : ';
     h += marketsToProcess.map(function(m) { return (MARKET_LANG[m]?.flag || '') + ' ' + (MARKET_LANG[m]?.label || m); }).join(', ');
     h += '.</p>';
-    h += `<div style="margin-bottom:12px">
-  <div class="fg-lb">📋 Fiche Amazon
-    <span style="color:var(--muted);font-size:11px;font-weight:400">
-      — coller pour enrichir la génération SEO et l'analyse IA
-    </span>
-    ${a.ficheAmazon ? '<span style="color:var(--ok);font-size:11px">✓</span>' : ''}
+    h += `<div class="cd" style="padding:1.25rem;margin-bottom:12px">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+    <div style="width:22px;height:22px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:#3C3489;flex-shrink:0">2</div>
+    <span style="font-size:14px;font-weight:500">Enrichissement produit</span>
+    <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#EEEDFE;color:#3C3489">optionnel · recommandé</span>
   </div>
-  <textarea class="fg-in"
-    style="height:100px;font-size:11px;margin-top:4px;resize:vertical"
-    placeholder="Collez ici le contenu de la page Amazon.fr (titre, bullets, avis, concurrents)..."
+  <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Coller la fiche Amazon pour une analyse plus précise — concurrents, avis, specs réelles</div>
+  <textarea class="fg-in" id="fiche-amazon-${esc(a.asin)}"
+    style="height:90px;font-size:12px;resize:vertical"
+    placeholder="Collez ici le contenu de la page Amazon.fr (titre actuel, bullets, description, avis clients, produits associés)..."
     oninput="saveFicheAmazon('${esc(a.asin)}', this.value)"
   >${esc(a.ficheAmazon || '')}</textarea>
+  <div style="font-size:11px;color:var(--muted2);margin-top:6px">Sauvegardée automatiquement. Alimente aussi l'Analyse IA et la Buy Box.</div>
+  ${a.ficheAmazon ? `
+  <button class="btn-sm" style="margin-top:8px;color:var(--danger)" onclick="saveFicheAmazon('${esc(a.asin)}','');document.getElementById('fiche-amazon-${esc(a.asin)}').value='';render()">
+    Effacer
+  </button>` : ''}
 </div>`;
+    if (a.ficheAmazon) {
+      h += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--ok-bg, #EAF3DE);border-radius:6px;margin-bottom:10px">
+    <span style="font-size:12px;color:var(--ok)">✓ Fiche Amazon enrichie — analyse plus précise</span>
+  </div>`;
+    }
     h += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
     h += '<button class="btn btn-p" onclick="runSEOFiche(' + _asinJ + ',seoActiveTab||(cl()&&(cl().mainMarket||\'.fr\')),seoMotcle[' + _asinJ + ']||extractSearchKeyword(' + _asinJ + ',cl()))" ' + (seoLoading ? 'disabled' : '') + '>✍️ Générer la fiche (' + marketsToProcess.length + ' langue' + (marketsToProcess.length > 1 ? 's' : '') + ')</button>';
     h += '<button class="btn btn-or" onclick="goAgentVC(' + _asinJ + ')">📤 Optimiser + Publier VC</button>';

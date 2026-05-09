@@ -531,7 +531,7 @@ function renderAgentVC() {
         h += '<div style="margin-bottom:10px;font-size:12px;color:var(--tx2)">Vendor code(s) : <strong>' + vendorCodes.map(esc).join(', ') + '</strong></div>';
       }
       h += '<div style="margin-bottom:6px"><div style="font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:4px">SKU <span style="color:var(--r)">*</span></div>';
-      h += '<input id="avc-sku" class="inp" style="font-family:var(--mono);width:100%;max-width:260px" placeholder="Ex: 643416 ou ASIN" value="' + esc(s.sku||'') + '" oninput="agentVCState.sku=this.value.trim()">';
+      h += '<input id="avc-sku" class="inp" style="font-family:var(--mono);width:100%;max-width:260px" placeholder="Ex: 643416 ou ASIN" value="' + esc(s.sku||'') + '" oninput="agentVCState.sku=this.value.trim()" onblur="render()">';
       h += '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Le SKU figure dans le catalogue VC (recherche par ASIN). Il peut être identique à l\'ASIN ou différent.</div></div>';
       h += '<button class="btn btn-p" style="margin-top:8px" ' + (!s.sku ? 'disabled' : '') + ' onclick="avcConfirmSKU()">Confirmer →</button>';
     }
@@ -551,18 +551,20 @@ function renderAgentVC() {
         h += '<div style="font-size:11px;color:var(--tx3);margin-top:4px">' + esc(progress.phase||'') + '</div></div>';
       } else if (!ficheReady) {
         var aObj4 = s.asin ? c.asins.find(function(x){ return x.asin === s.asin; }) : null;
-        h += `<div style="margin-bottom:12px">
-  <div class="fg-lb">📋 Fiche Amazon
-    <span style="color:var(--muted);font-size:11px;font-weight:400">
-      — coller pour enrichir la génération SEO et l'analyse IA
-    </span>
-    ${aObj4 && aObj4.ficheAmazon ? '<span style="color:var(--ok);font-size:11px">✓</span>' : ''}
+        var _ficheOk = !!(aObj4 && aObj4.ficheAmazon);
+        h += `<div style="margin-bottom:14px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+    <span style="font-size:13px;font-weight:500">Enrichissement produit</span>
+    <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#EEEDFE;color:#3C3489">optionnel · recommandé</span>
   </div>
-  <textarea class="fg-in"
-    style="height:100px;font-size:11px;margin-top:4px;resize:vertical"
-    placeholder="Collez ici le contenu de la page Amazon.fr (titre, bullets, avis, concurrents)..."
+  <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Coller la fiche Amazon pour une analyse plus précise</div>
+  <textarea class="fg-in" id="fiche-amazon-vc-${esc(s.asin)}"
+    style="height:90px;font-size:12px;resize:vertical"
+    placeholder="Collez ici le contenu de la page Amazon.fr (titre actuel, bullets, description, avis, produits associés)..."
     oninput="saveFicheAmazon('${s.asin}', this.value)"
-  >${esc(aObj4 && aObj4.ficheAmazon ? aObj4.ficheAmazon : '')}</textarea>
+  >${esc((aObj4 && aObj4.ficheAmazon) || '')}</textarea>
+  <div style="font-size:11px;color:var(--muted2);margin-top:4px">Sauvegardée automatiquement pour cet ASIN.</div>
+  ${_ficheOk ? `<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--ok)">✓ Fiche enrichie — la génération sera plus précise</div>` : ''}
 </div>`;
         h += '<button class="btn btn-p" onclick="avcLaunchSEO()">✨ Générer la fiche SEO</button>';
       } else {
