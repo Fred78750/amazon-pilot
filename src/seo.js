@@ -936,12 +936,10 @@ function drawSEOContent(asin, activeMkt, res, mtp, compact) {
   }
 
   // ALERTES_FRED
-  if (r.alertesFred) {
-    h += `<div class="alr alr-w" style="margin-bottom:16px">
+  h += `<div class="alr alr-w" style="margin-bottom:16px;${r.alertesFred ? '' : 'display:none'}">
     ⚠️ <strong>Points à vérifier avant publication :</strong><br>
-    ${esc(r.alertesFred)}
+    ${esc(r.alertesFred || '')}
   </div>`;
-  }
 
   // Titre
   var tl = r.titre ? r.titre.length : 0;
@@ -991,11 +989,9 @@ function drawSEOContent(asin, activeMkt, res, mtp, compact) {
       h += '</div>';
     }
 
-    if (r.pointImportant) {
-      h += `<div class="cd" style="padding:14px;margin-top:12px;border-left:3px solid var(--or)">
-    🔥 <strong>Point clé :</strong> ${esc(r.pointImportant)}
+    h += `<div class="cd" style="padding:14px;margin-top:12px;border-left:3px solid var(--or);${r.pointImportant ? '' : 'display:none'}">
+    🔥 <strong>Point clé :</strong> ${esc(r.pointImportant || '')}
   </div>`;
-    }
 
     if (r.images && r.images.length) {
       h += '<div style="margin-bottom:10px">';
@@ -1275,9 +1271,11 @@ function buildSEOPrompt(a, c, lang, isBackendKW) {
       + '- Si le champ dépasse 249 bytes, Amazon désindexe TOUT le champ sans warning\n'
       + '- Structure 4 blocs : usages → contextes → synonymes → longue traîne\n'
       + '- Le mot-clé principal peut figurer même s\'il est dans le titre — renforce la pertinence\n'
+      + '- Maximum 35 mots — pas plus\n'
+      + '- INTERDIT absolument : "pas cher", "discount", "budget", "économique", "meilleur", "top", "n°1", tout superlatif, tout claim commercial\n'
+      + '- INTERDIT : noms de marques concurrentes\n'
+      + '- Un mot = un concept utile — zéro remplissage\n'
       + '- Zéro répétition entre les blocs\n'
-      + '- Zéro nom de marque concurrente\n'
-      + '- Zéro superlatif (meilleur, top, n°1)\n'
       + '- Zéro stop words inutiles (de, le, la, pour, avec)\n'
       + '- Zéro terme trop générique seul (maison, outil, produit)\n'
       + '- Préférer les usages concrets — couverture sémantique dense, pas liste disparate\n'
