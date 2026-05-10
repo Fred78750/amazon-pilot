@@ -2123,6 +2123,15 @@ RÈGLES ABSOLUES:
 }
 const cl = () => clients.find(c => c.id === activeId) || null;
 
+function saveClientSafe(c) {
+  if (!c || !c.asins || c.asins.length === 0) {
+    console.error('[ABORT] saveClientSafe — asins vide ou corrompu, longueur:', c?.asins?.length);
+    return false;
+  }
+  save();
+  return true;
+}
+
 function toggleFicheAmazon(asin) {
   const el = document.getElementById('fiche-amazon-' + asin);
   if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
@@ -2311,36 +2320,7 @@ function copyFicheFusion(asin, market) {
   });
 }
 
-function applyFusionAndPublish(asin, market) {
-  const c = cl(); if (!c) return;
-  const a = c.asins.find(x => x.asin === asin);
-  if (!a || !a.ficheChallenge || !a.ficheChallenge[market]) {
-    alert('Aucune fiche fusionnée disponible.'); return;
-  }
-  const ch = a.ficheChallenge[market];
-
-  // 1. Remplacer seoResults[asin][market] par la fiche fusionnée
-  if (!seoResults[asin]) seoResults[asin] = {};
-  if (!seoResults[asin][market]) seoResults[asin][market] = {};
-  const r = seoResults[asin][market];
-  if (!r.bullets) r.bullets = [];
-  if (ch.fusionTitre)   r.titre       = ch.fusionTitre;
-  if (ch.fusionB1)      r.bullets[0]  = ch.fusionB1;
-  if (ch.fusionB2)      r.bullets[1]  = ch.fusionB2;
-  if (ch.fusionB3)      r.bullets[2]  = ch.fusionB3;
-  if (ch.fusionB4)      r.bullets[3]  = ch.fusionB4;
-  if (ch.fusionB5)      r.bullets[4]  = ch.fusionB5;
-  if (ch.fusionDesc)    r.description = ch.fusionDesc;
-  if (ch.fusionBackend) r.backendKW   = ch.fusionBackend;
-
-  // Persister dans ficheOptimisee
-  if (!c.ficheOptimisee) c.ficheOptimisee = {};
-  c.ficheOptimisee[asin] = seoResults[asin];
-  save();
-
-  // 2. Naviguer vers l'étape 4 du wizard avec la fiche fusionnée
-  goAgentSEOPublish(asin);
-}
+// applyFusionAndPublish supprimé — remplacé par wizardSaveAndPublish (v3.4.29)
 
 const fmt = n => (n || 0).toLocaleString('fr-FR');
 const fmtEur = n => fmt(Math.round(n || 0)) + ' €';
@@ -2469,7 +2449,8 @@ function renderContent() {
     pompier: renderPompier, buybox: renderBuyBox, config: renderConfig, weekly: renderWeeklyReview,
     appros: renderAppros, forecast: renderApprosForecast, agent: renderAgent, potentiel: renderPotentiel,
     seo: renderSEOScreen,
-    agentvc: renderAgentVC
+    agentvc: renderAgentVC,
+    optimisationWizard: renderOptimisationWizard
   };
   try {
     el.innerHTML = (map[screen] || renderWelcome)();
@@ -7961,6 +7942,34 @@ ${dec.slice(0,12).map(a => {
 // État SEO global
 let seoLoading = false;
 let challengeLoading = null; // asin en cours de challenge GPT
+
+// ── Wizard Optimisation ──────────────────────────────────────────────────────
+let wizardState = {
+  asin: null, market: null, sku: null,
+  step: 'a', ficheReady: false, challengeReady: false,
+  progress: null, isRegen: false
+};
+
+function resetWizard() {
+  wizardState = {
+    asin: null, market: null, sku: null,
+    step: 'a', ficheReady: false, challengeReady: false,
+    progress: null, isRegen: false
+  };
+}
+
+function openWizard(asin, market, isRegen) {
+  resetWizard();
+  wizardState.asin    = asin;
+  wizardState.market  = market || '.fr';
+  wizardState.isRegen = !!isRegen;
+  go('optimisationWizard');
+}
+
+function closeWizard() {
+  resetWizard();
+  go('asins');
+}
 let seoResults = {}; // { asin: { '.fr': {...}, backendKW: '...', _progress: {...} } }
 let seoActiveTab = null;
 let seoDrawerAsin = null;
@@ -8118,7 +8127,7 @@ function renderSEOSection(a, c) {
   </div>`;
     }
     h += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
-    h += '<button class="btn btn-p" onclick="goAgentSEO(' + _asinJ + ')" ' + (seoLoading ? 'disabled' : '') + '>🚀 Générer la fiche</button>';
+    h += '<button class="btn btn-p" onclick="openWizard(' + _asinJ + ',(cl()&&(cl().mainMarket||\'.fr\')),false)" ' + (seoLoading ? 'disabled' : '') + '>✨ Optimiser la fiche Article</button>';
     h += '</div>';
     h += '</div>';
     return h;
@@ -8231,13 +8240,10 @@ function renderSEOSection(a, c) {
 
   // Tout copier
   h += '<button class="btn btn-sm btn-p" onclick="copySEOField(' + asinJson + ',' + mktJson + ',\'all\')">📋 Tout copier (' + (MARKET_LANG[activeMkt]?.label || activeMkt) + ')</button>';
-  h += '<div style="margin-top:10px;display:flex;gap:8px">';
-  h += '<button class="btn btn-p" onclick="goAgentSEOPublish(' + _asinJ + ')">📤 Publier dans VC</button>';
+  h += '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">';
+  h += '<button class="btn btn-p" onclick="publishVC(' + _asinJ + ',' + mktJson + ')">📤 Publier dans VC</button>';
+  h += '<button class="btn btn-or" onclick="openWizard(' + _asinJ + ',' + mktJson + ',true)">🔄 Régénérer</button>';
   h += '</div>';
-  const _seoRChallenge = seoResults[a.asin] && seoResults[a.asin][activeMkt];
-  if (_seoRChallenge) {
-    h += renderChallengeGPT(a.asin, activeMkt, a);
-  }
   h += '</div>';
   return h;
 }
@@ -8345,25 +8351,180 @@ function go(s) {
 }
 function goAgentVC(asin) { agentVCParam = asin; go('agentvc'); }
 
-function goAgentSEO(asin) {
-  // Démarrage wizard à l'étape 1 — init propre via agentVCParam
-  goAgentVC(asin);
-}
-
-function goAgentSEOPublish(asin) {
-  // Navigation directe vers l'étape 4 (résultat fiche) sans réinitialiser le wizard
+function publishVC(asin, market) {
   const c = cl(); if (!c) return;
   const a = c.asins.find(x => x.asin === asin);
   if (!a) return;
+  const mkt = market || c.mainMarket || '.fr';
+  const fiche = (seoResults[asin] && seoResults[asin][mkt])
+    || (c.ficheOptimisee && c.ficheOptimisee[asin] && c.ficheOptimisee[asin][mkt]);
+  if (!fiche) { alert('Aucune fiche optimisée disponible pour cet ASIN.'); return; }
+  // Charger la fiche dans seoResults pour que le wizard VC la trouve
+  if (!seoResults[asin]) seoResults[asin] = {};
+  seoResults[asin][mkt] = fiche;
+  // Navigation directe vers l'étape 4 (résultat fiche)
   if (typeof agentVCState !== 'undefined') {
     agentVCState.asin     = asin;
-    agentVCState.market   = agentVCState.market || (c.mainMarket || '.fr');
+    agentVCState.market   = mkt;
     agentVCState.sku      = a.sku || asin;
     agentVCState.step     = 4;
     agentVCState.progress = null;
   }
   go('agentvc');
 }
+
+function wizardNextStep(step) {
+  wizardState.step = step;
+  render();
+}
+
+function wizardRunSEO() {
+  const c = cl(); if (!c) return;
+  wizardState.step = 'c';
+  wizardState.progress = 'seo';
+  render();
+  const keyword = seoMotcle[wizardState.asin] || extractSearchKeyword(wizardState.asin, c);
+  runSEOFiche(wizardState.asin, wizardState.market, keyword)
+    .then(function() {
+      wizardState.progress = null;
+      wizardState.ficheReady = true;
+      wizardState.step = 'd';
+      render();
+    })
+    .catch(function(e) {
+      wizardState.progress = null;
+      console.error('SEO error:', e);
+      render();
+    });
+}
+
+function wizardRunChallenge() {
+  wizardState.step = 'e';
+  wizardState.progress = 'challenge';
+  render();
+  runChallengeGPT(wizardState.asin, wizardState.market)
+    .then(function() {
+      wizardState.progress = null;
+      wizardState.challengeReady = true;
+      wizardState.step = 'e';
+      render();
+    })
+    .catch(function(e) {
+      wizardState.progress = null;
+      console.error('Challenge error:', e);
+      render();
+    });
+}
+
+function wizardSaveAndChoose() {
+  wizardState.step = 'g';
+  render();
+}
+
+function updateWizardField(asin, mkt, field, val) {
+  const c = cl(); if (!c) return;
+  const a = c.asins.find(x => x.asin === asin);
+  if (!a) return;
+  const ch = a.ficheChallenge && a.ficheChallenge[mkt];
+  if (ch) {
+    const map = {
+      titre: 'fusionTitre', description: 'fusionDesc', backendKW: 'fusionBackend',
+      bullet0: 'fusionB1', bullet1: 'fusionB2', bullet2: 'fusionB3',
+      bullet3: 'fusionB4', bullet4: 'fusionB5'
+    };
+    if (map[field]) ch[map[field]] = val;
+  } else if (seoResults[asin] && seoResults[asin][mkt]) {
+    const r = seoResults[asin][mkt];
+    if (field === 'titre') r.titre = val;
+    else if (field === 'description') r.description = val;
+    else if (field === 'backendKW') r.backendKW = val;
+    else if (field.startsWith('bullet')) r.bullets[parseInt(field.replace('bullet',''))] = val;
+  }
+}
+
+function wizardSave(asin, mkt) {
+  const c = cl(); if (!c) return;
+  if (!c.asins || c.asins.length === 0) {
+    console.error('[ABORT] wizardSave — asins vide'); return;
+  }
+  const a = c.asins.find(x => x.asin === asin);
+  if (!a) return;
+  const ch = a.ficheChallenge && a.ficheChallenge[mkt];
+  const seoR = seoResults[asin] && seoResults[asin][mkt];
+  const fiche = {
+    titre:          (ch && ch.fusionTitre)   || (seoR && seoR.titre)       || '',
+    bullets:        ch
+      ? [ch.fusionB1, ch.fusionB2, ch.fusionB3, ch.fusionB4, ch.fusionB5]
+      : (seoR && seoR.bullets) || [],
+    description:    (ch && ch.fusionDesc)    || (seoR && seoR.description) || '',
+    backendKW:      (ch && ch.fusionBackend) || (seoR && seoR.backendKW)   || '',
+    positionnement: (seoR && seoR.positionnement) || '',
+    leviers:        (seoR && seoR.leviers)        || '',
+    erreurs:        (seoR && seoR.erreurs)         || '',
+    opportunite:    (seoR && seoR.opportunite)     || '',
+    pointImportant: (seoR && seoR.pointImportant)  || '',
+    alertesFred:    (seoR && seoR.alertesFred)     || '',
+    generatedAt:    new Date().toISOString(),
+  };
+  if (!c.ficheOptimisee) c.ficheOptimisee = {};
+  // COPIE PROFONDE — jamais de référence directe
+  c.ficheOptimisee[asin] = {};
+  c.ficheOptimisee[asin][mkt] = JSON.parse(JSON.stringify(fiche));
+  // Réinjecter dans seoResults
+  if (!seoResults[asin]) seoResults[asin] = {};
+  seoResults[asin][mkt] = c.ficheOptimisee[asin][mkt];
+  // Vérification défensive avant save
+  if (!c.asins || c.asins.length === 0) {
+    console.error('[ABORT] wizardSave post-assign — asins corrompu'); return;
+  }
+  saveClientSafe(c);
+  closeWizard();
+}
+
+function wizardSaveAndPublish(asin, mkt) {
+  const c = cl(); if (!c) return;
+  const a = c.asins.find(x => x.asin === asin);
+  if (!a) return;
+  // Sauvegarder la fiche (sans closeWizard pour enchaîner la navigation)
+  if (!c.asins || c.asins.length === 0) {
+    console.error('[ABORT] wizardSaveAndPublish — asins vide'); return;
+  }
+  const ch = a.ficheChallenge && a.ficheChallenge[mkt];
+  const seoR = seoResults[asin] && seoResults[asin][mkt];
+  const fiche = {
+    titre:          (ch && ch.fusionTitre)   || (seoR && seoR.titre)       || '',
+    bullets:        ch
+      ? [ch.fusionB1, ch.fusionB2, ch.fusionB3, ch.fusionB4, ch.fusionB5]
+      : (seoR && seoR.bullets) || [],
+    description:    (ch && ch.fusionDesc)    || (seoR && seoR.description) || '',
+    backendKW:      (ch && ch.fusionBackend) || (seoR && seoR.backendKW)   || '',
+    positionnement: (seoR && seoR.positionnement) || '',
+    leviers:        (seoR && seoR.leviers)        || '',
+    erreurs:        (seoR && seoR.erreurs)         || '',
+    opportunite:    (seoR && seoR.opportunite)     || '',
+    pointImportant: (seoR && seoR.pointImportant)  || '',
+    alertesFred:    (seoR && seoR.alertesFred)     || '',
+    generatedAt:    new Date().toISOString(),
+  };
+  if (!c.ficheOptimisee) c.ficheOptimisee = {};
+  c.ficheOptimisee[asin] = {};
+  c.ficheOptimisee[asin][mkt] = JSON.parse(JSON.stringify(fiche));
+  if (!seoResults[asin]) seoResults[asin] = {};
+  seoResults[asin][mkt] = c.ficheOptimisee[asin][mkt];
+  saveClientSafe(c);
+  // Naviguer vers Agent VC étape 4 — publication
+  if (typeof agentVCState !== 'undefined') {
+    agentVCState.asin     = asin;
+    agentVCState.market   = mkt;
+    agentVCState.sku      = wizardState.sku || a.sku || asin;
+    agentVCState.step     = 4;
+    agentVCState.progress = null;
+  }
+  resetWizard();
+  go('agentvc');
+}
+
+// goAgentSEO + goAgentSEOPublish supprimés — remplacés par openWizard/publishVC (v3.4.29)
 
 function deleteAnnualData(year) {
   const c = cl();

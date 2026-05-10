@@ -575,8 +575,7 @@ function renderAgentVC() {
         h += '<button class="btn btn-sm" onclick="avcLaunchSEO()">🔄 Regénérer</button>';
         h += '<button class="btn btn-p btn-sm" onclick="agentVCState.step=5;render()">📤 Script VC →</button>';
         h += '</div>';
-        var _aFiche = s.asin ? c.asins.find(function(x){ return x.asin === s.asin; }) : null;
-        if (_aFiche) h += renderChallengeGPT(s.asin, s.market, _aFiche);
+        // renderChallengeGPT supprimé — intégré dans renderOptimisationWizard (v3.4.29)
       }
     }
     h += '</div></div>';
@@ -1655,4 +1654,140 @@ function parseSEOResponse(text, lang) {
     }
   } catch(e) { /* parsing partiel OK */ }
   return result;
+}
+
+// ── Wizard Optimisation Fiche Article ────────────────────────────────────────
+
+function renderOptimisationWizard() {
+  var ws  = wizardState;
+  var c   = cl(); if (!c) return '<div style="padding:24px" class="alr alr-r">Erreur client</div>';
+  var a   = c.asins.find(function(x){ return x.asin === ws.asin; });
+  if (!a) return '<div style="padding:24px" class="alr alr-r">ASIN introuvable</div>';
+  var mkt = ws.market || '.fr';
+
+  var h = '<div style="max-width:680px;margin:0 auto;padding:1.5rem">';
+  h += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:1.5rem">';
+  h += '<button class="btn btn-sm" onclick="closeWizard()">← Retour</button>';
+  h += '<h2 style="font-size:16px;font-weight:500;margin:0">' + (ws.isRegen ? '🔄 Régénérer la fiche' : '✨ Optimiser la fiche Article') + '</h2>';
+  h += '<span style="font-size:12px;color:var(--tx3)">' + esc(ws.asin) + '</span>';
+  h += '</div>';
+
+  // ── ÉTAPE A — SKU ──────────────────────────────────────────────
+  var stepA_done = !!ws.sku;
+  h += renderWizardStep('a', 'A', 'Saisir le SKU', stepA_done, ws.step === 'a',
+    '<div style="font-size:12px;color:var(--tx3);margin-bottom:8px">Le SKU figure dans le catalogue Vendor Central.</div>' +
+    '<input type="text" class="fg-in" id="wiz-sku" style="max-width:280px;font-size:13px" placeholder="Ex: 50405 ou B009L0RMUG" value="' + esc(ws.sku || '') + '" oninput="wizardState.sku=this.value" />' +
+    '<div style="margin-top:10px"><button class="btn btn-p" onclick="wizardNextStep(\'b\')" ' + (!ws.sku ? 'disabled' : '') + '>Confirmer →</button></div>',
+    'SKU : ' + esc(ws.sku || '')
+  );
+
+  // ── ÉTAPE B — FICHE AMAZON ─────────────────────────────────────
+  var stepB_done = !!(a.ficheAmazon);
+  h += renderWizardStep('b', 'B', 'Coller la fiche Amazon', stepB_done, ws.step === 'b',
+    '<div style="font-size:12px;color:var(--tx3);margin-bottom:8px">Collez le contenu de la page Amazon.fr — titre actuel, bullets, description, avis, produits associés.<br><span style="color:var(--tx3);opacity:.7">Optionnel mais recommandé pour une analyse précise.</span></div>' +
+    '<textarea class="fg-in" style="height:100px;font-size:12px;resize:vertical" placeholder="Collez ici le contenu de la page Amazon.fr..." oninput="saveFicheAmazon(\'' + esc(ws.asin) + '\', this.value)">' + esc(a.ficheAmazon || '') + '</textarea>' +
+    '<div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-p" onclick="wizardRunSEO()">✨ Générer la fiche →</button><button class="btn btn-sm" onclick="wizardNextStep(\'c\')" style="font-size:12px">Passer cette étape</button></div>',
+    stepB_done ? 'Fiche Amazon enrichie ✓' : 'Non renseignée'
+  );
+
+  // ── ÉTAPE C — GÉNÉRATION CLAUDE ────────────────────────────────
+  var seoR = seoResults[ws.asin] && seoResults[ws.asin][mkt];
+  var stepC_done = !!seoR;
+  var stepC_content;
+  if (ws.progress === 'seo') {
+    stepC_content = '<div style="font-size:13px;color:var(--tx3)"><span class="spin">⏳</span> Génération en cours...</div>';
+  } else if (stepC_done) {
+    stepC_content = '<div style="font-size:12px;font-weight:500;margin-bottom:6px">' + esc((seoR.titre || '').substring(0,80)) + '…</div>' +
+      '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-sm" onclick="wizardNextStep(\'d\')">Continuer →</button><button class="btn btn-sm" onclick="wizardRunSEO()">Regénérer</button></div>';
+  } else {
+    stepC_content = '<button class="btn btn-p" onclick="wizardRunSEO()">✨ Générer</button>';
+  }
+  h += renderWizardStep('c', 'C', 'Analyse et génération Claude', stepC_done, ws.step === 'c', stepC_content, '');
+
+  // ── ÉTAPE D — SORTIE GPT ───────────────────────────────────────
+  var stepD_done = !!(a.ficheGPT);
+  h += renderWizardStep('d', 'D', 'Intégrer la sortie GPT', stepD_done, ws.step === 'd',
+    '<div style="font-size:12px;color:var(--tx3);margin-bottom:8px">Collez la sortie brute de ChatGPT pour la comparaison.<br><span style="color:var(--tx3);opacity:.7">Optionnel — sans GPT, la fiche Claude est utilisée directement.</span></div>' +
+    '<textarea class="fg-in" style="height:100px;font-size:12px;resize:vertical" placeholder="Collez ici la sortie complète de ChatGPT..." oninput="saveFicheGPT(\'' + esc(ws.asin) + '\', this.value)">' + esc(a.ficheGPT || '') + '</textarea>' +
+    '<div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-p" onclick="wizardRunChallenge()" ' + (!a.ficheGPT ? 'disabled' : '') + '>⚡ Comparer et arbitrer →</button><button class="btn btn-sm" onclick="wizardNextStep(\'f\')" style="font-size:12px">Utiliser la fiche Claude telle quelle</button></div>',
+    stepD_done ? 'Sortie GPT renseignée ✓' : 'Non renseignée'
+  );
+
+  // ── ÉTAPE E — COMPARAISON ──────────────────────────────────────
+  var ch = a.ficheChallenge && a.ficheChallenge[mkt];
+  var stepE_done = !!ch;
+  if (ws.step === 'e' || stepE_done) {
+    var stepE_content;
+    if (ws.progress === 'challenge') {
+      stepE_content = '<div style="font-size:13px;color:var(--tx3)"><span class="spin">⏳</span> Comparaison en cours...</div>';
+    } else if (stepE_done) {
+      stepE_content = '<div style="font-size:12px;margin-bottom:8px">Claude <strong>' + esc(String(ch.scoreClaude || '')) + '</strong> · GPT <strong>' + esc(String(ch.scoreGPT || '')) + '</strong></div>' +
+        (ch.autocritique ? '<div class="alr alr-w" style="margin-bottom:8px;font-size:12px"><strong>Autocritique :</strong> ' + esc(ch.autocritique) + '</div>' : '') +
+        '<button class="btn btn-p" onclick="wizardNextStep(\'f\')">Voir la fiche fusionnée →</button>';
+    } else {
+      stepE_content = '<button class="btn btn-p" onclick="wizardRunChallenge()">⚡ Comparer</button>';
+    }
+    h += renderWizardStep('e', 'E', 'Comparaison & arbitrage', stepE_done, ws.step === 'e', stepE_content, '');
+  }
+
+  // ── ÉTAPE F — FICHE FUSIONNÉE ÉDITABLE ────────────────────────
+  var fusionSrc = ch || seoR;
+  if (ws.step === 'f' || ws.step === 'g') {
+    h += renderWizardStep('f', 'F', 'Fiche finale — éditable', true, ws.step === 'f' || ws.step === 'g',
+      renderFicheEditable(ws.asin, mkt, fusionSrc, ch) +
+      '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-p" onclick="wizardSaveAndChoose()">Valider la fiche →</button><button class="btn btn-sm" onclick="wizardNextStep(\'d\')">← Modifier la comparaison</button></div>',
+      ''
+    );
+  }
+
+  // ── ÉTAPE G — CTA FINAL ────────────────────────────────────────
+  if (ws.step === 'g') {
+    h += renderWizardStep('g', 'G', 'Que faire de cette fiche ?', false, true,
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button class="btn btn-p" onclick="wizardSave(\'' + esc(ws.asin) + '\',\'' + esc(mkt) + '\')">💾 Sauvegarder</button>' +
+      '<button class="btn btn-or" onclick="wizardSaveAndPublish(\'' + esc(ws.asin) + '\',\'' + esc(mkt) + '\')">📤 Sauvegarder + Publier dans VC</button>' +
+      '<button class="btn btn-sm" onclick="wizardNextStep(\'c\')">🔄 Regénérer depuis le début</button>' +
+      '</div>',
+      ''
+    );
+  }
+
+  h += '</div>';
+  return h;
+}
+
+function renderWizardStep(id, letter, title, done, active, content, summary) {
+  var numBg  = done ? 'var(--ok-bg,#EAF3DE)' : active ? '#EEEDFE' : 'var(--s2)';
+  var numCol = done ? 'var(--ok,#3B6D11)'    : active ? '#3C3489' : 'var(--tx3)';
+  var numTxt = done ? '✓' : letter;
+  return '<div class="cd" style="padding:1.25rem;margin-bottom:12px;' + (active ? 'border-color:var(--accent)' : done ? 'opacity:0.75' : 'opacity:0.4') + '">' +
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:' + (active ? '12px' : '0') + '">' +
+    '<div style="width:22px;height:22px;border-radius:50%;background:' + numBg + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:' + numCol + ';flex-shrink:0">' + numTxt + '</div>' +
+    '<span style="font-size:14px;font-weight:500">' + esc(title) + '</span>' +
+    (done && !active && summary ? '<span style="font-size:11px;color:var(--tx3)">' + summary + '</span>' : '') +
+    '</div>' +
+    (active ? content : '') +
+    '</div>';
+}
+
+function renderFicheEditable(asin, mkt, src, ch) {
+  if (!src) return '<div style="font-size:12px;color:var(--tx3)">Aucune fiche disponible.</div>';
+  var titre   = (ch && ch.fusionTitre)   || (src && src.titre)       || '';
+  var bullets = ch
+    ? [ch.fusionB1, ch.fusionB2, ch.fusionB3, ch.fusionB4, ch.fusionB5]
+    : (src && src.bullets) || [];
+  var desc    = (ch && ch.fusionDesc)    || (src && src.description) || '';
+  var backend = (ch && ch.fusionBackend) || (src && src.backendKW)   || '';
+  var h = '';
+  h += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:500;color:var(--tx3);text-transform:uppercase;margin-bottom:4px">Titre</div>' +
+    '<textarea class="fg-in" rows="3" style="font-size:12px;resize:vertical" oninput="updateWizardField(\'' + esc(asin) + '\',\'' + esc(mkt) + '\',\'titre\',this.value)">' + esc(titre) + '</textarea></div>';
+  bullets.forEach(function(b, i) {
+    h += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:500;color:var(--tx3);text-transform:uppercase;margin-bottom:4px">Bullet ' + (i+1) + '</div>' +
+      '<textarea class="fg-in" rows="4" style="font-size:12px;resize:vertical" oninput="updateWizardField(\'' + esc(asin) + '\',\'' + esc(mkt) + '\',\'bullet' + i + '\',this.value)">' + esc(b || '') + '</textarea></div>';
+  });
+  h += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:500;color:var(--tx3);text-transform:uppercase;margin-bottom:4px">Description HTML</div>' +
+    '<textarea class="fg-in" rows="8" style="font-size:12px;resize:vertical" oninput="updateWizardField(\'' + esc(asin) + '\',\'' + esc(mkt) + '\',\'description\',this.value)">' + esc(desc) + '</textarea></div>';
+  h += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:500;color:var(--tx3);text-transform:uppercase;margin-bottom:4px">Backend keywords</div>' +
+    '<textarea class="fg-in" rows="3" style="font-size:12px;resize:vertical" oninput="updateWizardField(\'' + esc(asin) + '\',\'' + esc(mkt) + '\',\'backendKW\',this.value)">' + esc(backend) + '</textarea></div>';
+  return h;
 }
