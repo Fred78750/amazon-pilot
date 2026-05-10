@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 10 mai 2026 (v3.4.31)
+**Dernière mise à jour :** 10 mai 2026 (v3.4.32)
 
 ---
 
@@ -72,7 +72,8 @@ Tout patch doit être minimal et ciblé :
 | v3.4.28 | ✅ Stable — **prod** | d747085 |
 | v3.4.29 | ✅ Stable | 201fadc |
 | v3.4.30 | ✅ Stable | 6a37a60 |
-| v3.4.31 | ✅ Staging/Preprod | d127eae |
+| v3.4.31 | ✅ Stable | d127eae |
+| v3.4.32 | ✅ Staging/Preprod | 3a2f3ad |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -91,8 +92,8 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | v3.4.24 | https://amazon.foliow.app |
-| Recette (staging) | v3.4.31 | https://d9xny9istvl53.cloudfront.net |
-| Preprod | v3.4.31 | https://preprod.amazon.foliow.app |
+| Recette (staging) | v3.4.32 | https://d9xny9istvl53.cloudfront.net |
+| Preprod | v3.4.32 | https://preprod.amazon.foliow.app |
 
 ---
 
@@ -200,6 +201,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 - [x] v3.4.29 : Challenge GPT — `renderChallengeGPT` + `runChallengeGPT` + `parseChallengeResponse` + `updateFusionField` + `copyFicheFusion` + `exportExemplesGPT` → `src/core.js` + `src/seo.js`
 - [x] v3.4.30 : UX Challenge GPT — textareas agrandis + 3 boutons + `applyFusionAndPublish` → `src/core.js` + `src/seo.js`
 - [x] v3.4.31 : fix `applyFusionAndPublish` — `agentVCState` step=4 + `go('agentvc')` direct → `src/core.js`
+- [x] v3.4.32 : fix reinject ficheOptimisee dans `init()` + boutons vue détail (`goAgentSEO`/`goAgentSEOPublish`) + `applyFusionAndPublish` → `goAgentSEOPublish` → `src/core.js`
 
 ---
 
@@ -233,4 +235,4 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 10 mai 2026 (v3.4.28)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 10 mai 2026 (v3.4.32)**
