@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 10 mai 2026 (v3.4.30)
+**Dernière mise à jour :** 10 mai 2026 (v3.4.31)
 
 ---
 
@@ -75,7 +75,8 @@ Tout patch doit être minimal et ciblé :
 | v3.4.31 | ✅ Stable | d127eae |
 | v3.4.32 | ⛔ Annulé (bug données) | 3a2f3ad |
 | v3.4.29 (wizard) | ✅ Stable | 393b553 |
-| v3.4.30 (wizard) | ✅ Staging/Preprod | 8845fb0 |
+| v3.4.30 (wizard) | ✅ Stable | 8845fb0 |
+| v3.4.31 (wizard) | ✅ Staging/Preprod | b7a668b |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -94,8 +95,8 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | v3.4.28 | https://amazon.foliow.app |
-| Recette (staging) | v3.4.30 | https://d9xny9istvl53.cloudfront.net |
-| Preprod | v3.4.30 | https://preprod.amazon.foliow.app |
+| Recette (staging) | v3.4.31 | https://d9xny9istvl53.cloudfront.net |
+| Preprod | v3.4.31 | https://preprod.amazon.foliow.app |
 
 ---
 
@@ -206,6 +207,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 - [x] v3.4.32 : fix reinject ficheOptimisee dans `init()` + boutons vue détail (`goAgentSEO`/`goAgentSEOPublish`) + `applyFusionAndPublish` → `goAgentSEOPublish` → `src/core.js` ⛔ ANNULÉ — bug données
 - [x] v3.4.29 (wizard) : refacto complète wizard optimisation — `wizardState` + `renderOptimisationWizard` + `publishVC` + `saveClientSafe` + `wizardSave/SaveAndPublish` — `openWizard/closeWizard` remplacent `goAgentSEO/goAgentSEOPublish/applyFusionAndPublish` → `src/core.js` + `src/seo.js`
 - [x] v3.4.30 (wizard) : fix `disabled` dynamique étapes A (SKU) + D (GPT) — `oninput` met à jour le bouton sans `render()` → `src/seo.js`
+- [x] v3.4.31 (wizard) : fix `parseChallengeResponse` — parsing ligne par ligne, corrige débordement regex multi-lignes → `src/core.js`
 
 ---
 
@@ -239,4 +241,4 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 10 mai 2026 (v3.4.30)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 10 mai 2026 (v3.4.31)**
