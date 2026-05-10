@@ -1066,14 +1066,14 @@ function renderChallengeGPT(asin, market, a) {
 
     // Champs comparaison + fusion éditables
     const fields = [
-      { label: 'Titre', verdict: ch.verdictTitre, fusion: ch.fusionTitre, key: 'fusionTitre', rows: 2 },
-      { label: 'Bullet 1', verdict: ch.verdictB1, fusion: ch.fusionB1, key: 'fusionB1', rows: 2 },
-      { label: 'Bullet 2', verdict: ch.verdictB2, fusion: ch.fusionB2, key: 'fusionB2', rows: 2 },
-      { label: 'Bullet 3', verdict: ch.verdictB3, fusion: ch.fusionB3, key: 'fusionB3', rows: 2 },
-      { label: 'Bullet 4', verdict: ch.verdictB4, fusion: ch.fusionB4, key: 'fusionB4', rows: 2 },
-      { label: 'Bullet 5', verdict: ch.verdictB5, fusion: ch.fusionB5, key: 'fusionB5', rows: 2 },
-      { label: 'Description', verdict: ch.verdictDesc, fusion: ch.fusionDesc, key: 'fusionDesc', rows: 4 },
-      { label: 'Backend keywords', verdict: ch.verdictBackend, fusion: ch.fusionBackend, key: 'fusionBackend', rows: 2 },
+      { label: 'Titre',            verdict: ch.verdictTitre,   fusion: ch.fusionTitre,   key: 'fusionTitre',   rows: 3 },
+      { label: 'Bullet 1',         verdict: ch.verdictB1,      fusion: ch.fusionB1,      key: 'fusionB1',      rows: 4 },
+      { label: 'Bullet 2',         verdict: ch.verdictB2,      fusion: ch.fusionB2,      key: 'fusionB2',      rows: 4 },
+      { label: 'Bullet 3',         verdict: ch.verdictB3,      fusion: ch.fusionB3,      key: 'fusionB3',      rows: 4 },
+      { label: 'Bullet 4',         verdict: ch.verdictB4,      fusion: ch.fusionB4,      key: 'fusionB4',      rows: 4 },
+      { label: 'Bullet 5',         verdict: ch.verdictB5,      fusion: ch.fusionB5,      key: 'fusionB5',      rows: 4 },
+      { label: 'Description HTML', verdict: ch.verdictDesc,    fusion: ch.fusionDesc,    key: 'fusionDesc',    rows: 8 },
+      { label: 'Backend keywords', verdict: ch.verdictBackend, fusion: ch.fusionBackend, key: 'fusionBackend', rows: 3 },
     ];
 
     fields.forEach(f => {
@@ -1091,9 +1091,12 @@ function renderChallengeGPT(asin, market, a) {
       </div>`;
     });
 
-    h += `<div style="display:flex;gap:8px;margin-top:4px">
+    h += `<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn-p" onclick="applyFusionAndPublish('${esc(asin)}','${esc(market)}')">
+        🚀 Appliquer + Publier dans VC
+      </button>
       <button class="btn-or" onclick="copyFicheFusion('${esc(asin)}','${esc(market)}')">
-        📋 Tout copier (fiche fusionnée)
+        📋 Copier la fiche fusionnée
       </button>
       <button class="btn-sm" onclick="exportExemplesGPT('${esc(asin)}','${esc(market)}')">
         💾 Sauvegarder référence SEO
