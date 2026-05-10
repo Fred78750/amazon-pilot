@@ -1676,8 +1676,8 @@ function renderOptimisationWizard() {
   var stepA_done = !!ws.sku;
   h += renderWizardStep('a', 'A', 'Saisir le SKU', stepA_done, ws.step === 'a',
     '<div style="font-size:12px;color:var(--tx3);margin-bottom:8px">Le SKU figure dans le catalogue Vendor Central.</div>' +
-    '<input type="text" class="fg-in" id="wiz-sku" style="max-width:280px;font-size:13px" placeholder="Ex: 50405 ou B009L0RMUG" value="' + esc(ws.sku || '') + '" oninput="wizardState.sku=this.value" />' +
-    '<div style="margin-top:10px"><button class="btn btn-p" onclick="wizardNextStep(\'b\')" ' + (!ws.sku ? 'disabled' : '') + '>Confirmer →</button></div>',
+    '<input type="text" class="fg-in" id="wiz-sku" style="max-width:280px;font-size:13px" placeholder="Ex: 50405 ou B009L0RMUG" value="' + esc(ws.sku || '') + '" oninput="wizardState.sku=this.value;document.getElementById(\'wiz-sku-btn\').disabled=!this.value.trim()" />' +
+    '<div style="margin-top:10px"><button class="btn btn-p" id="wiz-sku-btn" onclick="if(wizardState.sku){wizardNextStep(\'b\')}" ' + (!ws.sku ? 'disabled' : '') + '>Confirmer →</button></div>',
     'SKU : ' + esc(ws.sku || '')
   );
 
@@ -1708,8 +1708,8 @@ function renderOptimisationWizard() {
   var stepD_done = !!(a.ficheGPT);
   h += renderWizardStep('d', 'D', 'Intégrer la sortie GPT', stepD_done, ws.step === 'd',
     '<div style="font-size:12px;color:var(--tx3);margin-bottom:8px">Collez la sortie brute de ChatGPT pour la comparaison.<br><span style="color:var(--tx3);opacity:.7">Optionnel — sans GPT, la fiche Claude est utilisée directement.</span></div>' +
-    '<textarea class="fg-in" style="height:100px;font-size:12px;resize:vertical" placeholder="Collez ici la sortie complète de ChatGPT..." oninput="saveFicheGPT(\'' + esc(ws.asin) + '\', this.value)">' + esc(a.ficheGPT || '') + '</textarea>' +
-    '<div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-p" onclick="wizardRunChallenge()" ' + (!a.ficheGPT ? 'disabled' : '') + '>⚡ Comparer et arbitrer →</button><button class="btn btn-sm" onclick="wizardNextStep(\'f\')" style="font-size:12px">Utiliser la fiche Claude telle quelle</button></div>',
+    '<textarea class="fg-in" style="height:100px;font-size:12px;resize:vertical" placeholder="Collez ici la sortie complète de ChatGPT..." oninput="saveFicheGPT(\'' + esc(ws.asin) + '\', this.value);document.getElementById(\'wiz-gpt-btn\').disabled=!this.value.trim()">' + esc(a.ficheGPT || '') + '</textarea>' +
+    '<div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-p" id="wiz-gpt-btn" onclick="wizardRunChallenge()" ' + (!a.ficheGPT ? 'disabled' : '') + '>⚡ Comparer et arbitrer →</button><button class="btn btn-sm" onclick="wizardNextStep(\'f\')" style="font-size:12px">Utiliser la fiche Claude telle quelle</button></div>',
     stepD_done ? 'Sortie GPT renseignée ✓' : 'Non renseignée'
   );
 
