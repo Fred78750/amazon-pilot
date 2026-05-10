@@ -575,6 +575,8 @@ function renderAgentVC() {
         h += '<button class="btn btn-sm" onclick="avcLaunchSEO()">🔄 Regénérer</button>';
         h += '<button class="btn btn-p btn-sm" onclick="agentVCState.step=5;render()">📤 Script VC →</button>';
         h += '</div>';
+        var _aFiche = s.asin ? c.asins.find(function(x){ return x.asin === s.asin; }) : null;
+        if (_aFiche) h += renderChallengeGPT(s.asin, s.market, _aFiche);
       }
     }
     h += '</div></div>';
@@ -1013,6 +1015,96 @@ function drawSEOContent(asin, activeMkt, res, mtp, compact) {
 function copySEOTitreMkt(asin, mkt) { copySEOField(asin, mkt, 'all'); }
 function copySEODescMkt(asin, mkt)  { copySEOField(asin, mkt, 'description'); }
 function copySEOBkwMkt(asin)        { copySEOField(asin, null, 'backendKW'); }
+
+function renderChallengeGPT(asin, market, a) {
+  const ch = a.ficheChallenge && a.ficheChallenge[market];
+  let h = '';
+
+  // === ÉTAPE 6 — Saisie GPT ===
+  h += `<div class="cd" style="padding:1.25rem;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <div style="width:22px;height:22px;border-radius:50%;background:#EAF3DE;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:#3B6D11;flex-shrink:0">6</div>
+      <span style="font-size:14px;font-weight:500">Challenge GPT</span>
+      <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#EAF3DE;color:#3B6D11">apprentissage</span>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Collez la sortie brute de ChatGPT pour comparer objectivement les deux fiches</div>
+    <textarea class="fg-in" id="fiche-gpt-${esc(asin)}-${esc(market)}"
+      style="height:100px;font-size:12px;resize:vertical"
+      placeholder="Collez ici la sortie complète de ChatGPT (titre, bullets, description, backend, synthèse)..."
+      oninput="saveFicheGPT('${esc(asin)}', this.value)"
+    >${esc(a.ficheGPT || '')}</textarea>
+    <div style="margin-top:8px;display:flex;gap:8px">
+      ${challengeLoading === asin
+        ? `<div style="font-size:12px;color:var(--muted)"><span class="spin">⏳</span> Analyse en cours…</div>`
+        : `<button class="btn-or" onclick="runChallengeGPT('${esc(asin)}','${esc(market)}')">⚡ Analyser et comparer</button>`
+      }
+    </div>
+  </div>`;
+
+  // === ÉTAPE 7 — Résultat comparaison ===
+  if (ch) {
+    const scoreColor = (s) => {
+      const n = parseInt(s);
+      if (n >= 8) return 'var(--ok)';
+      if (n >= 6) return 'var(--or)';
+      return 'var(--danger)';
+    };
+
+    h += `<div class="cd" style="padding:1.25rem;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div style="width:22px;height:22px;border-radius:50%;background:#EAF3DE;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:#3B6D11;flex-shrink:0">7</div>
+        <span style="font-size:14px;font-weight:500">Comparaison & fiche fusionnée</span>
+        <span style="font-size:12px;color:var(--muted)">Claude <strong style="color:${scoreColor(ch.scoreClaude)}">${esc(ch.scoreClaude)}</strong> · GPT <strong style="color:${scoreColor(ch.scoreGPT)}">${esc(ch.scoreGPT)}</strong></span>
+      </div>`;
+
+    // Autocritique
+    if (ch.autocritique) {
+      h += `<div class="alr alr-w" style="margin-bottom:14px">
+        <strong>Autocritique Claude :</strong> ${esc(ch.autocritique)}
+      </div>`;
+    }
+
+    // Champs comparaison + fusion éditables
+    const fields = [
+      { label: 'Titre', verdict: ch.verdictTitre, fusion: ch.fusionTitre, key: 'fusionTitre', rows: 2 },
+      { label: 'Bullet 1', verdict: ch.verdictB1, fusion: ch.fusionB1, key: 'fusionB1', rows: 2 },
+      { label: 'Bullet 2', verdict: ch.verdictB2, fusion: ch.fusionB2, key: 'fusionB2', rows: 2 },
+      { label: 'Bullet 3', verdict: ch.verdictB3, fusion: ch.fusionB3, key: 'fusionB3', rows: 2 },
+      { label: 'Bullet 4', verdict: ch.verdictB4, fusion: ch.fusionB4, key: 'fusionB4', rows: 2 },
+      { label: 'Bullet 5', verdict: ch.verdictB5, fusion: ch.fusionB5, key: 'fusionB5', rows: 2 },
+      { label: 'Description', verdict: ch.verdictDesc, fusion: ch.fusionDesc, key: 'fusionDesc', rows: 4 },
+      { label: 'Backend keywords', verdict: ch.verdictBackend, fusion: ch.fusionBackend, key: 'fusionBackend', rows: 2 },
+    ];
+
+    fields.forEach(f => {
+      const winner = (f.verdict || '').startsWith('GPT') ? '🟢 GPT' : (f.verdict || '').startsWith('Claude') ? '🔵 Claude' : '⚪ Égalité';
+      h += `<div style="margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span style="font-size:11px;font-weight:500;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">${esc(f.label)}</span>
+          <span style="font-size:11px;color:var(--muted)">${winner}</span>
+          <span style="font-size:11px;color:var(--muted);font-style:italic">${esc((f.verdict || '').replace(/^[^—]+—\s*/, ''))}</span>
+        </div>
+        <textarea class="fg-in" rows="${f.rows}"
+          style="font-size:12px;resize:vertical"
+          oninput="updateFusionField('${esc(asin)}','${esc(market)}','${f.key}',this.value)"
+        >${esc(f.fusion || '')}</textarea>
+      </div>`;
+    });
+
+    h += `<div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn-or" onclick="copyFicheFusion('${esc(asin)}','${esc(market)}')">
+        📋 Tout copier (fiche fusionnée)
+      </button>
+      <button class="btn-sm" onclick="exportExemplesGPT('${esc(asin)}','${esc(market)}')">
+        💾 Sauvegarder référence SEO
+      </button>
+    </div>`;
+
+    h += '</div>';
+  }
+
+  return h;
+}
 
 function seoSetInternalRef(asin, val) {
   var c = cl();
