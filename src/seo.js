@@ -531,7 +531,7 @@ function renderAgentVC() {
         h += '<div style="margin-bottom:10px;font-size:12px;color:var(--tx2)">Vendor code(s) : <strong>' + vendorCodes.map(esc).join(', ') + '</strong></div>';
       }
       h += '<div style="margin-bottom:6px"><div style="font-size:10px;font-weight:700;color:var(--tx3);margin-bottom:4px">SKU <span style="color:var(--r)">*</span></div>';
-      h += '<input id="avc-sku" class="inp" style="font-family:var(--mono);width:100%;max-width:260px" placeholder="Ex: 643416 ou ASIN" value="' + esc(s.sku||'') + '" oninput="agentVCState.sku=this.value.trim();render()">';
+      h += '<input id="avc-sku" class="inp" style="font-family:var(--mono);width:100%;max-width:260px" placeholder="Ex: 643416 ou ASIN" value="' + esc(s.sku||'') + '" oninput="agentVCState.sku=this.value.trim()" onblur="render()">';
       h += '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Le SKU figure dans le catalogue VC (recherche par ASIN). Il peut être identique à l\'ASIN ou différent.</div></div>';
       h += '<button class="btn btn-p" style="margin-top:8px" ' + (!s.sku ? 'disabled' : '') + ' onclick="avcConfirmSKU()">Confirmer →</button>';
     }
@@ -550,6 +550,22 @@ function renderAgentVC() {
         h += '<div style="margin-bottom:8px"><div style="height:4px;background:var(--bd);border-radius:2px;overflow:hidden"><div style="height:100%;background:var(--accent);border-radius:2px;width:' + (progress.pct||0) + '%"></div></div>';
         h += '<div style="font-size:11px;color:var(--tx3);margin-top:4px">' + esc(progress.phase||'') + '</div></div>';
       } else if (!ficheReady) {
+        var aObj4 = s.asin ? c.asins.find(function(x){ return x.asin === s.asin; }) : null;
+        var _ficheOk = !!(aObj4 && aObj4.ficheAmazon);
+        h += `<div style="margin-bottom:14px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+    <span style="font-size:13px;font-weight:500">Enrichissement produit</span>
+    <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#EEEDFE;color:#3C3489">optionnel · recommandé</span>
+  </div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Coller la fiche Amazon pour une analyse plus précise</div>
+  <textarea class="fg-in" id="fiche-amazon-vc-${esc(s.asin)}"
+    style="height:90px;font-size:12px;resize:vertical"
+    placeholder="Collez ici le contenu de la page Amazon.fr (titre actuel, bullets, description, avis, produits associés)..."
+    oninput="saveFicheAmazon('${s.asin}', this.value)"
+  >${esc((aObj4 && aObj4.ficheAmazon) || '')}</textarea>
+  <div style="font-size:11px;color:var(--muted2);margin-top:4px">Sauvegardée automatiquement pour cet ASIN.</div>
+  ${_ficheOk ? `<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--ok)">✓ Fiche enrichie — la génération sera plus précise</div>` : ''}
+</div>`;
         h += '<button class="btn btn-p" onclick="avcLaunchSEO()">✨ Générer la fiche SEO</button>';
       } else {
         var r4 = seoResults[s.asin][s.market];
@@ -919,6 +935,12 @@ function drawSEOContent(asin, activeMkt, res, mtp, compact) {
     h += '</div>';
   }
 
+  // ALERTES_FRED
+  h += `<div class="alr alr-w" style="margin-bottom:16px;${r.alertesFred ? '' : 'display:none'}">
+    ⚠️ <strong>Points à vérifier avant publication :</strong><br>
+    ${esc(r.alertesFred || '')}
+  </div>`;
+
   // Titre
   var tl = r.titre ? r.titre.length : 0;
   var tc = tl > 200 ? 'var(--r)' : tl >= 80 ? 'var(--g)' : 'var(--or)';
@@ -966,6 +988,10 @@ function drawSEOContent(asin, activeMkt, res, mtp, compact) {
       if (r.opportunite)    h += '<div><span style="font-size:9px;font-weight:700;color:var(--b)">OPPORTUNITÉ</span><div style="font-size:11px">' + esc(r.opportunite) + '</div></div>';
       h += '</div>';
     }
+
+    h += `<div class="cd" style="padding:14px;margin-top:12px;border-left:3px solid var(--or);${r.pointImportant ? '' : 'display:none'}">
+    🔥 <strong>Point clé :</strong> ${esc(r.pointImportant || '')}
+  </div>`;
 
     if (r.images && r.images.length) {
       h += '<div style="margin-bottom:10px">';
@@ -1204,7 +1230,7 @@ function buildDonneesMarche(enrichies) {
   return lines.join('\n');
 }
 
-function buildSEOPrompt(a, c, lang, isBackendKW, enrichies, motsExclure) {
+function buildSEOPrompt(a, c, lang, isBackendKW) {
   const langLabels = { fr:'français', de:'allemand', it:'italien', es:'espagnol',
                        en:'anglais', nl:'néerlandais', sv:'suédois', pl:'polonais' };
   const langName = langLabels[lang] || lang;
@@ -1215,172 +1241,176 @@ function buildSEOPrompt(a, c, lang, isBackendKW, enrichies, motsExclure) {
                : 'niveau non déterminé';
   const pot = calcPotential(a, c);
   const trend = calcTrend(a);
-  const convRate = a.glanceViews > 0 && getRevenue(a,c) > 0
-    ? (getRevenue(a,c) / a.glanceViews * 100).toFixed(1) + '%' : 'N/D';
-  const totalCA = c.asins.reduce((s,x) => s+(getRevenue(x,c)||0), 0);
+  const convRate = a.glanceViews > 0 && a.revenue > 0
+    ? (a.revenue / a.glanceViews * 100).toFixed(1) + '%' : 'N/D';
+  const totalCA = c.asins.reduce((s,x) => s+(x.revenue||0), 0);
 
   const dataCtx = [
-    'Titre actuel : ' + (a.title || 'N/D'),
-    'Référence interne : ' + (a.internalRef || 'NON RENSEIGNÉE'),
     'ASIN : ' + a.asin + ' | Marque : ' + (a.brand || 'N/D'),
-    'CA semaine : ' + fmtEur(getRevenue(a,c)||0) + ' | Tendance : ' + (trend?.label || 'N/D'),
+    'Titre actuel : ' + (a.title || 'N/D'),
+    'CA semaine : ' + fmtEur(a.revenue || 0) + ' | Tendance : ' + (trend?.label || 'N/D'),
     'Taux de conversion : ' + convRate,
     'Retours : ' + (a.returns || 0) + ' | Retail % : ' + (a.retailPct || 'N/D'),
     'Segment : ' + calcSegment(a, totalCA),
     'Niveau de gamme estimé (PPM) : ' + niveau + (ppm?.ppm != null ? ' (' + ppm.ppm.toFixed(1) + '%)' : ''),
     'Score potentiel : ' + pot.score + '/100',
     pot.signals.filter(s => s.cls === 'r').length > 0
-      ? 'Alertes : ' + pot.signals.filter(s => s.cls === 'r').map(s => s.label).join(', ')
+      ? 'Alertes Vendor : ' + pot.signals.filter(s => s.cls === 'r').map(s => s.label).join(', ')
       : '',
+    a.ficheAmazon ? '\n--- FICHE AMAZON ACTUELLE (titre, bullets, description, avis, concurrents) ---\n' + a.ficheAmazon : '',
   ].filter(Boolean).join('\n');
 
+  // ── BACKEND KW ─────────────────────────────────────────────────────────────
   if (isBackendKW) {
     return 'Tu es un expert Amazon SEO.\n'
-      + 'Génère UNIQUEMENT les backend keywords en ' + langName + '.\n\n'
-      + 'CIBLE : 40 à 60 mots maximum — JAMAIS plus de 60.\n'
-      + 'FORMAT : mots séparés par des espaces, en minuscules, sans ponctuation, sans virgule.\n\n'
-      + 'INTERDIT (rejet automatique si présent) :\n'
-      + '- Tout mot déjà présent dans le titre OU les bullets que tu viens de générer (liste fournie ci-dessous)\n'
-      + '- Adjectifs vagues sans intention de recherche : polyvalent, robuste, universel, adaptable, ergonomique, confort, qualité, professionnel, durable, pratique, solide, fiable, performant\n'
-      + '- Substantifs génériques sans qualificatif : matériaux, formes, espaces, objets, éléments, produits, articles\n'
-      + '- Superlatifs, marques concurrentes\n\n'
-      + 'Exception autorisée : les synonymes directs du type de produit (autre appellation usuelle du même objet — ex : "pince" synonyme de "tenaille") sont autorisés même s\'ils semblent vagues isolément, car ils correspondent à une vraie requête Amazon.\n\n'
-      + 'TEST DE VALIDITÉ pour CHAQUE mot :\n'
-      + 'Termine cette phrase : "Un acheteur tape \'...\' dans la barre Amazon."\n'
-      + 'Si le mot ne passe pas le test → exclu.\n\n'
+      + 'Génère UNIQUEMENT les backend keywords en ' + langName + '.\n'
+      + 'RÈGLES STRICTES :\n'
+      + '- Séparateur : espace uniquement (jamais de virgule ni ponctuation)\n'
+      + '- Maximum 249 BYTES — règle safe : viser 240-245 bytes réels\n'
+      + '- ATTENTION : les accents français comptent 2 bytes (é, è, à, ü...)\n'
+      + '- Si le champ dépasse 249 bytes, Amazon désindexe TOUT le champ sans warning\n'
+      + '- Structure 4 blocs : usages → contextes → synonymes → longue traîne\n'
+      + '- Le mot-clé principal peut figurer même s\'il est dans le titre — renforce la pertinence\n'
+      + '- Maximum 35 mots — pas plus\n'
+      + '- INTERDIT absolument : "pas cher", "discount", "budget", "économique", "meilleur", "top", "n°1", tout superlatif, tout claim commercial\n'
+      + '- INTERDIT : noms de marques concurrentes\n'
+      + '- Un mot = un concept utile — zéro remplissage\n'
+      + '- Zéro répétition entre les blocs\n'
+      + '- Zéro stop words inutiles (de, le, la, pour, avec)\n'
+      + '- Zéro terme trop générique seul (maison, outil, produit)\n'
+      + '- Préférer les usages concrets — couverture sémantique dense, pas liste disparate\n'
       + 'Réponds UNIQUEMENT avec les mots clés, rien d\'autre.\n\n'
-      + dataCtx
-      + (motsExclure ? '\n\nMOTS EXCLUS — déjà présents dans le titre et les bullets :\n' + motsExclure : '')
-      + (enrichies && enrichies.mots_cles_frequents && enrichies.mots_cles_frequents.length
-          ? '\n\nMOTS-CLÉS FRÉQUENTS SERP (à utiliser en priorité s\'ils ne sont pas déjà dans titre/bullets) :\n' + enrichies.mots_cles_frequents.join(', ')
-          : '');
+      + dataCtx;
   }
 
-  const donneesMarche = buildDonneesMarche(enrichies);
-  return 'Tu es un expert Amazon FR, spécialisé en SEO A10, conversion, merchandising marketplace, analyse concurrentielle et stratégie catalogue.\n'
-    + 'Tu travailles comme un consultant senior Amazon Vendor — pas comme un simple rédacteur.\n'
-    + 'Langue de rédaction exclusive : ' + langName.toUpperCase() + '\n\n'
-    + 'OBJECTIF : fiche produit Amazon capable de mieux se positionner, mieux convertir, mieux résister dans le temps.\n'
-    + 'Ta réponse DOIT être complète, détaillée, professionnelle — pas une ébauche.\n\n'
-    + 'DONNÉES PRODUIT :\n' + dataCtx + '\n'
-    + donneesMarche + '\n'
-    + '━━━━━━━━━━━━━━━━━━\n'
-    + 'ÉTAPE 1 — ANALYSE STRATÉGIQUE OBLIGATOIRE (à produire AVANT la fiche)\n'
-    + '━━━━━━━━━━━━━━━━━━\n'
-    + 'Analyse et explicite :\n'
-    + '1. Positionnement : niveau ' + niveau + ' — usage principal, usage secondaire, bénéfice différenciant réel\n'
-    + '2. Concurrence Amazon : familles dominantes SERP, arguments surutilisés à éviter, opportunités sous-exploitées\n'
-    + '3. Risques : confusion dimensions/compatibilité/usage/pack/qualité — risque sur-promesse — risque avis négatifs\n'
-    + '4. Stratégie : ce qu\'il faut mettre en avant, angle marketing retenu, mot-clé prioritaire, 3 longues traînes\n\n'
-    + '━━━━━━━━━━━━━━━━━━\n'
-    + 'ÉTAPE 2 — RÈGLES DE RÉDACTION IMPÉRATIVES\n'
-    + '━━━━━━━━━━━━━━━━━━\n'
-    + '1. Toujours écrire en ' + langName + ' naturel, clair et vendeur\n'
-    + '2. Toujours rester crédible et exact — ne jamais inventer une caractéristique\n'
-    + '3. Ne jamais sur-promettre — adapter au vrai niveau du produit (' + niveau + ')\n'
-    + '4. Toujours raisonner en intention d\'achat\n'
-    + '5. Intégrer une logique "anti-déception" — filtrer les mauvais clients\n'
-    + '6. Penser comme Amazon : ce produit est-il la réponse exacte à cette recherche ?\n\n'
-    + '━━━━━━━━━━━━━━━━━━\n'
-    + 'RÈGLES DE CONFORMITÉ ABSOLUE (toutes sections : titre, bullets, description, synthèse)\n'
-    + '━━━━━━━━━━━━━━━━━━\n'
-    + 'INTERDIT — ne JAMAIS écrire :\n'
-    + '- "garantie à vie", "à vie", "garantie illimitée", "lifetime warranty"\n'
-    + '- Une durée de garantie chiffrée si elle n\'est PAS présente dans les DONNÉES MARCHÉ ci-dessous\n'
-    + '- Une date de création de marque, un effectif, un volume de ventes, un classement, une certification non sourcée\n'
-    + '- Un matériau, traitement, dimension non présent dans la fiche actuelle ou les données catalogue\n'
-    + '- "incassable", "indestructible", "universel" si non vérifiable\n'
-    + '- "homologué", "certifié", "conforme" si document non disponible\n'
-    + '- "compatible tous modèles" si non prouvé\n\n'
-    + 'SOURCE DE VÉRITÉ pour les SPECS FACTUELLES :\n'
-    + '- Reprends UNIQUEMENT les specs présentes dans le bloc DONNÉES MARCHÉ (titre actuel, bullets actuels, description actuelle, données catalogue)\n'
-    + '- Si une spec n\'est pas dans la source de vérité : NE LA MENTIONNE PAS. Préférer le silence à l\'invention.\n'
-    + '- Bénéfices, usages, positionnement, ton commercial : LIBRE — utilise avis clients et concurrence comme appui\n\n'
-    + '━━━━━━━━━━━━━━━━━━\n'
-    + 'ÉTAPE 3 — CRÉATION DE LA FICHE EN ' + langName.toUpperCase() + '\n'
-    + '━━━━━━━━━━━━━━━━━━\n'
-    + 'GÉNÈRE EXACTEMENT dans cet ordre :\n\n'
-    + 'NOM_TYPE_PRODUIT: [en ' + langName + ', minuscules, sans marque, précis, sans underscore — ex: tenaille russe / cric rouleur hydraulique]\n\n'
-    + 'TITRE: [Viser 150-200 caractères — 200 max — long, informatif ET lisible par un consommateur]\n'
-    + 'STRUCTURE OBLIGATOIRE : [Marque] [Référence interne] - [Type produit exact] [Taille/Format] - [Matériau/Attribut clé] - [Usage principal] - [Contexte/Compatibilité si pertinent]\n'
-    + 'RÈGLES TITRE STRICTES :\n'
-    + '- La RÉFÉRENCE INTERNE doit figurer IMMÉDIATEMENT après la marque — RÈGLE DURE, jamais d\'exception, ordre EXACT : [Marque] [Référence] - [Type produit]…\n'
-    + '- Si la référence interne est inconnue : ne PAS inventer, structurer le titre sans référence et signaler "REFERENCE_MANQUANTE: true" dans la sortie\n'
-    + '- Séparateurs : tirets - uniquement (JAMAIS de | / ! ? *)\n'
-    + '- Mot-clé principal (type produit exact) dans les 40 premiers caractères — tester : un client comprendrait-il ce produit en lisant le titre ?\n'
-    + '- Un même mot maximum 2 fois\n'
-    + '- INTERDIT dans le titre : prix, promotions, "meilleur", "n°1", "gratuit", "garantie X ans", "garantie à vie", durée de garantie de toute nature\n'
-    + '- Pas de répétition de la taille ou des specs\n'
-    + '- Majuscule à chaque mot sauf articles/prépositions\n\n'
-    + 'BULLET_1: [🔧 ou icône pertinente — BÉNÉFICE PRINCIPAL + mot-clé central + usage terrain spécifique]\n'
-    + 'BULLET_2: [💪 ou icône pertinente — MATÉRIAUX / QUALITÉ + specs techniques + différenciation vs concurrents]\n'
-    + 'BULLET_3: [🌱 ou icône pertinente — PROFIL CLIENT + cas d\'usage concrets + polyvalence]\n'
-    + 'BULLET_4: [📏 ou icône pertinente — DIMENSIONS / SPECS + ergonomie + compatibilité]\n'
-    + 'BULLET_5: [🛡️ ou icône pertinente — GARANTIE + marque/distributeur + réassurance achat]\n\n'
-    + 'RÈGLES BULLETS STRICTES :\n'
-    + '- Exactement 5 bullets — jamais 4, jamais 6\n'
-    + '- Bullet 1 : bénéfice principal + mot-clé central + usage terrain concret\n'
-    + '- Bullet 2 : différenciation + matériaux/qualité + specs techniques clés\n'
-    + '- Bullet 3 : réassurance technique + compatibilité + profil client ciblé\n'
-    + '- Bullet 4 : usage concret + projection client + polyvalence\n'
-    + '- Bullet 5 : sécurité / praticité / limite bien cadrée / garantie / marque\n'
-    + '- Une seule icône pertinente par bullet, en PREMIER — choisie au contexte réel\n'
-    + '- Icônes : 🔧 outil/bricolage ⚡ électricité 💧 étanchéité 🔒 sécurité 🚗 auto 🌱 jardin 🔥 barbecue 🧰 kit 📏 dimensions 💪 robustesse 🛡️ garantie\n'
-    + '- Interdit : ⭐ ✅ ❌ et répétition d\'icône\n'
-    + '- MINIMUM 200 caractères par bullet, idéalement 250-300 — style narratif : bénéfice + usage terrain + preuve — éviter les adjectifs creux, les prouver\n'
-    + '- Mélanger : bénéfice client + usage concret + mot-clé secondaire + réassurance\n'
-    + '- Pas de HTML, pas de prix, pas de référence interne\n\n'
-    + 'DESCRIPTION: [HTML STRICT — balises autorisées : <p> <strong> <ul> <li> uniquement — JAMAIS de ** markdown — JAMAIS de tableau, emoji, style CSS, majuscules excessives]\n'
-    + 'Structure OBLIGATOIRE dans cet ordre :\n'
-    + '1. <p><strong>[Nom exact du produit + usage principal]</strong> est conçu pour [usage réel].</p>\n'
-    + '2. <p>Grâce à [caractéristique clé], il permet de [bénéfice concret client].</p>\n'
-    + '3. <p>Il convient pour [contextes d\'utilisation principaux], adapté à [niveau réel du produit].</p>\n'
-    + '4. <p>[Phrase anti-déception si une limite existe : compatibilité, dimension, accessoire non fourni, usage restreint — OBLIGATOIRE si pertinent]</p>\n'
-    + '5. <ul><li>Type : ...</li><li>Dimensions : ...</li><li>Matière : ...</li><li>Compatibilité : ...</li><li>Utilisation : ...</li></ul>\n'
-    + 'RÈGLES STRICTES :\n'
-    + '- Commencer par le produit exact — jamais par une phrase générique\n'
-    + '- Ton adapté au niveau réel du produit — jamais sur-promettre\n'
-    + '- Paragraphes courts (1-2 phrases) — lisible sur mobile\n'
-    + '- Ne pas répéter les bullets — compléter et rassurer\n'
-    + '- 400 à 800 caractères — specs uniquement issues des DONNÉES MARCHÉ\n'
-    + '- Ne JAMAIS inclure REFERENCE_MANQUANTE, OPPORTUNITE_SEO, POSITIONNEMENT_AMAZON, LEVIERS_RANKING ou tout autre bloc stratégique dans la description\n\n'
-    + 'PRECONISATIONS_IMAGES:\n'
-    + 'Toutes les images Amazon doivent faire 1500×1500 px minimum, fond blanc pur RGB(255,255,255) pour l\'image principale, produit ≥85% du cadre pour la principale.\n\n'
-    + 'Génère N préconisations (3 ≤ N ≤ 7, viser 5) — chaque préconisation au format STRICT :\n\n'
-    + 'IMAGE_1:\n'
-    + 'emplacement: principale | secondaire-2 | … | secondaire-7\n'
-    + 'type: packshot | usage-terrain | infographie-spec | détail-matière | comparatif-échelle | lifestyle\n'
-    + 'scene: [1-2 phrases — ce qu\'on doit voir, lumière, angle, props]\n'
-    + 'texte_overlay: [phrase courte ou "aucun"]\n'
-    + 'pourquoi_cette_image: [1 phrase — basée sur avis clients OU manque concurrent OU bénéfice à prouver]\n\n'
-    + 'RÈGLES :\n'
-    + '- IMAGE_1 (principale) : packshot fond blanc OBLIGATOIRE, pas de texte\n'
-    + '- Au moins 1 image "usage-terrain"\n'
-    + '- Au moins 1 image "infographie-spec" si dimensions/matériaux/specs sont des arguments forts\n'
-    + '- Le "pourquoi_cette_image" doit citer EXPLICITEMENT : un avis client ou un manque concurrent ou un bénéfice difficile à comprendre par le titre seul\n'
-    + '- Chaque image doit être actionnable par un graphiste sans question\n\n'
-    + 'BACKEND_KEYWORDS: [mots séparés par des espaces UNIQUEMENT — jamais de virgules — CIBLE 40 à 60 mots — JAMAIS plus de 60]\n'
-    + 'Structure en 5 blocs mentaux dans cet ordre :\n'
-    + '1. Synonymes du produit (autres appellations usuelles)\n'
-    + '2. Usages concrets (actions : serrage, fixation, découpe...)\n'
-    + '3. Contextes (chantier, atelier, jardin, auto, rénovation...)\n'
-    + '4. Matériaux / compatibilités absents du titre\n'
-    + '5. Longue traîne qualifiée\n'
-    + 'INTERDIT dans les backend keywords :\n'
-    + '- Tout mot déjà dans le titre ou les bullets\n'
-    + '- Adjectifs vagues : robuste, polyvalent, pratique, universel, professionnel, solide, durable\n'
-    + '- Substantifs génériques seuls : maison, outil, produit, accessoire, matériaux\n'
-    + '- Marques concurrentes, ASIN, EAN, références concurrentes\n'
-    + '- Claims : meilleur, n°1, garanti, incassable, homologué, certifié\n'
-    + '- Fautes volontaires\n'
-    + '- Ponctuation de toute nature]\n\n'
-    + '━━━━━━━━━━━━━━━━━━\n'
-    + 'ÉTAPE 4 — SYNTHÈSE STRATÉGIQUE\n'
-    + '━━━━━━━━━━━━━━━━━━\n'
-    + 'POSITIONNEMENT_AMAZON: [positionnement retenu sur Amazon — 1 phrase claire]\n'
-    + 'LEVIERS_RANKING: [3 leviers principaux pour gagner du ranking sur cet ASIN]\n'
-    + 'ERREURS_A_EVITER: [erreurs absolues à ne pas commettre sur cette fiche]\n'
-    + 'OPPORTUNITE_SEO: [1 opportunité concurrentielle non exploitée]';
+  // ── PROMPT PRINCIPAL ────────────────────────────────────────────────────────
+  return (
+    'Tu es un consultant senior Amazon Vendor spécialisé en SEO A10, conversion et stratégie catalogue.\n'
+  + 'Tu travailles pour un compte Vendor Central 1P. Ta mission : produire une fiche qui se positionne mieux, convertit mieux, et génère moins de retours.\n'
+  + 'Langue de rédaction exclusive : ' + langName.toUpperCase() + '\n\n'
+
+  + '━━━━━━━━━━━━━━━━━━\n'
+  + 'DONNÉES PRODUIT\n'
+  + '━━━━━━━━━━━━━━━━━━\n'
+  + dataCtx + '\n\n'
+
+  + '━━━━━━━━━━━━━━━━━━\n'
+  + 'PHASE 0 — ANALYSE OBLIGATOIRE AVANT TOUTE RÉDACTION\n'
+  + '━━━━━━━━━━━━━━━━━━\n'
+  + 'IMPORTANT : ne rédige RIEN (titre, bullets, description) avant d\'avoir complété cette phase.\n\n'
+
+  + '1. RISQUE SÉMANTIQUE\n'
+  + 'Le terme de recherche principal crée-t-il de fausses attentes ?\n'
+  + 'La SERP est-elle dominée par une catégorie supérieure ou différente ?\n'
+  + '→ Si oui : définir une case distincte. Ne jamais imiter la catégorie dominante.\n\n'
+
+  + '2. RÉALITÉ PRODUIT (une phrase)\n'
+  + 'Ce produit est [type exact], pour [profil acheteur réel], avec [limite principale].\n'
+  + 'RÈGLE ABSOLUE : n\'invente aucune spec, matière, dimension non présente dans les données.\n'
+  + 'Si une information n\'est pas dans les données fournies → ne pas l\'écrire.\n\n'
+
+  + '3. ANALYSE CONCURRENTIELLE\n'
+  + 'Si la fiche Amazon est fournie, identifie depuis les produits associés :\n'
+  + '- Les 2-3 concurrents directs (nom, prix estimé, note)\n'
+  + '- Les arguments de titre surutilisés → à éviter\n'
+  + '- La case libre : ce que personne ne dit mais que ce produit peut revendiquer honnêtement\n\n'
+
+  + '4. LECTURE DES AVIS\n'
+  + 'Si des avis sont fournis :\n'
+  + 'Cause réelle des avis négatifs : mauvaise utilisation ou défaut produit ?\n'
+  + '→ Mauvaise utilisation → opportunité pédagogique dans les bullets\n'
+  + '→ Défaut produit → ne pas promettre ce que le produit ne fait pas\n'
+  + 'Signal bimodal (beaucoup de 5★ + beaucoup de 1★) = produit technique mal documenté → fort levier pédagogique\n\n'
+
+  + '5. NO GO POTENTIEL\n'
+  + 'Arrête-toi et signale dans ALERTES_FRED si :\n'
+  + '- Le prix positionne le produit contre des concurrents mieux notés sur la même SERP\n'
+  + '- Un défaut produit structurel génère des avis négatifs indépendamment de la fiche\n'
+  + '- La note est < 3,5★ avec > 50 avis (fiche seule insuffisante)\n'
+  + '- Une spec dans la fiche actuelle est fausse (matière incorrecte, dimensions erronées)\n'
+  + '- Rupture de stock signalée\n\n'
+
+  + '6. POSITIONNEMENT RETENU\n'
+  + 'En une phrase : angle marketing, mot-clé prioritaire, profil acheteur cible.\n\n'
+
+  + '━━━━━━━━━━━━━━━━━━\n'
+  + 'RÈGLES DE RÉDACTION IMPÉRATIVES\n'
+  + '━━━━━━━━━━━━━━━━━━\n'
+  + '- Langue : ' + langName + ' naturel, clair, vendeur\n'
+  + '- JAMAIS inventer une spec, matière, dimension, usage non confirmé par les données\n'
+  + '- JAMAIS sur-promettre — adapter au niveau réel du produit (' + niveau + ')\n'
+  + '- Vocabulaire acheteur (usages réels) > vocabulaire fabricant (specs techniques)\n'
+  + '- Données chiffrées concrètes > qualificatifs vagues ("360g" > "léger", "11cm" > "plat")\n'
+  + '- INTERDIT titre ET bullets : "garantie à vie", "incassable", "indestructible", "meilleur", "n°1", "professionnel" si non prouvé, "compatible tous modèles" si non vérifié, "grandes surfaces" si non adapté\n'
+  + '- "Garantie à vie" : autorisée UNIQUEMENT dans la description, formulée factuellement si documentée\n'
+  + '- Sur les produits face aux leaders (WD-40, Gardena, Facom...) : différencier par usages réels et pédagogie — jamais concurrencer frontalement\n\n'
+
+  + '━━━━━━━━━━━━━━━━━━\n'
+  + 'FICHE PRODUIT — GÉNÈRE EXACTEMENT DANS CET ORDRE\n'
+  + '━━━━━━━━━━━━━━━━━━\n\n'
+
+  + 'NOM_TYPE_PRODUIT: [minuscules, sans marque, précis — ex: tenaille russe / roue jockey de remorque / cisaille à haies manuelle]\n\n'
+
+  + 'TITRE: [structure : Marque + Référence + Mot-clé principal + Matière/Format + Nom technique exact + Usage + Contexte]\n'
+  + 'RÈGLES TITRE :\n'
+  + '- 200 chars maximum — plafond, pas cible. Utiliser autant que nécessaire pour être complet et vendeur\n'
+  + '- Référence interne OBLIGATOIRE juste après la marque\n'
+  + '- Mot-clé principal en POSITION 3 (après Marque + Référence) — Amazon pondère les premiers mots\n'
+  + '- Double occurrence autorisée si deux façons de chercher ("machine à crépir" + "tyrolienne")\n'
+  + '- Séparateurs : tirets - uniquement (JAMAIS | / ! ? * $)\n'
+  + '- Majuscule à chaque mot sauf articles/prépositions\n'
+  + '- La matière va dans le titre UNIQUEMENT si c\'est un argument décisif (chrome vanadium = oui / PVC = non)\n'
+  + '- Sur les outils à double fonction : expliciter les deux extrémités ("outil 2 têtes plate et œil")\n'
+  + '- Sur les kits : expliciter ce qui est inclus ("kit bride + visserie incluses")\n'
+  + '- Sur les specs critiques de compatibilité : les inclure (Ø35mm, charge 80kg)\n'
+  + '- INTERDIT : prix, promos, "meilleur", "n°1", "gratuit", "garantie à vie"\n\n'
+
+  + 'BULLET_1: [Question client : "C\'est quoi et à quoi ça sert ?" — si produit mal compris : expliquer le bénéfice avant de vendre]\n'
+  + 'BULLET_2: [Question client : "Pour quel usage / surface / compatibilité ?" — cadrer l\'usage réel + limites]\n'
+  + 'BULLET_3: [Question client : "Est-ce compatible avec mon besoin ?" — données concrètes chiffrées]\n'
+  + 'BULLET_4: [Question client : "Dans quels cas je vais l\'utiliser ?" — projection + profil + renvoi gamme si pertinent]\n'
+  + 'BULLET_5: [ANTI-DÉCEPTION OBLIGATOIRE — "Quelles limites ou précautions ?" — toujours présent, jamais générique]\n\n'
+  + 'RÈGLES BULLETS :\n'
+  + '- Exactement 5 bullets\n'
+  + '- 2-3 phrases maximum par bullet — sur mobile les longs bullets ne se lisent pas\n'
+  + '- Chaque bullet = un angle distinct — zéro redondance\n'
+  + '- Une seule icône par bullet, en PREMIER, choisie selon le contexte réel\n'
+  + '- Icônes : 🔧 outil 🏗️ construction ⚙️ mécanique ⚖️ poids 🛡️ protection 🚗 auto 🌿 jardin 🔥 chaleur 🧰 kit 📏 dimensions 💪 résistance ⚠️ limite 🎯 précision 🤲 prise en main 🧘 sport/fitness 🔩 visserie\n'
+  + '- INTERDIT : ⭐ ✅ ❌ répétition d\'icône bullet sur la marque\n'
+  + '- 200-250 caractères recommandés par bullet\n'
+  + '- Specs à risque de malentendu → bullet dédié à l\'EXPLICATION pas juste la donnée\n'
+  + '  (charge à la flèche ≠ poids total remorque / longueur étirée ≠ longueur repos)\n'
+  + '- "Kit complet" → expliciter ce qui est inclus ET ce que ça évite d\'acheter séparément\n'
+  + '- Matière limite (PVC, acier chromé) → dans bullet 5 uniquement, jamais dans titre\n\n'
+
+  + 'DESCRIPTION: [HTML strict]\n'
+  + 'STRUCTURE OBLIGATOIRE :\n'
+  + '<p><strong>[Nom exact produit + usage principal]</strong> est conçu pour [usage réel].</p>\n'
+  + '<p>Grâce à [caractéristique clé], il permet de [bénéfice concret + comparaison si pertinent].</p>\n'
+  + '<p>Il convient pour [contextes], adapté à [niveau réel : particulier / bricoleur / artisan].</p>\n'
+  + '<p>[Phrase technique si nécessaire : consistance, compatibilité, dosage, matière réelle...]</p>\n'
+  + '<p>[Phrase anti-déception : montage requis / accessoire non fourni / limite usage / spec importante...]</p>\n'
+  + '<ul><li>Référence : ...</li><li>Matière : ...</li><li>Dimensions : ...</li><li>Usage : ...</li></ul>\n'
+  + 'RÈGLES DESCRIPTION :\n'
+  + '- Ne pas répéter les bullets — compléter et rassurer\n'
+  + '- Expliquer les specs complexes en langage naturel\n'
+  + '- Informations "négatives" utiles filtrent les mauvais acheteurs — les inclure\n'
+  + '- Balises autorisées : <p> <strong> <ul> <li> UNIQUEMENT — pas de <b> <br> CSS\n'
+  + '- Ton adapté au niveau réel : entrée de gamme ≠ premium\n'
+  + '- Penser mobile : paragraphes de 1-2 phrases, liste courte\n\n'
+
+  + 'BACKEND_KEYWORDS: [espaces uniquement — 240-245 bytes réels maximum (accents = 2 bytes) — 4 blocs : usages → contextes → synonymes → longue traîne — mot-clé principal autorisé même si dans titre]\n\n'
+
+  + '━━━━━━━━━━━━━━━━━━\n'
+  + 'SYNTHÈSE STRATÉGIQUE\n'
+  + '━━━━━━━━━━━━━━━━━━\n'
+  + 'POSITIONNEMENT_AMAZON: [positionnement retenu — 1 phrase claire et spécifique]\n'
+  + 'LEVIERS_RANKING: [3 leviers : 1 algorithmique / 1 longue traîne / 1 conversion]\n'
+  + 'ERREURS_A_EVITER: [erreurs spécifiques à CE produit — pas génériques]\n'
+  + 'OPPORTUNITE_SEO: [1 opportunité concrète non exploitée par les concurrents]\n'
+  + 'POINT_IMPORTANT: [Le vrai enjeu — quelle est la promesse implicite du terme de recherche et en quoi le produit s\'en écarte ? Comment la fiche corrige cet écart sans perdre la visibilité SEO ?]\n'
+  + 'ALERTES_FRED: [Problèmes à signaler indépendamment du SEO : rupture stock / spec fausse / défaut produit structurel / note trop basse / claim incorrect fiche actuelle — VIDE si aucun problème]'
+  );
 }
 
 // ── Utilitaires ─────────────────────────────────────────────────
@@ -1473,7 +1503,8 @@ function extractMotsTitreBullets(titre, bullets) {
 function parseSEOResponse(text, lang) {
   const result = { titre: '', bullets: ['','','','',''], description: '',
                    nomType: '', backendKW: '', images: [],
-                   positionnement: '', leviers: '', erreurs: '', opportunite: '' };
+                   positionnement: '', leviers: '', erreurs: '', opportunite: '',
+                   pointImportant: '', alertesFred: '' };
   try {
     // Utiliser split par lignes pour éviter les regex multilignes
     function extractField(t, key) {
@@ -1502,6 +1533,8 @@ function parseSEOResponse(text, lang) {
     result.leviers      = extractField(text, 'LEVIERS_RANKING').replace(/\*\*/g, '').trim();
     result.erreurs      = extractField(text, 'ERREURS_A_EVITER').replace(/\*\*/g, '').trim();
     result.opportunite  = extractField(text, 'OPPORTUNITE_SEO').replace(/\*\*/g, '').trim();
+    result.pointImportant = extractField(text, 'POINT_IMPORTANT').replace(/\*\*/g, '').trim();
+    result.alertesFred    = extractField(text, 'ALERTES_FRED').replace(/\*\*/g, '').trim();
 
     for (let i = 1; i <= 5; i++) {
       result.bullets[i-1] = extractField(text, 'BULLET_' + i).replace(/\*\*/g, '').trim();
