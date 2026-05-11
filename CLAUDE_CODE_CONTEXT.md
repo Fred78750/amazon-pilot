@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 10 mai 2026 (v3.4.31)
+**Dernière mise à jour :** 11 mai 2026 (v3.4.41)
 
 ---
 
@@ -69,14 +69,15 @@ Tout patch doit être minimal et ciblé :
 | Version | Statut | Hash git |
 |---------|--------|----------|
 | v3.4.27 | ✅ Stable | d9738ca |
-| v3.4.28 | ✅ Stable — **prod** | d747085 |
+| v3.4.28 | ✅ Stable | d747085 |
 | v3.4.29 | ✅ Stable | 201fadc |
 | v3.4.30 | ✅ Stable | 6a37a60 |
 | v3.4.31 | ✅ Stable | d127eae |
 | v3.4.32 | ⛔ Annulé (bug données) | 3a2f3ad |
 | v3.4.29 (wizard) | ✅ Stable | 393b553 |
 | v3.4.30 (wizard) | ✅ Stable | 8845fb0 |
-| v3.4.31 (wizard) | ✅ Staging/Preprod | b7a668b |
+| v3.4.31 (wizard) | ✅ Stable | b7a668b |
+| v3.4.41 | ✅ Stable — **prod** | cd3e709 |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -94,9 +95,9 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | v3.4.28 | https://amazon.foliow.app |
-| Recette (staging) | v3.4.31 | https://d9xny9istvl53.cloudfront.net |
-| Preprod | v3.4.31 | https://preprod.amazon.foliow.app |
+| Production (main) | v3.4.41 | https://amazon.foliow.app |
+| Recette (staging) | v3.4.41 | https://d9xny9istvl53.cloudfront.net |
+| Preprod | v3.4.41 | https://preprod.amazon.foliow.app |
 
 ---
 
@@ -191,35 +192,24 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-## TÂCHES EN COURS (session v3.4.29 — toutes terminées)
+## TÂCHES EN COURS (session v3.4.41 — toutes terminées)
 
-- [x] v3.4.25 : `buildSEOPrompt` v2 — Phase 0, ficheAmazon, ALERTES_FRED, POINT_IMPORTANT → `src/seo.js`
-- [x] v3.4.25 : `parseSEOResponse` — ajout `pointImportant` + `alertesFred` → `src/seo.js`
-- [x] v3.4.25 : `drawSEOContent` — affichage ALERTES_FRED + POINT_IMPORTANT → `src/seo.js`
-- [x] v3.4.26 : ficheAmazon "Enrichissement produit" — carte complète vue détail + wizard étape 4 → `src/core.js` + `src/seo.js`
-- [x] v3.4.26 : bug SKU wizard — `render()` supprimé de `oninput`, `onblur="render()"` → `src/seo.js`
-- [x] v3.4.27 : `drawSEOContent` — `display:none` conditionnel ALERTES_FRED + POINT_IMPORTANT → `src/seo.js`
-- [x] v3.4.27 : `isBackendKW` — 4 nouvelles directives strictes → `src/seo.js`
-- [x] v3.4.28 : `renderSEOSection` (core.js) — ajout ALERTES_FRED + POINT_IMPORTANT manquants → `src/core.js`
-- [x] v3.4.29 : Challenge GPT — `renderChallengeGPT` + `runChallengeGPT` + `parseChallengeResponse` + `updateFusionField` + `copyFicheFusion` + `exportExemplesGPT` → `src/core.js` + `src/seo.js`
-- [x] v3.4.30 : UX Challenge GPT — textareas agrandis + 3 boutons + `applyFusionAndPublish` → `src/core.js` + `src/seo.js`
-- [x] v3.4.31 : fix `applyFusionAndPublish` — `agentVCState` step=4 + `go('agentvc')` direct → `src/core.js`
-- [x] v3.4.32 : fix reinject ficheOptimisee dans `init()` + boutons vue détail (`goAgentSEO`/`goAgentSEOPublish`) + `applyFusionAndPublish` → `goAgentSEOPublish` → `src/core.js` ⛔ ANNULÉ — bug données
-- [x] v3.4.29 (wizard) : refacto complète wizard optimisation — `wizardState` + `renderOptimisationWizard` + `publishVC` + `saveClientSafe` + `wizardSave/SaveAndPublish` — `openWizard/closeWizard` remplacent `goAgentSEO/goAgentSEOPublish/applyFusionAndPublish` → `src/core.js` + `src/seo.js`
-- [x] v3.4.30 (wizard) : fix `disabled` dynamique étapes A (SKU) + D (GPT) — `oninput` met à jour le bouton sans `render()` → `src/seo.js`
-- [x] v3.4.31 (wizard) : fix `parseChallengeResponse` — parsing ligne par ligne, corrige débordement regex multi-lignes → `src/core.js`
+- [x] v3.4.32–v3.4.37 : wizard accordion + step C fiche + verdicts + synthèse + GO/NO GO + clearAllFicheChallenge + scroll fix + regex `[A-Z_0-9]+` → `src/core.js` + `src/seo.js` + `src/styles.css`
+- [x] v3.4.38 : `buildVCModifyPrompt` — URL catalogue directe + fetch interceptor → `src/seo.js`
+- [x] v3.4.39 : `buildVCModifyPrompt` — IIFE async + sleep + emballage + suppression bullets vides → `src/seo.js`
+- [x] v3.4.40 : `buildVCModifyPrompt` — emballage sélecteur exact `package_level-0-value` + `for...of` await-compatible → `src/seo.js`
+- [x] v3.4.41 : `buildVCModifyPrompt` — sélecteurs CSS validés Chrome (searchAsin + deleteSurplusBullets + setEmballage + saveForm double clic) + fillRemainingBullets → `src/seo.js`
+- [x] Merge staging → main v3.4.41 — ✅ prod déployée
 
 ---
 
 ## TÂCHES SUIVANTES
 
-- [x] Merge staging → main (v3.4.25 à v3.4.28) — ✅ prod déployée v3.4.28
-- [ ] Merge staging → main (v3.4.29–v3.4.31) — attendre GO Fred
-- [ ] Smoke test complet avant merge (voir `smoke-test.md`)
-- [ ] Qualité prompt SEO — comparaison ChatGPT + refonte `buildSEOPrompt` → `src/seo.js`
+- [ ] **Priorité 1** — Fix scroll étape C : `renderWizardStep` (`src/seo.js`) — div wrappant `${content}` → `overflow:visible`, supprimer `overflow:hidden`/`max-height` → `v3.4.42`
+- [ ] **Priorité 2** — Sessions comparatives Claude vs ChatGPT (3 ASINs Cogex) → alimenter `EXEMPLES_GPT_REFERENCE.md`
+- [ ] **Priorité 3** — Vérifier B07DGD6W4Y + B00BBU4Z4K sur Amazon.fr : 5 bullets non vides
+- [ ] Qualité prompt SEO — refonte `buildSEOPrompt` → `src/seo.js`
 - [ ] Enrichissement web `seoFetchFiche` — vérifier lecture fiche Amazon réelle → `src/seo.js`
-- [ ] Gestion erreurs Amazon (2-3 messages courants) dans le script VC → `buildVCModifyPrompt` `src/seo.js`
-- [ ] Double clic "Enregistrer et terminer" si premier clic ignoré → `save()` dans `buildVCModifyPrompt` `src/seo.js`
 
 ---
 
@@ -241,4 +231,14 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 10 mai 2026 (v3.4.31)**
+## RÈGLES AJOUTÉES (session 11 mai 2026)
+
+### Règle `forEach` + `await`
+Les callbacks `forEach` sont synchrones — jamais utiliser `await` à l'intérieur. Utiliser une boucle `for` indexée ou `for...of`.
+
+### Règle smoke test synthèse
+Les ASINs avec `ficheOptimisee` créée via fusion wizard n'ont pas de synthèse stratégique. Le smoke test doit utiliser un ASIN avec vraie génération SEO (`runSEOFiche`) pour valider positionnement/leviers/erreurs/opportunite.
+
+---
+
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 11 mai 2026 (v3.4.41)**
