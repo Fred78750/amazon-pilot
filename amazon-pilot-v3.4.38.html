@@ -451,7 +451,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.71';
+const APP_VERSION = '3.4.38';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -2962,7 +2962,6 @@ function parseChallengeResponse(text) {
     }
   }
   if (currentKey) result[currentKey] = currentVal.join('\n').replace(/\*\*/g,'').trim();
-  console.log('[PARSE]', result); // DEBUG v3.4.33 — à retirer après validation
   const g = (k) => result[k] || '';
   return {
     verdictTitre:   g('VERDICT_TITRE'),

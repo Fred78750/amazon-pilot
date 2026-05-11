@@ -2273,7 +2273,6 @@ function parseChallengeResponse(text) {
     }
   }
   if (currentKey) result[currentKey] = currentVal.join('\n').replace(/\*\*/g,'').trim();
-  console.log('[PARSE]', result); // DEBUG v3.4.33 — à retirer après validation
   const g = (k) => result[k] || '';
   return {
     verdictTitre:   g('VERDICT_TITRE'),
