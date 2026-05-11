@@ -90,11 +90,34 @@ function buildVCModifyPrompt(asin, market, fiche, c, sku, vc) {
     'Tu vas modifier la fiche ' + asin + ' sur Vendor Central France.',
     '',
     '== ÉTAPE 1 — CATALOGUE ==',
-    'Navigue vers vendorcentral.amazon.fr → Catalogue.',
-    'Recherche par ASIN : ' + asin,
-    'Note chaque ligne : Vendor Code + SKU.',
-    'Si > 2 vendor codes trouvés : avertis-moi (risque vieux listings).',
-    'Enchaîne sur ÉTAPE 2 pour chaque vendor code.',
+    'Navigue vers vendorcentral.amazon.fr/vendor/members/products/catalog',
+    'Exécute ce bloc JS dans la console pour rechercher l\'ASIN :',
+    '',
+    '(async function() {',
+    '  var sleep = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };',
+    '  var searchTA = document.querySelector(\'kat-textarea.SearchBox-module__textArea--eo-Yh\');',
+    '  if (searchTA && searchTA.shadowRoot) {',
+    '    var inner = searchTA.shadowRoot.querySelector(\'textarea\');',
+    '    if (inner) {',
+    '      inner.focus();',
+    '      document.execCommand(\'selectAll\');',
+    '      document.execCommand(\'delete\');',
+    '      document.execCommand(\'insertText\', false, ' + JSON.stringify(asin) + ');',
+    '      inner.dispatchEvent(new Event(\'input\', {bubbles:true}));',
+    '    }',
+    '  }',
+    '  await sleep(500);',
+    '  var searchBtn = document.querySelector(\'.SearchBox-module__searchButton--5iHxx\');',
+    '  if (searchBtn) { var icon = searchBtn.querySelector(\'kat-icon\'); if (icon) icon.click(); }',
+    '  await sleep(3000);',
+    '})();',
+    '',
+    'IMPORTANT : attends que le compteur "X - X sur X résultats" se stabilise avant de lire les résultats.',
+    'Lis TOUS les résultats visibles (pas seulement le premier) et construis un tableau :',
+    '  vendorEntries = [ {vendorCode: "COGEX", sku: "647808"}, {vendorCode: "COJFI", sku: "647808"}, ... ]',
+    'Si vendorEntries.length === 0 → stop, signale "ASIN introuvable dans le catalogue".',
+    'Si vendorEntries.length > 2 → alerte "risque vieux listings — attends GO explicite avant de continuer".',
+    'Si vendorEntries.length >= 1 → enchaîne ÉTAPE 2 pour CHAQUE entry du tableau.',
     '',
     '== ÉTAPE 2 — POUR CHAQUE VENDOR CODE ==',
     '',
@@ -105,7 +128,8 @@ function buildVCModifyPrompt(asin, market, fiche, c, sku, vc) {
     '',
     '2b. Exécute ce bloc JS en une seule fois dans la console :',
     '',
-    '(function() {',
+    '(async function() {',
+    '  var sleep = function(ms) { return new Promise(function(r) { setTimeout(r, ms); }); };',
     '  var origOpen = XMLHttpRequest.prototype.open;',
     '  var origSend = XMLHttpRequest.prototype.send;',
     '  window._lastXHRResponse = null;',
@@ -119,6 +143,21 @@ function buildVCModifyPrompt(asin, market, fiche, c, sku, vc) {
     '        window._lastXHRResponse = { status: self.status, response: self.responseText };',
     '    });',
     '    return origSend.apply(this, arguments);',
+    '  };',
+    '  // Intercepte XHR ET fetch pour détecter SUCCESS',
+    '  var origFetch = window.fetch;',
+    '  window.fetch = function(url, opts) {',
+    '    return origFetch.apply(this, arguments).then(function(resp) {',
+    '      if (url && url.toString().includes(\'abis/ajax/edit\')) {',
+    '        resp.clone().json().then(function(data) {',
+    '          if (data && data.status === \'SUCCESS\') {',
+    '            window._lastXHRResponse = { status: 200, response: JSON.stringify(data) };',
+    '            console.log(\'[VC SUCCESS via fetch] submissionSku:\', data.submissionSku);',
+    '          }',
+    '        }).catch(function(){});',
+    '      }',
+    '      return resp;',
+    '    });',
     '  };',
     '',
     '  function fillAndBlur(name, val) {',
@@ -159,43 +198,82 @@ function buildVCModifyPrompt(asin, market, fiche, c, sku, vc) {
     '    return errors;',
     '  }',
     '',
-    '  function save() {',
-    '    document.querySelectorAll("kat-button").forEach(function(btn) {',
-    '      if (btn.getAttribute(\'label\') === "Enregistrer et terminer") {',
-    '        var ib = btn.shadowRoot && btn.shadowRoot.querySelector("button");',
-    '        if (ib) ib.click();',
-    '      }',
-    '    });',
-    '    setTimeout(function() {',
-    '      var r = window._lastXHRResponse;',
-    '      if (r && r.response.includes(\'"SUCCESS"\')) {',
-    '        console.log("✅ SAUVEGARDE RÉUSSIE — vendor code traité.");',
-    '      } else {',
-    '        console.log("❌ ÉCHEC:", r ? r.response.substring(0, 200) : "pas de réponse XHR");',
-    '      }',
-    '    }, 3000);',
-    '  }',
     '',
-    '  function fillAll() {',
+    '  async function fillAll() {',
     '    fillAndBlur("item_name-0-value", ' + JSON.stringify(titre) + ');',
     '    fillAndBlur("bullet_point-0-value", ' + JSON.stringify(bullets[0] || '') + ');',
     '    fillAndBlur("bullet_point-1-value", ' + JSON.stringify(bullets[1] || '') + ');',
     '    fillAndBlur("bullet_point-2-value", ' + JSON.stringify(bullets[2] || '') + ');',
     '    fillAndBlur("bullet_point-3-value", ' + JSON.stringify(bullets[3] || '') + ');',
     '    fillAndBlur("bullet_point-4-value", ' + JSON.stringify(bullets[4] || '') + ');',
+    '    // Supprimer bullets vides — tolérance 1 vide résiduel',
+    '    await sleep(500);',
+    '    for (var attempt = 0; attempt < 15; attempt++) {',
+    '      var bulletFields = document.querySelectorAll("kat-textarea[name^=\'bullet_point\']");',
+    '      var empties = 0;',
+    '      bulletFields.forEach(function(f) {',
+    '        var inner = f.shadowRoot && f.shadowRoot.querySelector(\'textarea\');',
+    '        if (!(inner ? inner.value : \'\').trim()) empties++;',
+    '      });',
+    '      if (empties === 0 || empties === 1) break;',
+    '      var katLinks = document.querySelectorAll(\'kat-link\');',
+    '      var deleteKL = null;',
+    '      katLinks.forEach(function(kl) {',
+    '        if (kl.shadowRoot && kl.shadowRoot.textContent && kl.shadowRoot.textContent.includes(\'Supprimer le dernier\')) deleteKL = kl;',
+    '      });',
+    '      if (!deleteKL) break;',
+    '      var anchor = deleteKL.shadowRoot.querySelector(\'a\');',
+    '      if (anchor) { anchor.click(); console.log(\'[VC] Supprimer le dernier — attempt \' + (attempt+1)); }',
+    '      else break;',
+    '      await sleep(700);',
+    '    }',
+    '    // Remplir les bullets vides résiduels avec le bullet 5',
+    '    await sleep(400);',
+    '    var remainingBullets = document.querySelectorAll("kat-textarea[name^=\'bullet_point\']");',
+    '    remainingBullets.forEach(function(f) {',
+    '      var inner = f.shadowRoot && f.shadowRoot.querySelector(\'textarea\');',
+    '      if (inner && !inner.value.trim()) {',
+    '        inner.focus();',
+    '        document.execCommand(\'selectAll\');',
+    '        document.execCommand(\'delete\');',
+    '        document.execCommand(\'insertText\', false, ' + JSON.stringify(bullets[4] || '') + ');',
+    '        inner.blur();',
+    '        f.dispatchEvent(new Event(\'blur\', { bubbles: true }));',
+    '        console.log(\'[VC] Bullet résiduel rempli:\', f.getAttribute(\'name\'));',
+    '      }',
+    '    });',
+    '    await sleep(400);',
     '    fillAndBlur("rtip_product_description-0-value", ' + JSON.stringify(description) + ');',
     '    fillAndBlur("generic_keyword-0-value", ' + JSON.stringify(backendKW.substring(0, 249)) + ');',
-    '    setTimeout(function() {',
-    '      var errors = checkErrors();',
-    '      if (errors.length) {',
-    '        console.log("⚠️ ERREURS DÉTECTÉES — sauvegarde annulée :");',
-    '        errors.forEach(function(e) { console.log("→", e); });',
-    '        console.log("Signale ces erreurs à Fred avant de continuer.");',
-    '      } else {',
-    '        console.log("✅ Aucune erreur — sauvegarde en cours...");',
-    '        save();',
+    '    // Emballage — sélecteur exact : kat-dropdown[name=\'package_level-0-value\']',
+    '    await sleep(500);',
+    '    var embEl = document.querySelector("kat-dropdown[name=\'package_level-0-value\']");',
+    '    if (!embEl) {',
+    '      console.log(\'[VC] Champ emballage non trouvé\');',
+    '    } else if (embEl.getAttribute(\'value\') === \'unit\') {',
+    '      console.log(\'[VC] Emballage déjà = unit\');',
+    '    } else {',
+    '      var embHeader = embEl.shadowRoot && embEl.shadowRoot.querySelector(\'.select-header\');',
+    '      if (embHeader) { embHeader.click(); await sleep(1000); }',
+    '      var embSR = embEl.shadowRoot;',
+    '      if (embSR) {',
+    '        var unitOpt = Array.from(embSR.querySelectorAll(\'.dropdown-item, [role="option"], li\'))',
+    '          .find(function(li) { return li.getAttribute(\'value\') === \'unit\' || li.textContent.trim() === \'Unité\'; });',
+    '        if (unitOpt) { unitOpt.click(); console.log(\'[VC] Emballage → Unité\'); await sleep(400); }',
     '      }',
-    '    }, 1000);',
+    '    }',
+    '    // Radio commandable — sélecteur exact',
+    '    await sleep(300);',
+    '    var trueRadio = document.querySelector("kat-radiobutton[name=\'is_trade_item_orderable_unit-0-value\'][value=\'true\']");',
+    '    if (trueRadio) { trueRadio.scrollIntoView({behavior:\'instant\',block:\'center\'}); trueRadio.click(); console.log(\'[VC] Commandable → Oui\'); }',
+    '    await sleep(300);',
+    '    // Sauvegarde — double clic requis',
+    '    var saveBtn = document.getElementById(\'EditSaveAction\');',
+    '    if (saveBtn) { saveBtn.scrollIntoView({behavior:\'instant\',block:\'center\'}); saveBtn.click(); }',
+    '    console.log(\'[VC] Clic 1 — validation...\');',
+    '    await sleep(5000);',
+    '    if (saveBtn) saveBtn.click();',
+    '    console.log(\'[VC] Clic 2 — soumission...\');',
     '  }',
     '',
     '  var clicks = 0;',
@@ -575,6 +653,7 @@ function renderAgentVC() {
         h += '<button class="btn btn-sm" onclick="avcLaunchSEO()">🔄 Regénérer</button>';
         h += '<button class="btn btn-p btn-sm" onclick="agentVCState.step=5;render()">📤 Script VC →</button>';
         h += '</div>';
+        // renderChallengeGPT supprimé — intégré dans renderOptimisationWizard (v3.4.29)
       }
     }
     h += '</div></div>';
@@ -1013,6 +1092,99 @@ function drawSEOContent(asin, activeMkt, res, mtp, compact) {
 function copySEOTitreMkt(asin, mkt) { copySEOField(asin, mkt, 'all'); }
 function copySEODescMkt(asin, mkt)  { copySEOField(asin, mkt, 'description'); }
 function copySEOBkwMkt(asin)        { copySEOField(asin, null, 'backendKW'); }
+
+function renderChallengeGPT(asin, market, a) {
+  const ch = a.ficheChallenge && a.ficheChallenge[market];
+  let h = '';
+
+  // === ÉTAPE 6 — Saisie GPT ===
+  h += `<div class="cd" style="padding:1.25rem;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <div style="width:22px;height:22px;border-radius:50%;background:#EAF3DE;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:#3B6D11;flex-shrink:0">6</div>
+      <span style="font-size:14px;font-weight:500">Challenge GPT</span>
+      <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#EAF3DE;color:#3B6D11">apprentissage</span>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Collez la sortie brute de ChatGPT pour comparer objectivement les deux fiches</div>
+    <textarea class="fg-in" id="fiche-gpt-${esc(asin)}-${esc(market)}"
+      style="height:100px;font-size:12px;resize:vertical"
+      placeholder="Collez ici la sortie complète de ChatGPT (titre, bullets, description, backend, synthèse)..."
+      oninput="saveFicheGPT('${esc(asin)}', this.value)"
+    >${esc(a.ficheGPT || '')}</textarea>
+    <div style="margin-top:8px;display:flex;gap:8px">
+      ${challengeLoading === asin
+        ? `<div style="font-size:12px;color:var(--muted)"><span class="spin">⏳</span> Analyse en cours…</div>`
+        : `<button class="btn-or" onclick="runChallengeGPT('${esc(asin)}','${esc(market)}')">⚡ Analyser et comparer</button>`
+      }
+    </div>
+  </div>`;
+
+  // === ÉTAPE 7 — Résultat comparaison ===
+  if (ch) {
+    const scoreColor = (s) => {
+      const n = parseInt(s);
+      if (n >= 8) return 'var(--ok)';
+      if (n >= 6) return 'var(--or)';
+      return 'var(--danger)';
+    };
+
+    h += `<div class="cd" style="padding:1.25rem;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div style="width:22px;height:22px;border-radius:50%;background:#EAF3DE;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:#3B6D11;flex-shrink:0">7</div>
+        <span style="font-size:14px;font-weight:500">Comparaison & fiche fusionnée</span>
+        <span style="font-size:12px;color:var(--muted)">Claude <strong style="color:${scoreColor(ch.scoreClaude)}">${esc(ch.scoreClaude)}</strong> · GPT <strong style="color:${scoreColor(ch.scoreGPT)}">${esc(ch.scoreGPT)}</strong></span>
+      </div>`;
+
+    // Autocritique
+    if (ch.autocritique) {
+      h += `<div class="alr alr-w" style="margin-bottom:14px">
+        <strong>Autocritique Claude :</strong> ${esc(ch.autocritique)}
+      </div>`;
+    }
+
+    // Champs comparaison + fusion éditables
+    const fields = [
+      { label: 'Titre',            verdict: ch.verdictTitre,   fusion: ch.fusionTitre,   key: 'fusionTitre',   rows: 3 },
+      { label: 'Bullet 1',         verdict: ch.verdictB1,      fusion: ch.fusionB1,      key: 'fusionB1',      rows: 4 },
+      { label: 'Bullet 2',         verdict: ch.verdictB2,      fusion: ch.fusionB2,      key: 'fusionB2',      rows: 4 },
+      { label: 'Bullet 3',         verdict: ch.verdictB3,      fusion: ch.fusionB3,      key: 'fusionB3',      rows: 4 },
+      { label: 'Bullet 4',         verdict: ch.verdictB4,      fusion: ch.fusionB4,      key: 'fusionB4',      rows: 4 },
+      { label: 'Bullet 5',         verdict: ch.verdictB5,      fusion: ch.fusionB5,      key: 'fusionB5',      rows: 4 },
+      { label: 'Description HTML', verdict: ch.verdictDesc,    fusion: ch.fusionDesc,    key: 'fusionDesc',    rows: 8 },
+      { label: 'Backend keywords', verdict: ch.verdictBackend, fusion: ch.fusionBackend, key: 'fusionBackend', rows: 3 },
+    ];
+
+    fields.forEach(f => {
+      const winner = (f.verdict || '').startsWith('GPT') ? '🟢 GPT' : (f.verdict || '').startsWith('Claude') ? '🔵 Claude' : '⚪ Égalité';
+      h += `<div style="margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span style="font-size:11px;font-weight:500;color:var(--muted2);text-transform:uppercase;letter-spacing:0.5px">${esc(f.label)}</span>
+          <span style="font-size:11px;color:var(--muted)">${winner}</span>
+          <span style="font-size:11px;color:var(--muted);font-style:italic">${esc((f.verdict || '').replace(/^[^—]+—\s*/, ''))}</span>
+        </div>
+        <textarea class="fg-in" rows="${f.rows}"
+          style="font-size:12px;resize:vertical"
+          oninput="updateFusionField('${esc(asin)}','${esc(market)}','${f.key}',this.value)"
+        >${esc(f.fusion || '')}</textarea>
+      </div>`;
+    });
+
+    h += `<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn-p" onclick="applyFusionAndPublish('${esc(asin)}','${esc(market)}')">
+        🚀 Appliquer + Publier dans VC
+      </button>
+      <button class="btn-or" onclick="copyFicheFusion('${esc(asin)}','${esc(market)}')">
+        📋 Copier la fiche fusionnée
+      </button>
+      <button class="btn-sm" onclick="exportExemplesGPT('${esc(asin)}','${esc(market)}')">
+        💾 Sauvegarder référence SEO
+      </button>
+    </div>`;
+
+    h += '</div>';
+  }
+
+  return h;
+}
 
 function seoSetInternalRef(asin, val) {
   var c = cl();
@@ -1560,4 +1732,202 @@ function parseSEOResponse(text, lang) {
     }
   } catch(e) { /* parsing partiel OK */ }
   return result;
+}
+
+// ── Wizard Optimisation Fiche Article ────────────────────────────────────────
+
+function renderOptimisationWizard() {
+  var ws  = wizardState;
+  var c   = cl(); if (!c) return '<div style="padding:24px" class="alr alr-r">Erreur client</div>';
+  var a   = c.asins.find(function(x){ return x.asin === ws.asin; });
+  if (!a) return '<div style="padding:24px" class="alr alr-r">ASIN introuvable</div>';
+  var mkt = ws.market || '.fr';
+
+  var h = '<div style="max-width:680px;margin:0 auto;padding:1.5rem">';
+  h += '<div style="display:flex;align-items:center;gap:12px;margin-bottom:1.5rem">';
+  h += '<button class="btn btn-sm" onclick="closeWizard()">← Retour</button>';
+  h += '<h2 style="font-size:16px;font-weight:500;margin:0">' + (ws.isRegen ? '🔄 Régénérer la fiche' : '✨ Optimiser la fiche Article') + '</h2>';
+  h += '<span style="font-size:12px;color:var(--tx3)">' + esc(ws.asin) + '</span>';
+  h += '</div>';
+
+  // ── ÉTAPE A — SKU ──────────────────────────────────────────────
+  var stepA_done = !!ws.sku;
+  h += renderWizardStep('a', 'A', 'Saisir le SKU', stepA_done, ws.step === 'a',
+    '<div style="font-size:12px;color:var(--tx3);margin-bottom:8px">Le SKU figure dans le catalogue Vendor Central.</div>' +
+    '<input type="text" class="fg-in" id="wiz-sku" style="max-width:280px;font-size:13px" placeholder="Ex: 50405 ou B009L0RMUG" value="' + esc(ws.sku || '') + '" oninput="wizardState.sku=this.value;document.getElementById(\'wiz-sku-btn\').disabled=!this.value.trim()" />' +
+    '<div style="margin-top:10px"><button class="btn btn-p" id="wiz-sku-btn" onclick="if(wizardState.sku){wizardNextStep(\'b\')}" ' + (!ws.sku ? 'disabled' : '') + '>Confirmer →</button></div>',
+    'SKU : ' + esc(ws.sku || '')
+  );
+
+  // ── ÉTAPE B — FICHE AMAZON ─────────────────────────────────────
+  var stepB_done = !!(a.ficheAmazon);
+  h += renderWizardStep('b', 'B', 'Coller la fiche Amazon', stepB_done, ws.step === 'b',
+    '<div style="font-size:12px;color:var(--tx3);margin-bottom:8px">Collez le contenu de la page Amazon.fr — titre actuel, bullets, description, avis, produits associés.<br><span style="color:var(--tx3);opacity:.7">Optionnel mais recommandé pour une analyse précise.</span></div>' +
+    '<textarea class="fg-in" style="height:100px;font-size:12px;resize:vertical" placeholder="Collez ici le contenu de la page Amazon.fr..." oninput="saveFicheAmazon(\'' + esc(ws.asin) + '\', this.value)">' + esc(a.ficheAmazon || '') + '</textarea>' +
+    '<div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-p" onclick="wizardRunSEO()">✨ Générer la fiche →</button><button class="btn btn-sm" onclick="wizardNextStep(\'c\')" style="font-size:12px">Passer cette étape</button></div>',
+    stepB_done ? 'Fiche Amazon enrichie ✓' : 'Non renseignée'
+  );
+
+  // ── ÉTAPE C — GÉNÉRATION CLAUDE ────────────────────────────────
+  var seoR = seoResults[ws.asin] && seoResults[ws.asin][mkt];
+  var stepC_done = !!seoR;
+  var stepC_content;
+  if (ws.progress === 'seo') {
+    stepC_content = '<div style="font-size:13px;color:var(--tx3)"><span class="spin">⏳</span> Génération en cours...</div>';
+  } else if (stepC_done) {
+    stepC_content = '<div style="margin-bottom:10px">' +
+      '<div style="font-size:12px;font-weight:500;color:var(--color-text-primary);margin-bottom:6px">' + esc(seoR.titre || '') + '</div>' +
+      (seoR.bullets || []).map(function(b, i) {
+        return '<div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:4px"><strong>B' + (i+1) + '</strong> ' + esc(b) + '</div>';
+      }).join('') +
+      '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-p" onclick="wizardNextStep(\'d\')">Continuer →</button><button class="btn btn-sm" onclick="wizardRunSEO()">Regénérer</button></div>';
+  } else {
+    stepC_content = '<button class="btn btn-p" onclick="wizardRunSEO()">✨ Générer</button>';
+  }
+  h += renderWizardStep('c', 'C', 'Analyse et génération Claude', stepC_done, ws.step === 'c', stepC_content, '');
+
+  // ── ÉTAPE D — SORTIE GPT ───────────────────────────────────────
+  var stepD_done = !!(a.ficheGPT);
+  h += renderWizardStep('d', 'D', 'Intégrer la sortie GPT', stepD_done, ws.step === 'd',
+    '<div style="font-size:12px;color:var(--tx3);margin-bottom:8px">Collez la sortie brute de ChatGPT pour la comparaison.<br><span style="color:var(--tx3);opacity:.7">Optionnel — sans GPT, la fiche Claude est utilisée directement.</span></div>' +
+    '<textarea class="fg-in" style="height:100px;font-size:12px;resize:vertical" placeholder="Collez ici la sortie complète de ChatGPT..." oninput="saveFicheGPT(\'' + esc(ws.asin) + '\', this.value);document.getElementById(\'wiz-gpt-btn\').disabled=!this.value.trim()">' + esc(a.ficheGPT || '') + '</textarea>' +
+    '<div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-p" id="wiz-gpt-btn" onclick="wizardRunChallenge()" ' + (!a.ficheGPT ? 'disabled' : '') + '>⚡ Comparer et arbitrer →</button><button class="btn btn-sm" onclick="wizardNextStep(\'f\')" style="font-size:12px">Utiliser la fiche Claude telle quelle</button></div>',
+    stepD_done ? 'Sortie GPT renseignée ✓' : 'Non renseignée'
+  );
+
+  // ── ÉTAPE E — COMPARAISON ──────────────────────────────────────
+  var ch = a.ficheChallenge && a.ficheChallenge[mkt];
+  var stepE_done = !!ch;
+  if (ws.step === 'e' || stepE_done) {
+    var stepE_content;
+    if (ws.progress === 'challenge') {
+      stepE_content = '<div style="font-size:13px;color:var(--tx3)"><span class="spin">⏳</span> Comparaison en cours...</div>';
+    } else if (stepE_done) {
+      var eFields = [
+        { label: 'Titre',    verdict: ch.verdictTitre   || '' },
+        { label: 'Bullet 1', verdict: ch.verdictB1      || '' },
+        { label: 'Bullet 2', verdict: ch.verdictB2      || '' },
+        { label: 'Bullet 3', verdict: ch.verdictB3      || '' },
+        { label: 'Bullet 4', verdict: ch.verdictB4      || '' },
+        { label: 'Bullet 5', verdict: ch.verdictB5      || '' },
+        { label: 'Desc.',    verdict: ch.verdictDesc     || '' },
+        { label: 'Backend',  verdict: ch.verdictBackend  || '' },
+      ];
+      var eRows = '';
+      eFields.forEach(function(f) {
+        var winner = f.verdict.startsWith('GPT')    ? '🟢 GPT'
+                   : f.verdict.startsWith('Claude') ? '🔵 Claude' : '⚪ Égalité';
+        var reason = f.verdict.replace(/^(GPT|Claude|Égalité)\s*—\s*/, '');
+        eRows += '<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;font-size:12px">' +
+          '<span style="min-width:60px;font-weight:500;color:var(--tx3)">' + esc(f.label) + '</span>' +
+          '<span style="min-width:70px">' + winner + '</span>' +
+          '<span style="color:var(--tx3)">' + esc(reason.split('\n')[0]) + '</span>' +
+          '</div>';
+      });
+      // Synthèse stratégique depuis seoResults
+      var _seoRe = seoResults[ws.asin] && seoResults[ws.asin][mkt];
+      var eSynthese = '';
+      if (_seoRe) {
+        eSynthese += '<div style="margin-top:14px;padding-top:12px;border-top:0.5px solid var(--bd)">';
+        if (_seoRe.positionnement) eSynthese += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:500;color:var(--tx3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">Positionnement</div><div style="font-size:12px">' + esc(_seoRe.positionnement) + '</div></div>';
+        if (_seoRe.leviers)        eSynthese += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:500;color:var(--tx3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">Leviers ranking</div><div style="font-size:12px">' + esc(_seoRe.leviers) + '</div></div>';
+        if (_seoRe.erreurs)        eSynthese += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:500;color:var(--tx3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">Erreurs à éviter</div><div style="font-size:12px">' + esc(_seoRe.erreurs) + '</div></div>';
+        if (_seoRe.opportunite)    eSynthese += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:500;color:var(--tx3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">Opportunité SEO</div><div style="font-size:12px">' + esc(_seoRe.opportunite) + '</div></div>';
+        if (_seoRe.pointImportant) eSynthese += '<div style="margin-bottom:8px;padding:10px 12px;background:var(--alr-w-bg,#FFF9ED);border-radius:var(--rdl)"><div style="font-size:10px;font-weight:500;color:var(--ok-w,#7A4D00);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">🔥 Point clé</div><div style="font-size:12px">' + esc(_seoRe.pointImportant) + '</div></div>';
+        eSynthese += '</div>';
+      }
+      // GO / NO GO
+      var eGoNoGo = (_seoRe && _seoRe.alertesFred)
+        ? '<div class="alr alr-w" style="margin-bottom:12px;font-size:12px"><strong>⚠️ Points à vérifier avant publication :</strong><br>' + esc(_seoRe.alertesFred) + '</div>'
+        : '<div class="alr alr-g" style="margin-bottom:12px;font-size:12px">✅ GO — aucun point bloquant identifié</div>';
+
+      stepE_content =
+        '<div style="font-size:12px;font-weight:500;margin-bottom:10px">Claude <strong>' + esc(String(ch.scoreClaude || '')) + '</strong> · GPT <strong>' + esc(String(ch.scoreGPT || '')) + '</strong></div>' +
+        eRows +
+        (ch.autocritique ? '<div class="alr alr-w" style="margin:8px 0;font-size:12px"><strong>Autocritique :</strong> ' + esc(ch.autocritique) + '</div>' : '') +
+        eSynthese +
+        eGoNoGo +
+        '<button class="btn btn-p" onclick="wizardNextStep(\'f\')">Voir la fiche fusionnée →</button>';
+    } else {
+      stepE_content = '<button class="btn btn-p" onclick="wizardRunChallenge()">⚡ Comparer</button>';
+    }
+    h += renderWizardStep('e', 'E', 'Comparaison & arbitrage', stepE_done, ws.step === 'e', stepE_content, '');
+  }
+
+  // ── ÉTAPE F — FICHE FUSIONNÉE ÉDITABLE ────────────────────────
+  var fusionSrc = ch || seoR;
+  if (ws.step === 'f' || ws.step === 'g') {
+    h += renderWizardStep('f', 'F', 'Fiche finale — éditable', true, ws.step === 'f' || ws.step === 'g',
+      renderFicheEditable(ws.asin, mkt, fusionSrc, ch) +
+      '<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-p" onclick="wizardSaveAndChoose()">Valider la fiche →</button><button class="btn btn-sm" onclick="wizardNextStep(\'d\')">← Modifier la comparaison</button></div>',
+      ''
+    );
+  }
+
+  // ── ÉTAPE G — CTA FINAL ────────────────────────────────────────
+  if (ws.step === 'g') {
+    h += renderWizardStep('g', 'G', 'Que faire de cette fiche ?', false, true,
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button class="btn btn-p" onclick="wizardSave(\'' + esc(ws.asin) + '\',\'' + esc(mkt) + '\')">💾 Sauvegarder</button>' +
+      '<button class="btn btn-or" onclick="wizardSaveAndPublish(\'' + esc(ws.asin) + '\',\'' + esc(mkt) + '\')">📤 Sauvegarder + Publier dans VC</button>' +
+      '<button class="btn btn-sm" onclick="wizardNextStep(\'c\')">🔄 Regénérer depuis le début</button>' +
+      '</div>',
+      ''
+    );
+  }
+
+  h += '</div>';
+  return h;
+}
+
+function renderWizardStep(id, letter, title, done, active, content, summary) {
+  var numBg  = done ? 'var(--ok-bg,#EAF3DE)' : active ? '#EEEDFE' : 'var(--s2)';
+  var numCol = done ? 'var(--ok,#3B6D11)'    : active ? '#3C3489' : 'var(--tx3)';
+  var numTxt = done ? '✓' : letter;
+  // Accordéon : étapes done pliées par défaut, dépliables par clic
+  var isCollapsed = done && !active && (wizardState.collapsed[id] !== false);
+  var showContent = active || !isCollapsed;
+  return '<div class="cd" style="padding:1.25rem;margin-bottom:12px;' + (active ? 'border-color:var(--accent)' : done ? 'opacity:0.75' : 'opacity:0.4') + '">' +
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:' + (showContent && content ? '12px' : '0') + '">' +
+    '<div style="width:22px;height:22px;border-radius:50%;background:' + numBg + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:' + numCol + ';flex-shrink:0">' + numTxt + '</div>' +
+    '<span style="font-size:14px;font-weight:500">' + esc(title) + '</span>' +
+    (done && !active && summary ? '<span style="font-size:11px;color:var(--tx3);margin-left:6px">' + summary + '</span>' : '') +
+    (done && !active ? '<span onclick="toggleWizardStep(\'' + id + '\')" style="cursor:pointer;margin-left:auto;color:var(--tx3);font-size:12px;padding:2px 4px">' + (isCollapsed ? '▶' : '▼') + '</span>' : '') +
+    '</div>' +
+    (showContent ? '<div style="overflow:visible;padding-top:12px">' + content + '</div>' : '') +
+    '</div>';
+}
+
+function cleanFusionValue(val) {
+  if (!val) return '';
+  // Supprimer tout ce qui ressemble à VERDICT_xx: ou FUSION_xx: (données corrompues ancien parser)
+  return val.replace(/^(VERDICT|FUSION)_[A-Z0-9]+:.*$/gm, '').trim();
+}
+
+function renderFicheEditable(asin, mkt, src, ch) {
+  if (!src && !(seoResults[asin] && seoResults[asin][mkt])) return '<div style="font-size:12px;color:var(--tx3)">Aucune fiche disponible.</div>';
+  var _seoR   = (seoResults[asin] && seoResults[asin][mkt]) || {};
+  var titre   = cleanFusionValue((ch && ch.fusionTitre)   || _seoR.titre       || (src && src.titre)       || '');
+  var bullets = [
+    cleanFusionValue((ch && ch.fusionB1) || (_seoR.bullets && _seoR.bullets[0]) || (src && src.bullets && src.bullets[0]) || ''),
+    cleanFusionValue((ch && ch.fusionB2) || (_seoR.bullets && _seoR.bullets[1]) || (src && src.bullets && src.bullets[1]) || ''),
+    cleanFusionValue((ch && ch.fusionB3) || (_seoR.bullets && _seoR.bullets[2]) || (src && src.bullets && src.bullets[2]) || ''),
+    cleanFusionValue((ch && ch.fusionB4) || (_seoR.bullets && _seoR.bullets[3]) || (src && src.bullets && src.bullets[3]) || ''),
+    cleanFusionValue((ch && ch.fusionB5) || (_seoR.bullets && _seoR.bullets[4]) || (src && src.bullets && src.bullets[4]) || ''),
+  ];
+  var desc    = cleanFusionValue((ch && ch.fusionDesc)    || _seoR.description || (src && src.description) || '');
+  var backend = cleanFusionValue((ch && ch.fusionBackend) || _seoR.backendKW   || (src && src.backendKW)   || '');
+  var h = '';
+  h += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:500;color:var(--tx3);text-transform:uppercase;margin-bottom:4px">Titre</div>' +
+    '<textarea class="fg-in" rows="3" style="font-size:12px;resize:vertical" oninput="updateWizardField(\'' + esc(asin) + '\',\'' + esc(mkt) + '\',\'titre\',this.value)">' + esc(titre) + '</textarea></div>';
+  bullets.forEach(function(b, i) {
+    h += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:500;color:var(--tx3);text-transform:uppercase;margin-bottom:4px">Bullet ' + (i+1) + '</div>' +
+      '<textarea class="fg-in" rows="4" style="font-size:12px;resize:vertical" oninput="updateWizardField(\'' + esc(asin) + '\',\'' + esc(mkt) + '\',\'bullet' + i + '\',this.value)">' + esc(b || '') + '</textarea></div>';
+  });
+  h += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:500;color:var(--tx3);text-transform:uppercase;margin-bottom:4px">Description HTML</div>' +
+    '<textarea class="fg-in" rows="8" style="font-size:12px;resize:vertical" oninput="updateWizardField(\'' + esc(asin) + '\',\'' + esc(mkt) + '\',\'description\',this.value)">' + esc(desc) + '</textarea></div>';
+  h += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:500;color:var(--tx3);text-transform:uppercase;margin-bottom:4px">Backend keywords</div>' +
+    '<textarea class="fg-in" rows="3" style="font-size:12px;resize:vertical" oninput="updateWizardField(\'' + esc(asin) + '\',\'' + esc(mkt) + '\',\'backendKW\',this.value)">' + esc(backend) + '</textarea></div>';
+  return h;
 }

@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 10 mai 2026 (v3.4.28 prod)
+**Dernière mise à jour :** 10 mai 2026 (v3.4.31)
 
 ---
 
@@ -70,6 +70,13 @@ Tout patch doit être minimal et ciblé :
 |---------|--------|----------|
 | v3.4.27 | ✅ Stable | d9738ca |
 | v3.4.28 | ✅ Stable — **prod** | d747085 |
+| v3.4.29 | ✅ Stable | 201fadc |
+| v3.4.30 | ✅ Stable | 6a37a60 |
+| v3.4.31 | ✅ Stable | d127eae |
+| v3.4.32 | ⛔ Annulé (bug données) | 3a2f3ad |
+| v3.4.29 (wizard) | ✅ Stable | 393b553 |
+| v3.4.30 (wizard) | ✅ Stable | 8845fb0 |
+| v3.4.31 (wizard) | ✅ Staging/Preprod | b7a668b |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -88,8 +95,8 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | v3.4.28 | https://amazon.foliow.app |
-| Recette (staging) | v3.4.28 | https://d9xny9istvl53.cloudfront.net |
-| Preprod | v3.4.28 | https://preprod.amazon.foliow.app |
+| Recette (staging) | v3.4.31 | https://d9xny9istvl53.cloudfront.net |
+| Preprod | v3.4.31 | https://preprod.amazon.foliow.app |
 
 ---
 
@@ -184,7 +191,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-## TÂCHES EN COURS (session v3.4.28 — toutes terminées)
+## TÂCHES EN COURS (session v3.4.29 — toutes terminées)
 
 - [x] v3.4.25 : `buildSEOPrompt` v2 — Phase 0, ficheAmazon, ALERTES_FRED, POINT_IMPORTANT → `src/seo.js`
 - [x] v3.4.25 : `parseSEOResponse` — ajout `pointImportant` + `alertesFred` → `src/seo.js`
@@ -194,12 +201,20 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 - [x] v3.4.27 : `drawSEOContent` — `display:none` conditionnel ALERTES_FRED + POINT_IMPORTANT → `src/seo.js`
 - [x] v3.4.27 : `isBackendKW` — 4 nouvelles directives strictes → `src/seo.js`
 - [x] v3.4.28 : `renderSEOSection` (core.js) — ajout ALERTES_FRED + POINT_IMPORTANT manquants → `src/core.js`
+- [x] v3.4.29 : Challenge GPT — `renderChallengeGPT` + `runChallengeGPT` + `parseChallengeResponse` + `updateFusionField` + `copyFicheFusion` + `exportExemplesGPT` → `src/core.js` + `src/seo.js`
+- [x] v3.4.30 : UX Challenge GPT — textareas agrandis + 3 boutons + `applyFusionAndPublish` → `src/core.js` + `src/seo.js`
+- [x] v3.4.31 : fix `applyFusionAndPublish` — `agentVCState` step=4 + `go('agentvc')` direct → `src/core.js`
+- [x] v3.4.32 : fix reinject ficheOptimisee dans `init()` + boutons vue détail (`goAgentSEO`/`goAgentSEOPublish`) + `applyFusionAndPublish` → `goAgentSEOPublish` → `src/core.js` ⛔ ANNULÉ — bug données
+- [x] v3.4.29 (wizard) : refacto complète wizard optimisation — `wizardState` + `renderOptimisationWizard` + `publishVC` + `saveClientSafe` + `wizardSave/SaveAndPublish` — `openWizard/closeWizard` remplacent `goAgentSEO/goAgentSEOPublish/applyFusionAndPublish` → `src/core.js` + `src/seo.js`
+- [x] v3.4.30 (wizard) : fix `disabled` dynamique étapes A (SKU) + D (GPT) — `oninput` met à jour le bouton sans `render()` → `src/seo.js`
+- [x] v3.4.31 (wizard) : fix `parseChallengeResponse` — parsing ligne par ligne, corrige débordement regex multi-lignes → `src/core.js`
 
 ---
 
 ## TÂCHES SUIVANTES
 
-- [x] Merge staging → main (v3.4.25 à v3.4.28) — ✅ prod déployée
+- [x] Merge staging → main (v3.4.25 à v3.4.28) — ✅ prod déployée v3.4.28
+- [ ] Merge staging → main (v3.4.29–v3.4.31) — attendre GO Fred
 - [ ] Smoke test complet avant merge (voir `smoke-test.md`)
 - [ ] Qualité prompt SEO — comparaison ChatGPT + refonte `buildSEOPrompt` → `src/seo.js`
 - [ ] Enrichissement web `seoFetchFiche` — vérifier lecture fiche Amazon réelle → `src/seo.js`
@@ -226,4 +241,4 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 10 mai 2026 (v3.4.28)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 10 mai 2026 (v3.4.31)**
