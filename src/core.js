@@ -2261,8 +2261,9 @@ function parseChallengeResponse(text) {
     'VERDICT_BACKEND','FUSION_BACKEND',
     'AUTOCRITIQUE_CLAUDE','SCORE_CLAUDE','SCORE_GPT'
   ];
-  for (const line of lines) {
-    const match = line.match(/^([A-Z_]+):\s*(.*)/);
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\r$/, ''); // strip CRLF résiduel
+    const match = line.match(/^([A-Z_0-9]+):\s*(.*)/);
     if (match && KEYS.includes(match[1])) {
       if (currentKey) result[currentKey] = currentVal.join('\n').replace(/\*\*/g,'').trim();
       currentKey = match[1];
@@ -2272,6 +2273,7 @@ function parseChallengeResponse(text) {
     }
   }
   if (currentKey) result[currentKey] = currentVal.join('\n').replace(/\*\*/g,'').trim();
+  console.log('[PARSE]', result); // DEBUG v3.4.33 — à retirer après validation
   const g = (k) => result[k] || '';
   return {
     verdictTitre:   g('VERDICT_TITRE'),
@@ -2338,6 +2340,19 @@ function copyFicheFusion(asin, market) {
 }
 
 // applyFusionAndPublish supprimé — remplacé par wizardSaveAndPublish (v3.4.29)
+
+// Utilitaire maintenance — purge les ficheChallenge corrompues (parsées avec l'ancien parser regex)
+// Appeler UNE SEULE FOIS depuis la console preprod après déploiement v3.4.34
+function clearAllFicheChallenge() {
+  const c = cl(); if (!c) return;
+  if (!c.asins || c.asins.length === 0) { console.error('[CLEAR] asins vide — abandon'); return; }
+  let count = 0;
+  c.asins.forEach(a => {
+    if (a.ficheChallenge) { delete a.ficheChallenge; count++; }
+  });
+  saveClientSafe(c);
+  console.log('[CLEAR] ficheChallenge supprimé sur', count, 'ASINs');
+}
 
 const fmt = n => (n || 0).toLocaleString('fr-FR');
 const fmtEur = n => fmt(Math.round(n || 0)) + ' €';
@@ -7964,15 +7979,24 @@ let challengeLoading = null; // asin en cours de challenge GPT
 let wizardState = {
   asin: null, market: null, sku: null,
   step: 'a', ficheReady: false, challengeReady: false,
-  progress: null, isRegen: false
+  progress: null, isRegen: false,
+  collapsed: {}
 };
 
 function resetWizard() {
   wizardState = {
     asin: null, market: null, sku: null,
     step: 'a', ficheReady: false, challengeReady: false,
-    progress: null, isRegen: false
+    progress: null, isRegen: false,
+    collapsed: {}
   };
+}
+
+function toggleWizardStep(id) {
+  // collapsed[id] !== false = pliée (défaut undefined ou true)
+  // collapsed[id] === false = dépliée
+  wizardState.collapsed[id] = (wizardState.collapsed[id] === false);
+  render();
 }
 
 function openWizard(asin, market, isRegen) {

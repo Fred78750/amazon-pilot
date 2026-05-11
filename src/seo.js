@@ -90,11 +90,14 @@ function buildVCModifyPrompt(asin, market, fiche, c, sku, vc) {
     'Tu vas modifier la fiche ' + asin + ' sur Vendor Central France.',
     '',
     '== ÉTAPE 1 — CATALOGUE ==',
-    'Navigue vers vendorcentral.amazon.fr → Catalogue.',
+    'Navigue vers vendorcentral.amazon.fr/vendor/members/products/catalog',
     'Recherche par ASIN : ' + asin,
-    'Note chaque ligne : Vendor Code + SKU.',
-    'Si > 2 vendor codes trouvés : avertis-moi (risque vieux listings).',
-    'Enchaîne sur ÉTAPE 2 pour chaque vendor code.',
+    'IMPORTANT : attends que le compteur "X - X sur X résultats" se stabilise avant de lire les résultats.',
+    'Lis TOUS les résultats visibles (pas seulement le premier) et construis un tableau :',
+    '  vendorEntries = [ {vendorCode: "COGEX", sku: "647808"}, {vendorCode: "COJFI", sku: "647808"}, ... ]',
+    'Si vendorEntries.length === 0 → stop, signale "ASIN introuvable dans le catalogue".',
+    'Si vendorEntries.length > 2 → alerte "risque vieux listings — attends GO explicite avant de continuer".',
+    'Si vendorEntries.length >= 1 → enchaîne ÉTAPE 2 pour CHAQUE entry du tableau.',
     '',
     '== ÉTAPE 2 — POUR CHAQUE VENDOR CODE ==',
     '',
@@ -119,6 +122,21 @@ function buildVCModifyPrompt(asin, market, fiche, c, sku, vc) {
     '        window._lastXHRResponse = { status: self.status, response: self.responseText };',
     '    });',
     '    return origSend.apply(this, arguments);',
+    '  };',
+    '  // Intercepte XHR ET fetch pour détecter SUCCESS',
+    '  var origFetch = window.fetch;',
+    '  window.fetch = function(url, opts) {',
+    '    return origFetch.apply(this, arguments).then(function(resp) {',
+    '      if (url && url.toString().includes(\'abis/ajax/edit\')) {',
+    '        resp.clone().json().then(function(data) {',
+    '          if (data && data.status === \'SUCCESS\') {',
+    '            window._lastXHRResponse = { status: 200, response: JSON.stringify(data) };',
+    '            console.log(\'[VC SUCCESS via fetch] submissionSku:\', data.submissionSku);',
+    '          }',
+    '        }).catch(function(){});',
+    '      }',
+    '      return resp;',
+    '    });',
     '  };',
     '',
     '  function fillAndBlur(name, val) {',
@@ -1697,8 +1715,13 @@ function renderOptimisationWizard() {
   if (ws.progress === 'seo') {
     stepC_content = '<div style="font-size:13px;color:var(--tx3)"><span class="spin">⏳</span> Génération en cours...</div>';
   } else if (stepC_done) {
-    stepC_content = '<div style="font-size:12px;font-weight:500;margin-bottom:6px">' + esc((seoR.titre || '').substring(0,80)) + '…</div>' +
-      '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-sm" onclick="wizardNextStep(\'d\')">Continuer →</button><button class="btn btn-sm" onclick="wizardRunSEO()">Regénérer</button></div>';
+    stepC_content = '<div style="margin-bottom:10px">' +
+      '<div style="font-size:12px;font-weight:500;color:var(--color-text-primary);margin-bottom:6px">' + esc(seoR.titre || '') + '</div>' +
+      (seoR.bullets || []).map(function(b, i) {
+        return '<div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:4px"><strong>B' + (i+1) + '</strong> ' + esc(b) + '</div>';
+      }).join('') +
+      '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-p" onclick="wizardNextStep(\'d\')">Continuer →</button><button class="btn btn-sm" onclick="wizardRunSEO()">Regénérer</button></div>';
   } else {
     stepC_content = '<button class="btn btn-p" onclick="wizardRunSEO()">✨ Générer</button>';
   }
@@ -1721,8 +1744,50 @@ function renderOptimisationWizard() {
     if (ws.progress === 'challenge') {
       stepE_content = '<div style="font-size:13px;color:var(--tx3)"><span class="spin">⏳</span> Comparaison en cours...</div>';
     } else if (stepE_done) {
-      stepE_content = '<div style="font-size:12px;margin-bottom:8px">Claude <strong>' + esc(String(ch.scoreClaude || '')) + '</strong> · GPT <strong>' + esc(String(ch.scoreGPT || '')) + '</strong></div>' +
-        (ch.autocritique ? '<div class="alr alr-w" style="margin-bottom:8px;font-size:12px"><strong>Autocritique :</strong> ' + esc(ch.autocritique) + '</div>' : '') +
+      var eFields = [
+        { label: 'Titre',    verdict: ch.verdictTitre   || '' },
+        { label: 'Bullet 1', verdict: ch.verdictB1      || '' },
+        { label: 'Bullet 2', verdict: ch.verdictB2      || '' },
+        { label: 'Bullet 3', verdict: ch.verdictB3      || '' },
+        { label: 'Bullet 4', verdict: ch.verdictB4      || '' },
+        { label: 'Bullet 5', verdict: ch.verdictB5      || '' },
+        { label: 'Desc.',    verdict: ch.verdictDesc     || '' },
+        { label: 'Backend',  verdict: ch.verdictBackend  || '' },
+      ];
+      var eRows = '';
+      eFields.forEach(function(f) {
+        var winner = f.verdict.startsWith('GPT')    ? '🟢 GPT'
+                   : f.verdict.startsWith('Claude') ? '🔵 Claude' : '⚪ Égalité';
+        var reason = f.verdict.replace(/^(GPT|Claude|Égalité)\s*—\s*/, '');
+        eRows += '<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;font-size:12px">' +
+          '<span style="min-width:60px;font-weight:500;color:var(--tx3)">' + esc(f.label) + '</span>' +
+          '<span style="min-width:70px">' + winner + '</span>' +
+          '<span style="color:var(--tx3)">' + esc(reason.split('\n')[0]) + '</span>' +
+          '</div>';
+      });
+      // Synthèse stratégique depuis seoResults
+      var _seoRe = seoResults[ws.asin] && seoResults[ws.asin][mkt];
+      var eSynthese = '';
+      if (_seoRe) {
+        eSynthese += '<div style="margin-top:14px;padding-top:12px;border-top:0.5px solid var(--bd)">';
+        if (_seoRe.positionnement) eSynthese += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:500;color:var(--tx3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">Positionnement</div><div style="font-size:12px">' + esc(_seoRe.positionnement) + '</div></div>';
+        if (_seoRe.leviers)        eSynthese += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:500;color:var(--tx3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">Leviers ranking</div><div style="font-size:12px">' + esc(_seoRe.leviers) + '</div></div>';
+        if (_seoRe.erreurs)        eSynthese += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:500;color:var(--tx3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">Erreurs à éviter</div><div style="font-size:12px">' + esc(_seoRe.erreurs) + '</div></div>';
+        if (_seoRe.opportunite)    eSynthese += '<div style="margin-bottom:8px"><div style="font-size:10px;font-weight:500;color:var(--tx3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">Opportunité SEO</div><div style="font-size:12px">' + esc(_seoRe.opportunite) + '</div></div>';
+        if (_seoRe.pointImportant) eSynthese += '<div style="margin-bottom:8px;padding:10px 12px;background:var(--alr-w-bg,#FFF9ED);border-radius:var(--rdl)"><div style="font-size:10px;font-weight:500;color:var(--ok-w,#7A4D00);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px">🔥 Point clé</div><div style="font-size:12px">' + esc(_seoRe.pointImportant) + '</div></div>';
+        eSynthese += '</div>';
+      }
+      // GO / NO GO
+      var eGoNoGo = (_seoRe && _seoRe.alertesFred)
+        ? '<div class="alr alr-w" style="margin-bottom:12px;font-size:12px"><strong>⚠️ Points à vérifier avant publication :</strong><br>' + esc(_seoRe.alertesFred) + '</div>'
+        : '<div class="alr alr-g" style="margin-bottom:12px;font-size:12px">✅ GO — aucun point bloquant identifié</div>';
+
+      stepE_content =
+        '<div style="font-size:12px;font-weight:500;margin-bottom:10px">Claude <strong>' + esc(String(ch.scoreClaude || '')) + '</strong> · GPT <strong>' + esc(String(ch.scoreGPT || '')) + '</strong></div>' +
+        eRows +
+        (ch.autocritique ? '<div class="alr alr-w" style="margin:8px 0;font-size:12px"><strong>Autocritique :</strong> ' + esc(ch.autocritique) + '</div>' : '') +
+        eSynthese +
+        eGoNoGo +
         '<button class="btn btn-p" onclick="wizardNextStep(\'f\')">Voir la fiche fusionnée →</button>';
     } else {
       stepE_content = '<button class="btn btn-p" onclick="wizardRunChallenge()">⚡ Comparer</button>';
@@ -1760,24 +1825,39 @@ function renderWizardStep(id, letter, title, done, active, content, summary) {
   var numBg  = done ? 'var(--ok-bg,#EAF3DE)' : active ? '#EEEDFE' : 'var(--s2)';
   var numCol = done ? 'var(--ok,#3B6D11)'    : active ? '#3C3489' : 'var(--tx3)';
   var numTxt = done ? '✓' : letter;
+  // Accordéon : étapes done pliées par défaut, dépliables par clic
+  var isCollapsed = done && !active && (wizardState.collapsed[id] !== false);
+  var showContent = active || !isCollapsed;
   return '<div class="cd" style="padding:1.25rem;margin-bottom:12px;' + (active ? 'border-color:var(--accent)' : done ? 'opacity:0.75' : 'opacity:0.4') + '">' +
-    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:' + (active ? '12px' : '0') + '">' +
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:' + (showContent && content ? '12px' : '0') + '">' +
     '<div style="width:22px;height:22px;border-radius:50%;background:' + numBg + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:' + numCol + ';flex-shrink:0">' + numTxt + '</div>' +
     '<span style="font-size:14px;font-weight:500">' + esc(title) + '</span>' +
-    (done && !active && summary ? '<span style="font-size:11px;color:var(--tx3)">' + summary + '</span>' : '') +
+    (done && !active && summary ? '<span style="font-size:11px;color:var(--tx3);margin-left:6px">' + summary + '</span>' : '') +
+    (done && !active ? '<span onclick="toggleWizardStep(\'' + id + '\')" style="cursor:pointer;margin-left:auto;color:var(--tx3);font-size:12px;padding:2px 4px">' + (isCollapsed ? '▶' : '▼') + '</span>' : '') +
     '</div>' +
-    (active ? content : '') +
+    (showContent ? '<div style="overflow:visible;padding-top:12px">' + content + '</div>' : '') +
     '</div>';
 }
 
+function cleanFusionValue(val) {
+  if (!val) return '';
+  // Supprimer tout ce qui ressemble à VERDICT_xx: ou FUSION_xx: (données corrompues ancien parser)
+  return val.replace(/^(VERDICT|FUSION)_[A-Z0-9]+:.*$/gm, '').trim();
+}
+
 function renderFicheEditable(asin, mkt, src, ch) {
-  if (!src) return '<div style="font-size:12px;color:var(--tx3)">Aucune fiche disponible.</div>';
-  var titre   = (ch && ch.fusionTitre)   || (src && src.titre)       || '';
-  var bullets = ch
-    ? [ch.fusionB1, ch.fusionB2, ch.fusionB3, ch.fusionB4, ch.fusionB5]
-    : (src && src.bullets) || [];
-  var desc    = (ch && ch.fusionDesc)    || (src && src.description) || '';
-  var backend = (ch && ch.fusionBackend) || (src && src.backendKW)   || '';
+  if (!src && !(seoResults[asin] && seoResults[asin][mkt])) return '<div style="font-size:12px;color:var(--tx3)">Aucune fiche disponible.</div>';
+  var _seoR   = (seoResults[asin] && seoResults[asin][mkt]) || {};
+  var titre   = cleanFusionValue((ch && ch.fusionTitre)   || _seoR.titre       || (src && src.titre)       || '');
+  var bullets = [
+    cleanFusionValue((ch && ch.fusionB1) || (_seoR.bullets && _seoR.bullets[0]) || (src && src.bullets && src.bullets[0]) || ''),
+    cleanFusionValue((ch && ch.fusionB2) || (_seoR.bullets && _seoR.bullets[1]) || (src && src.bullets && src.bullets[1]) || ''),
+    cleanFusionValue((ch && ch.fusionB3) || (_seoR.bullets && _seoR.bullets[2]) || (src && src.bullets && src.bullets[2]) || ''),
+    cleanFusionValue((ch && ch.fusionB4) || (_seoR.bullets && _seoR.bullets[3]) || (src && src.bullets && src.bullets[3]) || ''),
+    cleanFusionValue((ch && ch.fusionB5) || (_seoR.bullets && _seoR.bullets[4]) || (src && src.bullets && src.bullets[4]) || ''),
+  ];
+  var desc    = cleanFusionValue((ch && ch.fusionDesc)    || _seoR.description || (src && src.description) || '');
+  var backend = cleanFusionValue((ch && ch.fusionBackend) || _seoR.backendKW   || (src && src.backendKW)   || '');
   var h = '';
   h += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:500;color:var(--tx3);text-transform:uppercase;margin-bottom:4px">Titre</div>' +
     '<textarea class="fg-in" rows="3" style="font-size:12px;resize:vertical" oninput="updateWizardField(\'' + esc(asin) + '\',\'' + esc(mkt) + '\',\'titre\',this.value)">' + esc(titre) + '</textarea></div>';
