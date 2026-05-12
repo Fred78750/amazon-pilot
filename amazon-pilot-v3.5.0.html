@@ -526,7 +526,7 @@ const SMOKE_REF = {
 
 async function smokeTest(silent) {
   const now = new Date();
-  const results = { vital: [], important: [], manual: [], ts: now.toISOString(), version: APP_VERSION };
+  const results = { vital: [], important: [], ts: now.toISOString(), version: APP_VERSION };
   const pass = (lvl, id, lbl) => results[lvl].push({ id, label: lbl, ok: true });
   const fail = (lvl, id, lbl, msg) => results[lvl].push({ id, label: lbl, ok: false, msg });
   const refExpired = (ref) => ref.expiry && new Date(ref.expiry) < now;
@@ -537,9 +537,7 @@ async function smokeTest(silent) {
   const c = typeof cl === 'function' ? cl() : null;
   if (c && c.name && c.asins && c.asins.length >= SMOKE_REF.asinMin.val)
     pass('vital','V1', 'Client actif : ' + c.name + ' (' + c.asins.length + ' ASINs)');
-  else if (c && c.name && c.catalogueXML && c.catalogueXML.length > 0)
-    pass('vital','V1', 'Client actif : ' + c.name + ' (catalogueXML ' + c.catalogueXML.length + ' lignes — CSV non encore importé)');
-  else fail('vital','V1','Client actif', !c ? 'Aucun client' : 'Seulement ' + (c && c.asins ? c.asins.length : 0) + ' ASINs');
+  else fail('vital','V1','Client actif', !c ? 'Aucun client' : 'Seulement ' + (c?.asins?.length||0) + ' ASINs');
 
   // V2 — Tableau de bord
   try {
@@ -614,35 +612,35 @@ async function smokeTest(silent) {
     else fail('vital','V8','Agent SEO', e || 'Contenu SEO absent');
   } catch(ex) { fail('vital','V8','Agent SEO', ex.message); }
 
-  // V9a — CA 2024 [manuel — recalibrer après reimport Gers]
+  // V9a — CA 2024
   if (!refExpired(SMOKE_REF.ca2024)) {
     const v = Math.round(c?.annualData?.['2024']?.ventes?.totalCA||0);
-    if (v === 0) pass('manual','V9a','CA 2024 : non importé (optionnel)');
+    if (v === 0) pass('vital','V9a','CA 2024 : non importé (optionnel)');
     else if (inTol(v, SMOKE_REF.ca2024.val, SMOKE_REF.ca2024.tol))
-      pass('manual','V9a','CA 2024 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
-    else fail('manual','V9a','CA 2024 dévié','Attendu ~' + SMOKE_REF.ca2024.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
+      pass('vital','V9a','CA 2024 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
+    else fail('vital','V9a','CA 2024 dévié','Attendu ~' + SMOKE_REF.ca2024.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
   }
 
-  // V9b — CA 2025 [manuel — recalibrer après reimport Gers]
+  // V9b — CA 2025
   if (!refExpired(SMOKE_REF.ca2025)) {
     const v = Math.round(c?.annualData?.['2025']?.ventes?.totalCA||0);
-    if (v === 0) pass('manual','V9b','CA 2025 : non importé (optionnel)');
+    if (v === 0) pass('vital','V9b','CA 2025 : non importé (optionnel)');
     else if (inTol(v, SMOKE_REF.ca2025.val, SMOKE_REF.ca2025.tol))
-      pass('manual','V9b','CA 2025 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
-    else fail('manual','V9b','CA 2025 dévié','Attendu ~' + SMOKE_REF.ca2025.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
+      pass('vital','V9b','CA 2025 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
+    else fail('vital','V9b','CA 2025 dévié','Attendu ~' + SMOKE_REF.ca2025.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
   }
 
-  // V9c — ASINs catalogue [manuel — recalibrer après reimport Gers]
+  // V9c — ASINs catalogue
   const asinCnt = c?.asins?.length||0;
-  if (asinCnt >= SMOKE_REF.asinMin.val) pass('manual','V9c','Catalogue : ' + asinCnt + ' ASINs');
-  else fail('manual','V9c','Catalogue ASINs', asinCnt + ' < minimum ' + SMOKE_REF.asinMin.val);
+  if (asinCnt >= SMOKE_REF.asinMin.val) pass('vital','V9c','Catalogue : ' + asinCnt + ' ASINs');
+  else fail('vital','V9c','Catalogue ASINs', asinCnt + ' < minimum ' + SMOKE_REF.asinMin.val);
 
-  // V9d — ASIN de référence : invariants pipeline [manuel — recalibrer après reimport Gers]
+  // V9d — ASIN de référence : invariants pipeline (PAS la santé business)
   // v3.1.70 — On vérifie que l'import n'a pas cassé la cohérence des données,
   //          pas que le CA est dans une fourchette (volatile par nature)
   const refA = c?.asins?.find(a => a.asin === SMOKE_REF.asinRef.asin);
   if (!refA) {
-    fail('manual','V9d','ASIN réf. ABSENT du catalogue après import', SMOKE_REF.asinRef.asin);
+    fail('vital','V9d','ASIN réf. ABSENT du catalogue après import', SMOKE_REF.asinRef.asin);
   } else {
     const rev = Math.round(refA.revenue || 0);
     const units = refA.units || refA.orderedUnits || 0;
@@ -667,9 +665,9 @@ async function smokeTest(silent) {
 
     if (checks.length === 0) {
       const detail = rev === 0 ? 'pas de vente cette semaine (OK)' : rev + '€ / ' + units + 'u (cohérent)';
-      pass('manual','V9d','ASIN réf. ' + SMOKE_REF.asinRef.asin + ' : ' + detail);
+      pass('vital','V9d','ASIN réf. ' + SMOKE_REF.asinRef.asin + ' : ' + detail);
     } else {
-      fail('manual','V9d','ASIN réf. cohérence pipeline', checks.join(' | '));
+      fail('vital','V9d','ASIN réf. cohérence pipeline', checks.join(' | '));
     }
   }
 
@@ -736,11 +734,9 @@ async function smokeTest(silent) {
   // Score et résumé
   const vFails = results.vital.filter(t => !t.ok);
   const iFails = results.important.filter(t => !t.ok);
-  const mFails = results.manual.filter(t => !t.ok);
   results.summary = {
     vitalTotal: results.vital.length, vitalOk: results.vital.filter(t=>t.ok).length, vitalFails: vFails.length,
     importantTotal: results.important.length, importantOk: results.important.filter(t=>t.ok).length, importantFails: iFails.length,
-    manualTotal: results.manual.length, manualOk: results.manual.filter(t=>t.ok).length, manualFails: mFails.length,
     status: vFails.length > 0 ? 'CRITICAL' : iFails.length > 0 ? 'WARNING' : 'OK'
   };
   try { localStorage.setItem('ap-smoketest-last', JSON.stringify(results)); } catch(e) {}
@@ -760,15 +756,10 @@ function renderSmokeResult(r) {
     : 'Smoke test OK — ' + s.vitalOk + '/' + s.vitalTotal + ' vitaux · ' + s.importantOk + '/' + s.importantTotal + ' importants';
   const fails = [...(r.vital||[]),...(r.important||[])].filter(t=>!t.ok);
   const detail = fails.map(t => '<span style="display:block;font-size:10px;margin-top:2px">&#8594; ' + t.id + ' ' + t.label + (t.msg?' : <em>'+t.msg+'</em>':'') + '</span>').join('');
-  const mFails = (r.manual||[]).filter(t=>!t.ok);
-  const manualDetail = mFails.length > 0
-    ? '<span style="display:block;font-size:10px;margin-top:6px;color:#888;border-top:1px solid #ddd;padding-top:4px">[MANUEL — à recalibrer] ' +
-      mFails.map(t => t.id + ' ' + t.label + (t.msg ? ' : ' + t.msg : '')).join(' · ') + '</span>'
-    : '';
   const div = document.createElement('div');
   div.id = 'smoke-banner';
   div.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9999;max-width:440px;padding:10px 14px;border-radius:8px;border-left:4px solid '+bd+';background:'+bg+';box-shadow:0 2px 8px rgba(0,0,0,0.12);font-size:12px;font-family:var(--font,sans-serif);cursor:default';
-  div.innerHTML = '<strong>' + icon + ' ' + lbl + '</strong> <span style="color:#888;font-size:10px">' + APP_VERSION + ' · ' + new Date(r.ts).toLocaleTimeString('fr-FR') + '</span>' + detail + manualDetail
+  div.innerHTML = '<strong>' + icon + ' ' + lbl + '</strong> <span style="color:#888;font-size:10px">' + APP_VERSION + ' · ' + new Date(r.ts).toLocaleTimeString('fr-FR') + '</span>' + detail
     + '<button onclick="this.parentElement.remove()" style="position:absolute;top:4px;right:6px;background:none;border:none;font-size:14px;cursor:pointer;color:#888">&#215;</button>';
   document.body.appendChild(div);
   if (s.status === 'OK') setTimeout(() => div.remove(), 8000);
@@ -3382,28 +3373,6 @@ function renderOnboarding() {
       h += `<label class="mk-cb"><input type="checkbox" ${nc.markets.includes(m) ? 'checked' : ''} onchange="toggleMarket('${m}',this.checked)"/>${m}</label>`;
     });
     h += `</div></div></div>`;
-    // ── Section Marques (dans étape 1 Config Amazon) ──
-    h += `<div style="margin-top:16px;border-top:1px solid var(--bd);padding-top:14px">`;
-    h += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">`;
-    h += `<div style="font-weight:600;font-size:13px">🏷️ Marques du client</div>`;
-    h += `<button class="btn btn-sm" onclick="wizAddBrand()">+ Ajouter</button>`;
-    h += `</div>`;
-    var wizBrands = nc.brands || [];
-    if (!wizBrands.length) {
-      h += `<div style="font-size:12px;color:var(--tx3);padding:6px 0">Aucune marque — nécessaire pour la fusion Fab/Appro des imports CSV.</div>`;
-    } else {
-      for (var bi = 0; bi < wizBrands.length; bi++) {
-        var wb = wizBrands[bi];
-        var wbFab = wb.role === 'fabricant';
-        h += `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--s2);border-radius:var(--rd);margin-bottom:4px">`;
-        h += `<span style="flex:1;font-weight:500;font-size:13px">${esc(wb.name)}</span>`;
-        h += `<button class="tog-b btn-sm ${wbFab ? 'sel-ok' : ''}" onclick="wizSetBrandRole(${bi},'fabricant')">🏭 Fabricant</button>`;
-        h += `<button class="tog-b btn-sm ${!wbFab ? 'sel-no' : ''}" onclick="wizSetBrandRole(${bi},'revendeur')">🏪 Revendeur</button>`;
-        h += `<button class="btn btn-sm btn-r" onclick="wizRemoveBrand(${bi})">✕</button>`;
-        h += `</div>`;
-      }
-    }
-    h += `</div>`;
   } else if (wizStep === 2) {
     // ── Étape 3 : Comptes VC & Catalogue ──
     h += `<h3 style="font-size:15px;font-weight:700;margin-bottom:14px">Comptes Vendor Central & Catalogue</h3>`;
@@ -3935,23 +3904,6 @@ function renderImport() {
   h += '<div class="cd-t space"><span>3 — Bons de commande <span style="font-size:10px;font-weight:400;color:var(--tx3)">(confirmés — mise à jour libre)</span></span>' + (posLoaded ? '<span class="pill pill-g">✓ Chargés</span>' : '<span class="pill pill-gr">Non chargé</span>') + '</div>';
   h += '<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Export XLS/CSV depuis Vendor Central → Gérer les bons de commande → Confirmés.</p>';
 
-  // ── Comptes BO attendus (si c.accounts renseigné) ──
-  var boAccts = (c.accounts || []).filter(function(a) { return a.role === 'BO'; });
-  if (boAccts.length > 0) {
-    h += '<div style="padding:10px 14px;background:var(--b-bg,#e8f0fb);border:1px solid var(--b-bd,#b0c8f0);border-radius:var(--rdl);margin-bottom:12px;font-size:12px">';
-    h += '<div style="font-weight:600;margin-bottom:4px">📦 Comptes Bon de Commande — ' + boAccts.length + ' PO attendus</div>';
-    h += '<div style="color:var(--tx2)">';
-    var boLabels = [];
-    for (var bai = 0; bai < boAccts.length; bai++) {
-      var ba = boAccts[bai];
-      var bamp = MARKETPLACES_FULL.find(function(m) { return m.market === ba.market; });
-      var baflag = bamp ? bamp.flag : '';
-      boLabels.push(baflag + ' ' + ba.vendorCode + ' (' + ba.market.replace('.', '').toUpperCase() + ')');
-    }
-    h += boLabels.join(' · ');
-    h += '</div></div>';
-  }
-
   if (posLoaded) {
     h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">';
     [{label:'POs chargés',val:posCount,icon:'📋'},{label:'ASINs concernés',val:poAsins,icon:'📦'},{label:'Dernier import',val:lastPODate||'—',icon:'📅'}].forEach(function({label,val,icon}){
@@ -3962,26 +3914,6 @@ function renderImport() {
         + '</div>';
     });
     h += '</div>';
-    // ── Bilan VCs trouvés vs attendus ──
-    if (boAccts.length > 0) {
-      var vcInPos = {};
-      for (var pi = 0; pi < (c.pos||[]).length; pi++) {
-        var pvc = (c.pos[pi].vendorCode || '').trim();
-        if (pvc) vcInPos[pvc] = (vcInPos[pvc] || 0) + 1;
-      }
-      h += '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px">';
-      for (var bci = 0; bci < boAccts.length; bci++) {
-        var bca = boAccts[bci];
-        var bcFound = !!vcInPos[bca.vendorCode];
-        var bcLines = vcInPos[bca.vendorCode] || 0;
-        var bcFlag = (MARKETPLACES_FULL.find(function(m){return m.market===bca.market;})||{}).flag||'';
-        h += '<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:5px 10px;background:' + (bcFound?'var(--g-bg)':'var(--a-bg,#fff8e1)') + ';border-radius:var(--rd);border:1px solid ' + (bcFound?'var(--g-bd)':'var(--a-bd,#f0c040)') + '">';
-        h += (bcFound ? '✅' : '⚠️') + ' <strong>' + bcFlag + ' ' + bca.vendorCode + '</strong>';
-        h += bcFound ? ' — ' + bcLines + ' lignes' : ' — non importé (fichier manquant ?)';
-        h += '</div>';
-      }
-      h += '</div>';
-    }
   }
   h += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
   h += '<label class="btn btn-sm" style="cursor:pointer">📁 ' + (posLoaded?'Recharger les POs':'Charger les POs (XLS/CSV)') + '<input type="file" accept=".xls,.xlsx,.csv,.txt" multiple onchange="handlePOFile(this)" style="display:none"/></label>';
@@ -12387,26 +12319,6 @@ function wizNext() {
   wizStep++; render();
 }
 function finishOnboarding() { clients.push(newClient); activeId = newClient.id; save(); screen = 'import'; render(); }
-function wizAddBrand() {
-  var name = prompt('Nom de la marque :');
-  if (!name || !name.trim()) return;
-  if (!newClient.brands) newClient.brands = [];
-  if (newClient.brands.some(function(b) { return norm(b.name) === norm(name.trim()); })) {
-    showToast('Marque déjà présente', '', 'warn'); return;
-  }
-  newClient.brands.push({ name: name.trim(), role: 'fabricant' });
-  render();
-}
-function wizSetBrandRole(idx, role) {
-  if (!newClient.brands || !newClient.brands[idx]) return;
-  newClient.brands[idx].role = role;
-  render();
-}
-function wizRemoveBrand(idx) {
-  if (!newClient.brands) return;
-  newClient.brands.splice(idx, 1);
-  render();
-}
 function wizAddAccount() {
   var market = document.getElementById('newAcctMarket') ? document.getElementById('newAcctMarket').value : '.fr';
   var vc = document.getElementById('newAcctVC') ? document.getElementById('newAcctVC').value.trim().toUpperCase() : '';
