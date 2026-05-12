@@ -3237,6 +3237,23 @@ function renderImport() {
   h += '<div class="cd-t space"><span>3 — Bons de commande <span style="font-size:10px;font-weight:400;color:var(--tx3)">(confirmés — mise à jour libre)</span></span>' + (posLoaded ? '<span class="pill pill-g">✓ Chargés</span>' : '<span class="pill pill-gr">Non chargé</span>') + '</div>';
   h += '<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Export XLS/CSV depuis Vendor Central → Gérer les bons de commande → Confirmés.</p>';
 
+  // ── Comptes BO attendus (si c.accounts renseigné) ──
+  var boAccts = (c.accounts || []).filter(function(a) { return a.role === 'BO'; });
+  if (boAccts.length > 0) {
+    h += '<div style="padding:10px 14px;background:var(--b-bg,#e8f0fb);border:1px solid var(--b-bd,#b0c8f0);border-radius:var(--rdl);margin-bottom:12px;font-size:12px">';
+    h += '<div style="font-weight:600;margin-bottom:4px">📦 Comptes Bon de Commande — ' + boAccts.length + ' PO attendus</div>';
+    h += '<div style="color:var(--tx2)">';
+    var boLabels = [];
+    for (var bai = 0; bai < boAccts.length; bai++) {
+      var ba = boAccts[bai];
+      var bamp = MARKETPLACES_FULL.find(function(m) { return m.market === ba.market; });
+      var baflag = bamp ? bamp.flag : '';
+      boLabels.push(baflag + ' ' + ba.vendorCode + ' (' + ba.market.replace('.', '').toUpperCase() + ')');
+    }
+    h += boLabels.join(' · ');
+    h += '</div></div>';
+  }
+
   if (posLoaded) {
     h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">';
     [{label:'POs chargés',val:posCount,icon:'📋'},{label:'ASINs concernés',val:poAsins,icon:'📦'},{label:'Dernier import',val:lastPODate||'—',icon:'📅'}].forEach(function({label,val,icon}){
@@ -3247,6 +3264,26 @@ function renderImport() {
         + '</div>';
     });
     h += '</div>';
+    // ── Bilan VCs trouvés vs attendus ──
+    if (boAccts.length > 0) {
+      var vcInPos = {};
+      for (var pi = 0; pi < (c.pos||[]).length; pi++) {
+        var pvc = (c.pos[pi].vendorCode || '').trim();
+        if (pvc) vcInPos[pvc] = (vcInPos[pvc] || 0) + 1;
+      }
+      h += '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px">';
+      for (var bci = 0; bci < boAccts.length; bci++) {
+        var bca = boAccts[bci];
+        var bcFound = !!vcInPos[bca.vendorCode];
+        var bcLines = vcInPos[bca.vendorCode] || 0;
+        var bcFlag = (MARKETPLACES_FULL.find(function(m){return m.market===bca.market;})||{}).flag||'';
+        h += '<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:5px 10px;background:' + (bcFound?'var(--g-bg)':'var(--a-bg,#fff8e1)') + ';border-radius:var(--rd);border:1px solid ' + (bcFound?'var(--g-bd)':'var(--a-bd,#f0c040)') + '">';
+        h += (bcFound ? '✅' : '⚠️') + ' <strong>' + bcFlag + ' ' + bca.vendorCode + '</strong>';
+        h += bcFound ? ' — ' + bcLines + ' lignes' : ' — non importé (fichier manquant ?)';
+        h += '</div>';
+      }
+      h += '</div>';
+    }
   }
   h += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
   h += '<label class="btn btn-sm" style="cursor:pointer">📁 ' + (posLoaded?'Recharger les POs':'Charger les POs (XLS/CSV)') + '<input type="file" accept=".xls,.xlsx,.csv,.txt" multiple onchange="handlePOFile(this)" style="display:none"/></label>';
