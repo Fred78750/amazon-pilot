@@ -2684,6 +2684,28 @@ function renderOnboarding() {
       h += `<label class="mk-cb"><input type="checkbox" ${nc.markets.includes(m) ? 'checked' : ''} onchange="toggleMarket('${m}',this.checked)"/>${m}</label>`;
     });
     h += `</div></div></div>`;
+    // ── Section Marques (dans étape 1 Config Amazon) ──
+    h += `<div style="margin-top:16px;border-top:1px solid var(--bd);padding-top:14px">`;
+    h += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">`;
+    h += `<div style="font-weight:600;font-size:13px">🏷️ Marques du client</div>`;
+    h += `<button class="btn btn-sm" onclick="wizAddBrand()">+ Ajouter</button>`;
+    h += `</div>`;
+    var wizBrands = nc.brands || [];
+    if (!wizBrands.length) {
+      h += `<div style="font-size:12px;color:var(--tx3);padding:6px 0">Aucune marque — nécessaire pour la fusion Fab/Appro des imports CSV.</div>`;
+    } else {
+      for (var bi = 0; bi < wizBrands.length; bi++) {
+        var wb = wizBrands[bi];
+        var wbFab = wb.role === 'fabricant';
+        h += `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--s2);border-radius:var(--rd);margin-bottom:4px">`;
+        h += `<span style="flex:1;font-weight:500;font-size:13px">${esc(wb.name)}</span>`;
+        h += `<button class="tog-b btn-sm ${wbFab ? 'sel-ok' : ''}" onclick="wizSetBrandRole(${bi},'fabricant')">🏭 Fabricant</button>`;
+        h += `<button class="tog-b btn-sm ${!wbFab ? 'sel-no' : ''}" onclick="wizSetBrandRole(${bi},'revendeur')">🏪 Revendeur</button>`;
+        h += `<button class="btn btn-sm btn-r" onclick="wizRemoveBrand(${bi})">✕</button>`;
+        h += `</div>`;
+      }
+    }
+    h += `</div>`;
   } else if (wizStep === 2) {
     // ── Étape 3 : Comptes VC & Catalogue ──
     h += `<h3 style="font-size:15px;font-weight:700;margin-bottom:14px">Comptes Vendor Central & Catalogue</h3>`;
@@ -8907,6 +8929,26 @@ function wizNext() {
   wizStep++; render();
 }
 function finishOnboarding() { clients.push(newClient); activeId = newClient.id; save(); screen = 'import'; render(); }
+function wizAddBrand() {
+  var name = prompt('Nom de la marque :');
+  if (!name || !name.trim()) return;
+  if (!newClient.brands) newClient.brands = [];
+  if (newClient.brands.some(function(b) { return norm(b.name) === norm(name.trim()); })) {
+    showToast('Marque déjà présente', '', 'warn'); return;
+  }
+  newClient.brands.push({ name: name.trim(), role: 'fabricant' });
+  render();
+}
+function wizSetBrandRole(idx, role) {
+  if (!newClient.brands || !newClient.brands[idx]) return;
+  newClient.brands[idx].role = role;
+  render();
+}
+function wizRemoveBrand(idx) {
+  if (!newClient.brands) return;
+  newClient.brands.splice(idx, 1);
+  render();
+}
 function wizAddAccount() {
   var market = document.getElementById('newAcctMarket') ? document.getElementById('newAcctMarket').value : '.fr';
   var vc = document.getElementById('newAcctVC') ? document.getElementById('newAcctVC').value.trim().toUpperCase() : '';
