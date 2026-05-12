@@ -2511,6 +2511,89 @@ function shortName(a) {
   return t.slice(0, 45) + (t.length > 45 ? '…' : '');
 }
 
+function consolidateAsins(asins, client) {
+  // Consolide les entrées multi-marchés en une seule ligne par ASIN physique
+  // Utilisé uniquement pour l'affichage quand filtre marché = "Tous"
+  // NE MODIFIE PAS client.asins — retourne une vue temporaire
+  var byAsin = {};
+  for (var i = 0; i < asins.length; i++) {
+    var a = asins[i];
+    if (!a.asin) continue;
+    if (!byAsin[a.asin]) {
+      byAsin[a.asin] = {
+        asin: a.asin,
+        title: a.title || '',
+        titleOriginal: a.titleOriginal || '',
+        brand: a.brand || '',
+        ean: a.ean || '',
+        model: a.model || '',
+        revenue: 0,
+        orderedRevenue: 0,
+        shippedRevenue: 0,
+        units: 0,
+        orderedUnits: 0,
+        shippedUnits: 0,
+        glanceViews: 0,
+        sellableUnits: 0,
+        returns: 0,
+        markets: [],
+        marketDetails: {},
+        market: '.all',
+        history: [],
+        historyMonthly: [],
+        revenueDelta: null,
+        retailPct: null,
+        segment: null,
+        _consolidated: true
+      };
+    }
+    var co = byAsin[a.asin];
+    var mkt = a.market || '.fr';
+
+    // Accumuler les numériques
+    co.revenue += (a.revenue || 0);
+    co.orderedRevenue += (a.orderedRevenue || 0);
+    co.shippedRevenue += (a.shippedRevenue || 0);
+    co.units += (a.units || 0);
+    co.orderedUnits += (a.orderedUnits || 0);
+    co.shippedUnits += (a.shippedUnits || 0);
+    co.glanceViews += (a.glanceViews || 0);
+    co.sellableUnits += (a.sellableUnits || 0);
+    co.returns += (a.returns || 0);
+
+    // Tracker les marchés
+    if (co.markets.indexOf(mkt) === -1) co.markets.push(mkt);
+
+    // Détail par marché
+    co.marketDetails[mkt] = {
+      revenue: a.revenue || 0,
+      orderedRevenue: a.orderedRevenue || 0,
+      shippedRevenue: a.shippedRevenue || 0,
+      units: a.units || 0,
+      glanceViews: a.glanceViews || 0,
+      sellableUnits: a.sellableUnits || 0,
+      returns: a.returns || 0,
+      revenueDelta: a.revenueDelta || null,
+      retailPct: a.retailPct || null
+    };
+
+    // Préférer le titre FR
+    if (mkt === '.fr' && a.title) co.title = a.title;
+
+    // Agréger les deltas (moyenne pondérée)
+    if (a.revenueDelta != null && a.revenue > 0) {
+      if (co.revenueDelta == null) co.revenueDelta = 0;
+      co.revenueDelta += a.revenueDelta * (a.revenue / (co.revenue || 1));
+    }
+  }
+
+  var result = [];
+  for (var asin in byAsin) {
+    if (byAsin.hasOwnProperty(asin)) result.push(byAsin[asin]);
+  }
+  return result;
+}
+
 function getMainKeyword(a) {
   if (!a.title) return a.brand || '';
   let t = a.title.split(' - ')[0].split(',')[0];
