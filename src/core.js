@@ -3965,12 +3965,15 @@ function renderDashboard() {
   h += `</div>`;
 
   const asins = getFilteredAsins(c);
-  const totalCA = asins.reduce((s, a) => s + (getRevenue(a,c)||0), 0);
-  const totalUnits = asins.reduce((s, a) => s + (getUnits(a,c)||0), 0);
-  const totalGV = asins.reduce((s, a) => s + (a.glanceViews || 0), 0);
-  const totalStock = asins.reduce((s, a) => s + (a.sellableUnits || 0), 0);
-  const lowStockN = asins.filter(a => a.sellableUnits > 0 && a.sellableUnits < 50 && (getRevenue(a,c)||0) > 50).length;
-  const declineN = asins.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) < -10).length;
+  // Consolidation multi-marchés quand filtre = "Tous"
+  var dashAsins = (filters.market === 'all' && c.markets && c.markets.length > 1) ? consolidateAsins(asins, c) : asins;
+
+  const totalCA = dashAsins.reduce((s, a) => s + (getRevenue(a,c)||0), 0);
+  const totalUnits = dashAsins.reduce((s, a) => s + (getUnits(a,c)||0), 0);
+  const totalGV = dashAsins.reduce((s, a) => s + (a.glanceViews || 0), 0);
+  const totalStock = dashAsins.reduce((s, a) => s + (a.sellableUnits || 0), 0);
+  const lowStockN = dashAsins.filter(a => a.sellableUnits > 0 && a.sellableUnits < 50 && (getRevenue(a,c)||0) > 50).length;
+  const declineN = dashAsins.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) < -10).length;
 
   // Période des données courantes
   const dashImport = c.imports?.filter(i=>i.type==='ventes'&&(i.periodType==='weekly'||!i.periodType)).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
@@ -3981,7 +3984,7 @@ function renderDashboard() {
   h += `<div class="kpi"><div class="kpi-lb">CA ${kpiMode === 'shipped' ? 'Expédié' : 'Commandé'}</div><div class="kpi-v">${fmtEur(totalCA)}</div>${dashPeriodTag}</div>`;
   h += `<div class="kpi"><div class="kpi-lb">Unités</div><div class="kpi-v">${fmt(totalUnits)}</div>${dashPeriodTag}</div>`;
   h += `<div class="kpi"><div class="kpi-lb">Glance Views</div><div class="kpi-v">${fmt(totalGV)}</div>${dashPeriodTag}</div>`;
-  h += `<div class="kpi"><div class="kpi-lb">ASINs</div><div class="kpi-v">${asins.length}</div></div>`;
+  h += `<div class="kpi"><div class="kpi-lb">ASINs</div><div class="kpi-v">${dashAsins.length}</div></div>`;
   h += `<div class="kpi"><div class="kpi-lb">Stock</div><div class="kpi-v">${fmt(totalStock)}u</div>${dashPeriodTag}</div>`;
   h += `<div class="kpi${declineN>0?' al':''}"><div class="kpi-lb">CA en baisse</div><div class="kpi-v">${declineN}</div>${dashPeriodTag}</div>`;
   h += `<div class="kpi${lowStockN>0?' warn':''}"><div class="kpi-lb">Stock faible</div><div class="kpi-v">${lowStockN}</div></div>`;
@@ -4021,10 +4024,10 @@ function renderDashboard() {
 
   const searchActive = asinSearch && asinSearch.trim();
   const exportLabel = searchActive
-    ? `⬇ Export (${asins.length} sélectionnés)`
+    ? `⬇ Export (${dashAsins.length} sélectionnés)`
     : `⬇ Export CSV`;
   h += `<div class="cd"><div class="cd-t space">
-    <span>📦 ASINs ${searchActive ? '<span style="color:var(--or);font-size:11px">— ' + asins.length + ' résultat' + (asins.length>1?'s':'') + ' pour \"' + esc(asinSearch) + '\"</span>' : '(' + asins.length + ')'}</span>
+    <span>📦 ASINs ${searchActive ? '<span style="color:var(--or);font-size:11px">— ' + dashAsins.length + ' résultat' + (dashAsins.length>1?'s':'') + ' pour \"' + esc(asinSearch) + '\"</span>' : '(' + dashAsins.length + ')'}</span>
     <button class="btn btn-sm" onclick="exportAsinsCsv()">${exportLabel} CSV</button><button class="btn btn-sm" onclick="exportAsinsXlsx()" style="margin-left:4px">⬇ XLSX</button>
   </div>`;
   // Période courante détectée
@@ -4038,17 +4041,26 @@ function renderDashboard() {
     <th class="r">CA</th><th class="r">Δ</th><th>Tendance</th><th class="r">GV</th><th class="r">Stock</th><th></th>
   </tr></thead><tbody>`;
 
-  asins.sort((a,b) => (getRevenue(b,c)||0)-(getRevenue(a,c)||0)).slice(0, 50).forEach(a => {
+  dashAsins.sort((a,b) => (getRevenue(b,c)||0)-(getRevenue(a,c)||0)).slice(0, 50).forEach(a => {
     const health = calcHealth(a);
     const hCls = healthClass(health);
     const seg = calcSegment(a, totalCA, c);
     const isLow = a.sellableUnits > 0 && a.sellableUnits < 50;
     const isDec = (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) < -10;
     const rc = isDec ? 'al-row' : isLow ? 'warn-row' : '';
+    var marketsFlags = '';
+    if (a._consolidated && a.markets && a.markets.length > 1) {
+      marketsFlags = ' <span style="font-size:10px;opacity:0.7">';
+      for (var mi = 0; mi < a.markets.length; mi++) {
+        var mpf = MARKETPLACES_FULL.find(function(x) { return x.market === a.markets[mi]; });
+        if (mpf) marketsFlags += mpf.flag;
+      }
+      marketsFlags += '</span>';
+    }
     h += `<tr class="${rc}">
       <td><div class="hs hs-sm ${hCls}">${health}</div></td>
       <td style="max-width:220px">
-        <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(a.title)}">${esc(shortName(a))}</div>
+        <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(a.title)}">${esc(shortName(a))}${marketsFlags}</div>
         <div class="mono" style="font-size:10px;color:var(--tx3)">${a.asin}</div>
       </td>
       <td>${segBadge(seg)}</td>
@@ -4068,7 +4080,7 @@ function renderDashboard() {
     </tr>`;
   });
   h += `</tbody></table></div>`;
-  if (asins.length > 50) h += `<p style="font-size:10px;color:var(--tx3);margin-top:6px">50 premiers sur ${asins.length}</p>`;
+  if (dashAsins.length > 50) h += `<p style="font-size:10px;color:var(--tx3);margin-top:6px">50 premiers sur ${dashAsins.length}</p>`;
   h += `</div>`;
   return h;
 }
