@@ -1032,6 +1032,31 @@ function mergeImportData(client, parsedFiles) {
   }
 
   client.asins = Array.from(asinMap.values());
+
+  // ── Enrichissement titres depuis catalogueXML (désignations françaises) ──
+  if (client.catalogueXML && client.catalogueXML.length > 0) {
+    var xmlByAsin = {};
+    for (var xi = 0; xi < client.catalogueXML.length; xi++) {
+      var xItem = client.catalogueXML[xi];
+      if (xItem.asin && !xmlByAsin[xItem.asin]) {
+        xmlByAsin[xItem.asin] = xItem;
+      }
+    }
+    for (var ai = 0; ai < client.asins.length; ai++) {
+      var asinEntry = client.asins[ai];
+      var xmlMatch = xmlByAsin[asinEntry.asin];
+      if (xmlMatch && xmlMatch.description) {
+        if (!asinEntry.titleOriginal && asinEntry.title) {
+          asinEntry.titleOriginal = asinEntry.title;
+        }
+        asinEntry.title = xmlMatch.description;
+        if (!asinEntry.ean && xmlMatch.ean) asinEntry.ean = xmlMatch.ean;
+        if (!asinEntry.model && xmlMatch.model) asinEntry.model = xmlMatch.model;
+      }
+    }
+    log('\u{1F1EB}\u{1F1F7} Titres enrichis depuis catalogueXML: ' + Object.keys(xmlByAsin).length + ' ASINs referencés', 'ok');
+  }
+
   client.csvImported = client.asins.length > 0;
   if (!client.history) client.history = { weekly: [], monthly: [], yearly: [] };
   if (totalCA > 0 || totalGV > 0) {
