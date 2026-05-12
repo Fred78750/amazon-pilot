@@ -4729,6 +4729,29 @@ function renderAsins() {
 
     h += `<button class="btn btn-sm" onclick="selectedAsin=null;render()" style="margin-bottom:14px">← Retour</button>`;
 
+    // ── Encadré récapitulatif multi-marchés ──────────────────────────
+    var allEntries = c.asins.filter(function(x) { return x.asin === selectedAsin; });
+    if (allEntries.length > 1) {
+      var totalRevMkt = 0, totalUnitsMkt = 0;
+      var mktHtml = '';
+      for (var ei = 0; ei < allEntries.length; ei++) {
+        var e = allEntries[ei];
+        var mkt = e.market || '.fr';
+        var mp = MARKETPLACES_FULL.find(function(x) { return x.market === mkt; });
+        var flag = mp ? mp.flag : '';
+        var rev = getRevenue(e, c) || 0;
+        var units = getUnits(e, c) || 0;
+        totalRevMkt += rev;
+        totalUnitsMkt += units;
+        mktHtml += '<span style="margin-right:12px">' + flag + ' ' + mkt.replace('.','').toUpperCase() + ': <b>' + rev.toLocaleString('fr-FR') + '€</b> · ' + units + 'u</span>';
+      }
+      h += '<div style="padding:12px 14px;background:var(--accent-bg);border:1px solid var(--accent-bd);border-radius:var(--rdl);margin-bottom:12px;font-size:12px">';
+      h += '<div style="font-weight:600;margin-bottom:6px">\u{1F30D} Cet ASIN est vendu dans ' + allEntries.length + ' marchés</div>';
+      h += '<div style="margin-bottom:4px;flex-wrap:wrap;display:flex;gap:4px">' + mktHtml + '</div>';
+      h += '<div style="font-weight:600;color:var(--accent)">Total consolidé : ' + totalRevMkt.toLocaleString('fr-FR') + '€ · ' + totalUnitsMkt + ' unités</div>';
+      h += '</div>';
+    }
+
     h += `<div class="cd" style="display:flex;gap:18px;align-items:flex-start">`;
     h += `<div class="hs hs-lg ${healthClass(health)}">${health}</div>`;
     h += `<div style="flex:1">
