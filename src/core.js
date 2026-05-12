@@ -321,6 +321,32 @@ function openDB() {
   });
 }
 
+function migrateXMLTitles(clients) {
+  // Migration silencieuse : enrichit les titres existants depuis catalogueXML (désignations FR)
+  // S'applique une fois par ASIN (skip si titleOriginal déjà présent)
+  clients.forEach(function(c) {
+    if (!c.catalogueXML || c.catalogueXML.length === 0) return;
+    if (!c.asins || c.asins.length === 0) return;
+    var xmlByAsin = {};
+    for (var xi = 0; xi < c.catalogueXML.length; xi++) {
+      var xItem = c.catalogueXML[xi];
+      if (xItem.asin && !xmlByAsin[xItem.asin]) xmlByAsin[xItem.asin] = xItem;
+    }
+    for (var ai = 0; ai < c.asins.length; ai++) {
+      var a = c.asins[ai];
+      if (a.titleOriginal) continue; // déjà enrichi
+      var xmlMatch = xmlByAsin[a.asin];
+      if (xmlMatch && xmlMatch.description) {
+        if (a.title) a.titleOriginal = a.title;
+        a.title = xmlMatch.description;
+        if (!a.ean && xmlMatch.ean) a.ean = xmlMatch.ean;
+        if (!a.model && xmlMatch.model) a.model = xmlMatch.model;
+      }
+    }
+  });
+  return clients;
+}
+
 function migrateSnapshotRevenue(clients) {
   clients.forEach(function(c) {
     (c.asins || []).forEach(function(a) {
@@ -405,6 +431,7 @@ async function load() {
       activeId = clients[0].id;
       screen = 'dashboard';
       log(`✓ IndexedDB: ${clients.length} client(s), ${clients.reduce((s,c)=>s+(c.asins?.length||0),0)} ASINs`, 'ok');
+      migrateXMLTitles(clients);
       migrateSnapshotRevenue(clients);
       await save();
     } else {
