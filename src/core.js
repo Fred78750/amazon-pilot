@@ -147,126 +147,14 @@ const BOUTIQUE_CODES = {
   'ATVPDKIKX0DER':  '.com',   // USA
   'A1VC38T7YXB528': '.jp',    // Japon
 };
-const WIZ_STEPS = ['Identité', 'Config Amazon', 'Comptes VC & Catalogue', 'Contraintes', 'Historique', 'Récapitulatif'];
-
-const MARKETPLACES_FULL = [
-  // Europe
-  { market: '.fr',     flag: '🇫🇷', name: 'France',               region: 'Europe' },
-  { market: '.de',     flag: '🇩🇪', name: 'Allemagne',             region: 'Europe' },
-  { market: '.it',     flag: '🇮🇹', name: 'Italie',                region: 'Europe' },
-  { market: '.es',     flag: '🇪🇸', name: 'Espagne',               region: 'Europe' },
-  { market: '.nl',     flag: '🇳🇱', name: 'Pays-Bas',              region: 'Europe' },
-  { market: '.be',     flag: '🇧🇪', name: 'Belgique',              region: 'Europe' },
-  { market: '.co.uk',  flag: '🇬🇧', name: 'Royaume-Uni',           region: 'Europe' },
-  { market: '.se',     flag: '🇸🇪', name: 'Suède',                 region: 'Europe' },
-  { market: '.pl',     flag: '🇵🇱', name: 'Pologne',               region: 'Europe' },
-  { market: '.com.tr', flag: '🇹🇷', name: 'Turquie',               region: 'Europe' },
-  // Amérique du Nord
-  { market: '.com',    flag: '🇺🇸', name: 'États-Unis',            region: 'Amérique du Nord' },
-  { market: '.ca',     flag: '🇨🇦', name: 'Canada',                region: 'Amérique du Nord' },
-  { market: '.com.mx', flag: '🇲🇽', name: 'Mexique',               region: 'Amérique du Nord' },
-  // Amérique du Sud
-  { market: '.com.br', flag: '🇧🇷', name: 'Brésil',                region: 'Amérique du Sud' },
-  // Asie-Pacifique
-  { market: '.co.jp',  flag: '🇯🇵', name: 'Japon',                 region: 'Asie-Pacifique' },
-  { market: '.in',     flag: '🇮🇳', name: 'Inde',                  region: 'Asie-Pacifique' },
-  { market: '.com.au', flag: '🇦🇺', name: 'Australie',             region: 'Asie-Pacifique' },
-  { market: '.sg',     flag: '🇸🇬', name: 'Singapour',             region: 'Asie-Pacifique' },
-  // Moyen-Orient & Afrique
-  { market: '.ae',     flag: '🇦🇪', name: 'Émirats Arabes Unis',   region: 'Moyen-Orient & Afrique' },
-  { market: '.sa',     flag: '🇸🇦', name: 'Arabie Saoudite',       region: 'Moyen-Orient & Afrique' },
-  { market: '.eg',     flag: '🇪🇬', name: 'Égypte',                region: 'Moyen-Orient & Afrique' },
-  { market: '.co.za',  flag: '🇿🇦', name: 'Afrique du Sud',        region: 'Moyen-Orient & Afrique' },
-];
-
-function marketOptionsHTML(selected) {
-  var html = '';
-  var lastRegion = '';
-  for (var i = 0; i < MARKETPLACES_FULL.length; i++) {
-    var m = MARKETPLACES_FULL[i];
-    if (m.region !== lastRegion) {
-      if (lastRegion) html += '</optgroup>';
-      html += '<optgroup label="' + m.region + '">';
-      lastRegion = m.region;
-    }
-    html += '<option value="' + m.market + '"' + (m.market === selected ? ' selected' : '') + '>' + m.flag + ' ' + m.name + '</option>';
-  }
-  if (lastRegion) html += '</optgroup>';
-  return html;
-}
-
-function parseMatriceTarifXML(xmlText) {
-  var parser = new DOMParser();
-  var doc = parser.parseFromString(xmlText, 'text/xml');
-  var ns = 'urn:schemas-microsoft-com:office:spreadsheet';
-
-  var worksheets = doc.getElementsByTagNameNS(ns, 'Worksheet');
-  var costSheet = null;
-  for (var i = 0; i < worksheets.length; i++) {
-    if (worksheets[i].getAttribute('ss:Name') === 'Cost') {
-      costSheet = worksheets[i]; break;
-    }
-  }
-  if (!costSheet) return { error: 'Onglet "Cost" non trouvé dans le XML' };
-
-  var table = costSheet.getElementsByTagNameNS(ns, 'Table')[0];
-  var rows = table.getElementsByTagNameNS(ns, 'Row');
-
-  var results = [];
-  var vcCounts = {};
-  var statusCounts = {};
-
-  // Les 6 premières lignes sont header/meta — données à partir de l'index 6
-  for (var r = 6; r < rows.length; r++) {
-    var cells = rows[r].getElementsByTagNameNS(ns, 'Cell');
-    var vals = {};
-    var colIdx = 0;
-    for (var c = 0; c < cells.length; c++) {
-      var idxAttr = cells[c].getAttribute('ss:Index');
-      if (idxAttr) colIdx = parseInt(idxAttr) - 1;
-      var dataEl = cells[c].getElementsByTagNameNS(ns, 'Data')[0];
-      vals[colIdx] = dataEl ? dataEl.textContent : '';
-      colIdx++;
-    }
-
-    var asin = (vals[2] || '').trim();
-    if (!asin.startsWith('B')) continue;
-
-    var vc = (vals[1] || '').trim();
-    var status = (vals[6] || '').trim();
-
-    if (vc && vc !== 'None') vcCounts[vc] = (vcCounts[vc] || 0) + 1;
-    if (status && status !== 'None') statusCounts[status] = (statusCounts[status] || 0) + 1;
-
-    results.push({
-      asin: asin,
-      ean: (vals[3] || '').trim(),
-      model: (vals[4] || '').trim(),
-      description: (vals[5] || '').trim(),
-      vendorCode: vc,
-      status: status,
-      cost: parseFloat((vals[8] || '0').replace(',', '.')) || 0
-    });
-  }
-
-  return {
-    items: results,
-    summary: {
-      totalASINs: new Set(results.map(function(r) { return r.asin; })).size,
-      totalLines: results.length,
-      vendorCodes: vcCounts,
-      statuses: statusCounts
-    }
-  };
-}
+const WIZ_STEPS = ['Identité', 'Config Amazon', 'Contraintes', 'Historique', 'Récapitulatif'];
 
 function freshClient() {
   return {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2,5),
     name: '', brand: '', sector: '', contactOp: '', reason: '',
     brands: [],  // [{ name: 'COGEX', role: 'fabricant' }] role: 'fabricant'|'revendeur'
-    model: '1P (Vendor Central)', vendorCode: '', accounts: [],  // [{ id, market, vendorCode, role: 'BO'|'catalogue', label }]
-    markets: ['.fr'], mainMarket: '.fr',
+    model: '1P (Vendor Central)', vendorCode: '', markets: ['.fr'], mainMarket: '.fr',
     fulfillment: 'Amazon (Vendor Direct)',
     stockDeporte: false, btr: 'Autorisé', btrNote: '', threeP: true,
     budget: '', pricingPolicy: 'Prix libre',
@@ -285,7 +173,6 @@ function freshClient() {
     moq: 0,              // quantité minimale de commande (0 = pas de contrainte)
     // ── Catalogue ASIN ↔ SKU fournisseur ──
     catalogue: [],       // [{ asin, sku, ean, description, prixAchat, vendorCode }]
-    catalogueXML: [],    // [{ asin, ean, model, description, vendorCode, status, cost }] — source: matrice tarifaire XML
     pos: [],             // [{ poId, asin, sku, title, vendorCode, qty, qtyAccepted,
     ficheOptimisee: {},  // asin => marche => {titre,bullets,description,nomType,backendKW,generatedAt} + actions[]
     // ── Données enrichies ──
@@ -393,8 +280,6 @@ async function load() {
         stockTarget:    c.stockTarget    ?? 8,
         moq:            c.moq            ?? 0,
         catalogue:      c.catalogue      || [],
-        catalogueXML:   c.catalogueXML   || [],
-        accounts:       c.accounts       || [],
         pos:            c.pos            || [],
         ficheOptimisee: c.ficheOptimisee || {},
         ppmData:        c.ppmData        || {},
@@ -2685,85 +2570,6 @@ function renderOnboarding() {
     });
     h += `</div></div></div>`;
   } else if (wizStep === 2) {
-    // ── Étape 3 : Comptes VC & Catalogue ──
-    h += `<h3 style="font-size:15px;font-weight:700;margin-bottom:14px">Comptes Vendor Central & Catalogue</h3>`;
-
-    // ── Section A : CRUD Comptes VC ──
-    h += `<div class="cd" style="margin-bottom:16px">`;
-    h += `<div class="cd-t space"><span>Comptes Vendor Central</span>`;
-    var totalAccts = nc.accounts ? nc.accounts.length : 0;
-    var totalMkts  = nc.accounts ? new Set(nc.accounts.map(function(a){return a.market;})).size : 0;
-    var totalBO    = nc.accounts ? nc.accounts.filter(function(a){return a.role==='BO';}).length : 0;
-    var totalCat   = nc.accounts ? nc.accounts.filter(function(a){return a.role==='catalogue';}).length : 0;
-    if (totalAccts > 0) h += `<span style="font-size:11px;color:var(--tx2)">${totalAccts} comptes · ${totalMkts} marchés · ${totalBO} BO · ${totalCat} catalogue</span>`;
-    h += `</div>`;
-    h += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:12px">`;
-    h += `<div><label class="fg-lb">Marché</label><select id="newAcctMarket" class="fg-in">${marketOptionsHTML('.fr')}</select></div>`;
-    h += `<div><label class="fg-lb">Vendor Code</label><input id="newAcctVC" class="fg-in" placeholder="Ex: GERA3" style="text-transform:uppercase"/></div>`;
-    h += `<div><label class="fg-lb">Rôle</label><select id="newAcctRole" class="fg-in"><option value="BO">Bon de Commande</option><option value="catalogue">Fournisseur catalogue</option></select></div>`;
-    h += `<div><label class="fg-lb">Label (optionnel)</label><input id="newAcctLabel" class="fg-in" placeholder="Ex: Principal FR"/></div>`;
-    h += `<div><button class="btn btn-p" style="padding:6px 12px" onclick="wizAddAccount()">+ Ajouter</button></div>`;
-    h += `</div>`;
-    if (nc.accounts && nc.accounts.length > 0) {
-      h += `<table style="width:100%;border-collapse:collapse;font-size:12px">`;
-      h += `<thead><tr style="background:var(--s2)">`;
-      h += `<th style="padding:6px 8px;text-align:left">Marché</th><th style="padding:6px 8px;text-align:left">Vendor Code</th>`;
-      h += `<th style="padding:6px 8px;text-align:left">Rôle</th><th style="padding:6px 8px;text-align:left">Label</th><th></th>`;
-      h += `</tr></thead><tbody>`;
-      for (var ai = 0; ai < nc.accounts.length; ai++) {
-        var acc = nc.accounts[ai];
-        var mobj = MARKETPLACES_FULL.find(function(m){return m.market===acc.market;});
-        var mLabel = mobj ? mobj.flag + ' ' + mobj.name : acc.market;
-        h += `<tr style="border-bottom:1px solid var(--bd2)">`;
-        h += `<td style="padding:6px 8px">${mLabel}</td>`;
-        h += `<td style="padding:6px 8px;font-weight:600">${esc(acc.vendorCode)}</td>`;
-        h += `<td style="padding:6px 8px"><span style="padding:2px 8px;border-radius:20px;font-size:11px;background:${acc.role==='BO'?'var(--b-bg)':'var(--s2)'};color:${acc.role==='BO'?'var(--b)':'var(--tx2)'}">${acc.role==='BO'?'Bon de Commande':'Catalogue'}</span></td>`;
-        h += `<td style="padding:6px 8px;color:var(--tx2)">${esc(acc.label||'')}</td>`;
-        h += `<td style="padding:6px 8px"><button class="btn" style="padding:3px 8px;font-size:11px" onclick="wizRemoveAccount('${esc(acc.id)}')">✕</button></td>`;
-        h += `</tr>`;
-      }
-      h += `</tbody></table>`;
-    }
-    h += `</div>`;
-
-    // ── Section B : Import Matrice Tarifaire XML ──
-    h += `<div class="cd">`;
-    h += `<div class="cd-t space"><span>Matrice Tarifaire XML <span style="font-size:11px;color:var(--r,#b42)">obligatoire</span></span>`;
-    if (nc.catalogueXML && nc.catalogueXML.length > 0 && nc.xmlSummary) {
-      h += `<span style="font-size:11px;color:var(--g,#3b6d11)">✓ ${nc.xmlSummary.totalASINs} ASINs importés</span>`;
-    }
-    h += `</div>`;
-    if (!nc.catalogueXML || nc.catalogueXML.length === 0) {
-      h += `<div class="import-zone" style="padding:20px;margin-bottom:10px" onclick="document.getElementById('wiz-xml-input').click()">`;
-      h += `<div style="font-size:24px;margin-bottom:6px">📄</div>`;
-      h += `<p style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:2px">Déposez la Matrice Tarifaire XML</p>`;
-      h += `<p style="font-size:11px;color:var(--tx3)">Format XML Spreadsheet 2003 — onglet "Cost" requis</p>`;
-      h += `<input type="file" id="wiz-xml-input" accept=".xml" style="display:none" onchange="wizHandleXML(this)"/>`;
-      h += `</div>`;
-    } else {
-      var xs = nc.xmlSummary;
-      h += `<div style="padding:10px 14px;background:var(--g-bg,#eaf6e0);border:1px solid var(--g-bd,#b7dfa0);border-radius:var(--rd);margin-bottom:10px">`;
-      h += `<strong>${xs.totalASINs} ASINs</strong> · ${xs.totalLines} lignes`;
-      if (xs.vendorCodes) {
-        var vcKeys = Object.keys(xs.vendorCodes);
-        if (vcKeys.length) h += ` · VC : ` + vcKeys.map(function(k){return k + ' (' + xs.vendorCodes[k] + ')';}).join(', ');
-      }
-      h += `</div>`;
-      h += `<button class="btn" style="font-size:12px" onclick="document.getElementById('wiz-xml-reinput').click()">🔄 Réimporter</button>`;
-      h += `<input type="file" id="wiz-xml-reinput" accept=".xml" style="display:none" onchange="wizHandleXML(this)"/>`;
-    }
-    h += `</div>`;
-
-    // Message de validation
-    var canNext2 = nc.accounts && nc.accounts.length > 0 && nc.catalogueXML && nc.catalogueXML.length > 0;
-    if (!canNext2) {
-      h += `<div id="wiz-step2-err" class="alr alr-a" style="margin-top:10px">`;
-      if (!nc.accounts || nc.accounts.length === 0) h += `⚠️ Ajoutez au moins un compte Vendor Central.<br>`;
-      if (!nc.catalogueXML || nc.catalogueXML.length === 0) h += `⚠️ Importez la matrice tarifaire XML.`;
-      h += `</div>`;
-    }
-
-  } else if (wizStep === 3) {
     h += `<h3 style="font-size:15px;font-weight:700;margin-bottom:14px">Contraintes internes</h3>`;
     h += `<div class="alr alr-a" style="margin-bottom:16px">Ces contraintes filtrent les recommandations IA — un levier interdit ne sera jamais proposé.</div>`;
     h += `<div class="fg2">`;
@@ -2778,7 +2584,7 @@ function renderOnboarding() {
     h += fgSel('Born to Run', nc.btr, ['Autorisé', 'Conditionnel', 'Interdit'], "newClient.btr=this.value");
     h += fgEl('Budget Ads mensuel', nc.budget, "newClient.budget=this.value", '5 000 € ou 8% du CA');
     h += `</div>`;
-  } else if (wizStep === 4) {
+  } else if (wizStep === 3) {
     // ── Étape Historique avec zone de dépôt intégrée ──
     const currentY = new Date().getFullYear();
     const prevY = currentY - 1;
@@ -2869,7 +2675,7 @@ function renderOnboarding() {
       💡 <span>Dans Vendor Central : <strong>Analytiques → Tableau de bord</strong> → sélectionnez la période → Exporter CSV</span>
     </div>`;
 
-  } else if (wizStep === 5) {
+  } else if (wizStep === 4) {
     // ── Récapitulatif ──
     h += `<h3 style="font-size:15px;font-weight:700;margin-bottom:14px">Récapitulatif — ${esc(nc.name)}</h3>`;
     h += `<div class="rec-grid">`;
@@ -2885,10 +2691,8 @@ function renderOnboarding() {
 
   h += `<div style="display:flex;justify-content:space-between;margin-top:20px">`;
   h += `<button class="btn" onclick="${wizStep > 0 ? 'wizGo('+(wizStep-1)+')' : 'go(clients.length?\'dashboard\':\'welcome\')'}"> ${wizStep > 0 ? '← Précédent' : 'Annuler'}</button>`;
-  if (wizStep < 5) {
-    var canProceed = !(wizStep === 2 && (!(nc.accounts && nc.accounts.length > 0) || !(nc.catalogueXML && nc.catalogueXML.length > 0)));
-    h += `<button class="btn btn-p" onclick="wizNext()" ${canProceed ? '' : 'disabled style="opacity:0.45;cursor:not-allowed"'}>Suivant →</button>`;
-  } else h += `<button class="btn btn-g" onclick="finishOnboarding()">Créer & importer →</button>`;
+  if (wizStep < 4) h += `<button class="btn btn-p" onclick="wizNext()">Suivant →</button>`;
+  else h += `<button class="btn btn-g" onclick="finishOnboarding()">Créer & importer →</button>`;
   h += `</div></div></div>`;
   return h;
 }
@@ -7333,77 +7137,6 @@ function renderFiche() {
   });
   h += `</div></div></div>`;
 
-  // ── Section Comptes Vendor Central ────────────────────────────────
-  var fAccts = c.accounts || [];
-  var fTotalMkts = new Set(fAccts.map(function(a){return a.market;})).size;
-  var fTotalBO   = fAccts.filter(function(a){return a.role==='BO';}).length;
-  var fTotalCat  = fAccts.filter(function(a){return a.role==='catalogue';}).length;
-  h += `<div class="cd"><div class="cd-t space">`;
-  h += `<span>🏢 Comptes Vendor Central</span>`;
-  if (fAccts.length > 0) h += `<span style="font-size:11px;color:var(--tx2)">${fAccts.length} comptes · ${fTotalMkts} marchés · ${fTotalBO} BO · ${fTotalCat} catalogue</span>`;
-  h += `</div>`;
-  h += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:12px">`;
-  h += `<div><label class="fg-lb">Marché</label><select id="newAcctMarket" class="fg-in">${marketOptionsHTML('.fr')}</select></div>`;
-  h += `<div><label class="fg-lb">Vendor Code</label><input id="newAcctVC" class="fg-in" placeholder="Ex: GERA3" style="text-transform:uppercase"/></div>`;
-  h += `<div><label class="fg-lb">Rôle</label><select id="newAcctRole" class="fg-in"><option value="BO">Bon de Commande</option><option value="catalogue">Fournisseur catalogue</option></select></div>`;
-  h += `<div><label class="fg-lb">Label (optionnel)</label><input id="newAcctLabel" class="fg-in" placeholder="Ex: Principal FR"/></div>`;
-  h += `<div><button class="btn btn-p" style="padding:6px 12px" onclick="addClientAccount()">+ Ajouter</button></div>`;
-  h += `</div>`;
-  if (fAccts.length > 0) {
-    h += `<table style="width:100%;border-collapse:collapse;font-size:12px">`;
-    h += `<thead><tr style="background:var(--s2)">`;
-    h += `<th style="padding:6px 8px;text-align:left">Marché</th><th style="padding:6px 8px;text-align:left">Vendor Code</th>`;
-    h += `<th style="padding:6px 8px;text-align:left">Rôle</th><th style="padding:6px 8px;text-align:left">Label</th><th></th>`;
-    h += `</tr></thead><tbody>`;
-    for (var fai = 0; fai < fAccts.length; fai++) {
-      var facc = fAccts[fai];
-      var fmobj = MARKETPLACES_FULL.find(function(m){return m.market===facc.market;});
-      var fmLabel = fmobj ? fmobj.flag + ' ' + fmobj.name : facc.market;
-      h += `<tr style="border-bottom:1px solid var(--bd2)">`;
-      h += `<td style="padding:6px 8px">${fmLabel}</td>`;
-      h += `<td style="padding:6px 8px"><input class="fg-in" style="font-size:12px;padding:3px 6px;font-weight:600" value="${esc(facc.vendorCode)}" onchange="updateClientAccount('${esc(facc.id)}','vendorCode',this.value)"/></td>`;
-      h += `<td style="padding:6px 8px"><select class="fg-in" style="font-size:12px;padding:3px 6px" onchange="updateClientAccount('${esc(facc.id)}','role',this.value)"><option value="BO"${facc.role==='BO'?' selected':''}>Bon de Commande</option><option value="catalogue"${facc.role==='catalogue'?' selected':''}>Catalogue</option></select></td>`;
-      h += `<td style="padding:6px 8px"><input class="fg-in" style="font-size:12px;padding:3px 6px" value="${esc(facc.label||'')}" onchange="updateClientAccount('${esc(facc.id)}','label',this.value)"/></td>`;
-      h += `<td style="padding:6px 8px"><button class="btn btn-sm btn-r" onclick="removeClientAccount('${esc(facc.id)}')">✕</button></td>`;
-      h += `</tr>`;
-    }
-    h += `</tbody></table>`;
-  } else {
-    h += `<div style="font-size:12px;color:var(--tx3);padding:8px 0">Aucun compte VC — ajoutez-en un via le formulaire ci-dessus.</div>`;
-  }
-  h += `</div>`;
-
-  // ── Section Catalogue (Matrice Tarifaire) ────────────────────────
-  var catXML = c.catalogueXML || [];
-  h += `<div class="cd"><div class="cd-t space">`;
-  h += `<span>📦 Catalogue (Matrice Tarifaire)</span>`;
-  if (catXML.length > 0) h += `<span style="font-size:11px;color:var(--g,#3b6d11)">✓ ${new Set(catXML.map(function(x){return x.asin;})).size} ASINs</span>`;
-  h += `</div>`;
-  if (catXML.length > 0) {
-    var cxVC = {};
-    var cxSt = {};
-    for (var cxi = 0; cxi < catXML.length; cxi++) {
-      var cxr = catXML[cxi];
-      if (cxr.vendorCode && cxr.vendorCode !== 'None') cxVC[cxr.vendorCode] = (cxVC[cxr.vendorCode]||0)+1;
-      if (cxr.status && cxr.status !== 'None') cxSt[cxr.status] = (cxSt[cxr.status]||0)+1;
-    }
-    h += `<div style="font-size:12px;margin-bottom:8px">`;
-    h += `<strong>${new Set(catXML.map(function(x){return x.asin;})).size} ASINs</strong> · ${catXML.length} lignes`;
-    var cxVCKeys = Object.keys(cxVC);
-    if (cxVCKeys.length) h += ` · VC : ` + cxVCKeys.map(function(k){return k + ' (' + cxVC[k] + ')';}).join(', ');
-    var cxStKeys = Object.keys(cxSt);
-    if (cxStKeys.length) h += `<br>Statuts : ` + cxStKeys.map(function(k){return k + ' (' + cxSt[k] + ')';}).join(', ');
-    if (c.xmlImportDate) h += `<br><span style="color:var(--tx3)">Importé le ${new Date(c.xmlImportDate).toLocaleDateString('fr-FR')}</span>`;
-    h += `</div>`;
-    h += `<button class="btn" style="font-size:12px" onclick="document.getElementById('fiche-xml-reimport').click()">🔄 Réimporter la matrice tarifaire</button>`;
-    h += `<input type="file" id="fiche-xml-reimport" accept=".xml" style="display:none" onchange="ficheHandleXML(this)"/>`;
-  } else {
-    h += `<div style="font-size:12px;color:var(--tx3);margin-bottom:8px">Aucune matrice tarifaire importée.</div>`;
-    h += `<button class="btn btn-p" style="font-size:12px" onclick="document.getElementById('fiche-xml-import').click()">📄 Importer la matrice tarifaire</button>`;
-    h += `<input type="file" id="fiche-xml-import" accept=".xml" style="display:none" onchange="ficheHandleXML(this)"/>`;
-  }
-  h += `</div>`;
-
   // ── Section Marques du client ────────────────────────────────────
   h += `<div class="cd"><div class="cd-t space"><span>🏷️ Marques du client</span>
     <button class="btn btn-sm" onclick="addClientBrand()">+ Ajouter</button>
@@ -8898,110 +8631,10 @@ function goFilteredAsins(preset) {
 function selClient(id) { activeId = id; screen = 'dashboard'; selectedAsin = null; aiResult = ''; render(); }
 function startOnboarding() { newClient = freshClient(); wizStep = 0; screen = 'onboarding'; render(); }
 function wizGo(step) { wizStep = step; render(); }
-function wizNext() {
-  if (wizStep === 0 && !newClient.name.trim()) { alert('Nom du client requis'); return; }
-  if (wizStep === 2) {
-    if (!newClient.accounts || newClient.accounts.length === 0) { return; }
-    if (!newClient.catalogueXML || newClient.catalogueXML.length === 0) { return; }
-  }
-  wizStep++; render();
-}
+function wizNext() { if (wizStep === 0 && !newClient.name.trim()) { alert('Nom du client requis'); return; } wizStep++; render(); }
 function finishOnboarding() { clients.push(newClient); activeId = newClient.id; save(); screen = 'import'; render(); }
-function wizAddAccount() {
-  var market = document.getElementById('newAcctMarket') ? document.getElementById('newAcctMarket').value : '.fr';
-  var vc = document.getElementById('newAcctVC') ? document.getElementById('newAcctVC').value.trim().toUpperCase() : '';
-  var role = document.getElementById('newAcctRole') ? document.getElementById('newAcctRole').value : 'BO';
-  var label = document.getElementById('newAcctLabel') ? document.getElementById('newAcctLabel').value.trim() : '';
-  if (!vc) { alert('Vendor Code obligatoire'); return; }
-  if (!newClient.accounts) newClient.accounts = [];
-  if (newClient.accounts.some(function(a) { return a.vendorCode === vc && a.market === market; })) {
-    alert('Ce vendor code existe déjà sur ce marché'); return;
-  }
-  newClient.accounts.push({
-    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    market: market, vendorCode: vc, role: role, label: label
-  });
-  render();
-}
-function wizRemoveAccount(accountId) {
-  if (!newClient.accounts) return;
-  newClient.accounts = newClient.accounts.filter(function(a) { return a.id !== accountId; });
-  render();
-}
-function wizHandleXML(input) {
-  var file = input.files && input.files[0];
-  if (!file) return;
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var result = parseMatriceTarifXML(e.target.result);
-    if (result.error) { alert('Erreur XML : ' + result.error); return; }
-    newClient.catalogueXML = result.items;
-    newClient.xmlSummary = result.summary;
-    newClient.xmlImportDate = new Date().toISOString();
-    render();
-  };
-  reader.readAsText(file);
-}
 function toggleMarket(m, checked) { if (checked && !newClient.markets.includes(m)) newClient.markets.push(m); if (!checked) newClient.markets = newClient.markets.filter(x => x !== m); render(); }
 function toggleClientMarket(m, checked) { const c = cl(); if (!c) return; if (checked && !c.markets.includes(m)) c.markets.push(m); if (!checked) c.markets = c.markets.filter(x => x !== m); save(); render(); }
-
-function addClientAccount() {
-  var c = cl();
-  if (!c) return;
-  var market = document.getElementById('newAcctMarket') ? document.getElementById('newAcctMarket').value : '.fr';
-  var vc = document.getElementById('newAcctVC') ? document.getElementById('newAcctVC').value.trim().toUpperCase() : '';
-  var role = document.getElementById('newAcctRole') ? document.getElementById('newAcctRole').value : 'BO';
-  var label = document.getElementById('newAcctLabel') ? document.getElementById('newAcctLabel').value.trim() : '';
-  if (!vc) { showToast('⚠️ Vendor Code obligatoire', '', 'warn'); return; }
-  if (!c.accounts) c.accounts = [];
-  if (c.accounts.some(function(a) { return a.vendorCode === vc && a.market === market; })) {
-    showToast('⚠️ Ce vendor code existe déjà sur ce marché', '', 'warn'); return;
-  }
-  c.accounts.push({
-    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    market: market, vendorCode: vc, role: role, label: label
-  });
-  save(); render();
-}
-
-function removeClientAccount(accountId) {
-  var c = cl();
-  if (!c || !c.accounts) return;
-  var acc = c.accounts.find(function(a) { return a.id === accountId; });
-  if (!acc) return;
-  if (!confirm('Supprimer ' + acc.vendorCode + ' ?')) return;
-  c.accounts = c.accounts.filter(function(a) { return a.id !== accountId; });
-  save(); render();
-}
-
-function updateClientAccount(accountId, field, value) {
-  var c = cl();
-  if (!c || !c.accounts) return;
-  var acc = c.accounts.find(function(a) { return a.id === accountId; });
-  if (!acc) return;
-  if (field === 'vendorCode') value = value.toUpperCase();
-  acc[field] = value;
-  save();
-  // Pas de render() complet pour éviter de perdre le focus sur les inline edits
-}
-
-function ficheHandleXML(input) {
-  var c = cl();
-  if (!c) return;
-  var file = input.files && input.files[0];
-  if (!file) return;
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    var result = parseMatriceTarifXML(e.target.result);
-    if (result.error) { alert('Erreur XML : ' + result.error); return; }
-    c.catalogueXML = result.items;
-    c.xmlSummary = result.summary;
-    c.xmlImportDate = new Date().toISOString();
-    save(); render();
-  };
-  reader.readAsText(file);
-}
-
 function ncSet(key, val) { newClient[key] = val; render(); }
 function updClient(key, val) { const c = cl(); if (c) { c[key] = val; save(); } }
 function deleteClient(id) { clients = clients.filter(c => c.id !== id); activeId = clients.length ? clients[0].id : null; screen = clients.length ? 'dashboard' : 'welcome'; save(); render(); }
@@ -9520,7 +9153,7 @@ function initDragDrop() {
     if (!files.length) return;
     const dt = new DataTransfer();
     files.forEach(f => dt.items.add(f));
-    if (screen === 'onboarding' && wizStep === 4) {
+    if (screen === 'onboarding' && wizStep === 3) {
       // Drop pendant l'étape Historique
       const input = document.getElementById('hist-files');
       if (input) { input.files = dt.files; handleHistCSV(input); }
