@@ -4490,8 +4490,10 @@ function renderAsins() {
   const c = cl();
   if (!c?.asins?.length) return `<div class="alr alr-a">Importez d'abord des données CSV.</div>`;
   const asins = getFilteredAsins(c);
-  const totalCA = asins.reduce((s, a) => s + (getRevenue(a,c)||0), 0);
-  const withRevenue = asins.filter(a => (getRevenue(a,c)||0) > 0);
+  // Consolidation multi-marchés quand filtre = "Tous"
+  var displayAsins = (filters.market === 'all' && c.markets && c.markets.length > 1) ? consolidateAsins(asins, c) : asins;
+  const totalCA = displayAsins.reduce((s, a) => s + (getRevenue(a,c)||0), 0);
+  const withRevenue = displayAsins.filter(a => (getRevenue(a,c)||0) > 0);
   let h = '';
 
   if (!selectedAsin) {
@@ -4616,7 +4618,7 @@ function renderAsins() {
           <option value="C"${filters.segment==='C'?' selected':''}>🥉 C</option>
         </select>
       </div>
-      <span style="color:var(--tx3);font-size:11px;margin-left:auto">${withRevenue.length} ASINs avec CA / ${asins.length} total</span>
+      <span style="color:var(--tx3);font-size:11px;margin-left:auto">${withRevenue.length} ASINs avec CA / ${displayAsins.length} total</span>
       <button class="btn btn-sm" onclick="exportAsinsCsv()">⬇ CSV</button><button class="btn btn-sm" onclick="exportAsinsXlsx()" style="margin-left:4px">⬇ XLSX</button>
     </div>`;
 
@@ -4678,12 +4680,21 @@ function renderAsins() {
       const isDec = delta < -10;
       const rc = isDec ? 'al-row' : isLow ? 'warn-row' : '';
       const rank = visible.indexOf(a) + 1;
+      var asinRowFlags = '';
+      if (a._consolidated && a.markets && a.markets.length > 1) {
+        asinRowFlags = ' <span style="font-size:10px;opacity:0.7">';
+        for (var rfi = 0; rfi < a.markets.length; rfi++) {
+          var rfmp = MARKETPLACES_FULL.find(function(x) { return x.market === a.markets[rfi]; });
+          if (rfmp) asinRowFlags += rfmp.flag;
+        }
+        asinRowFlags += '</span>';
+      }
       h += `<tr class="${rc}" style="cursor:pointer" onclick="selectAsin('${esc(a.asin)}')">
         <td style="text-align:center;font-size:11px;font-weight:700;color:var(--tx3)">${rank}</td>
         <td><div class="hs hs-sm ${healthClass(health)}">${health}</div></td>
         <td>
-          <div style="font-weight:500;font-size:12px;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(a.title)}">${esc(shortName(a))}</div>
-          <div style="font-size:10px;color:var(--tx3);font-family:var(--fm)">${a.asin} <span style="margin-left:4px;opacity:.6">${a.market||'.fr'}</span>${a.sourcingOnly ? '<span style="margin-left:4px;font-size:9px;font-weight:700;color:var(--a);background:var(--a-bg);border-radius:3px;padding:1px 4px">Appro</span>' : ''}</div>
+          <div style="font-weight:500;font-size:12px;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(a.title)}">${esc(shortName(a))}${asinRowFlags}</div>
+          <div style="font-size:10px;color:var(--tx3);font-family:var(--fm)">${a.asin} <span style="margin-left:4px;opacity:.6">${a._consolidated ? '🌍' : (a.market||'.fr')}</span>${a.sourcingOnly ? '<span style="margin-left:4px;font-size:9px;font-weight:700;color:var(--a);background:var(--a-bg);border-radius:3px;padding:1px 4px">Appro</span>' : ''}</div>
         </td>
         <td>${segBadge(seg)}</td>
         <td class="r" style="font-weight:600">${fmtEur(getRevenue(a,c)||0)}</td>
