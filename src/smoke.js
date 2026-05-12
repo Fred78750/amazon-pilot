@@ -7,7 +7,7 @@ const SMOKE_REF = {
 
 async function smokeTest(silent) {
   const now = new Date();
-  const results = { vital: [], important: [], ts: now.toISOString(), version: APP_VERSION };
+  const results = { vital: [], important: [], manual: [], ts: now.toISOString(), version: APP_VERSION };
   const pass = (lvl, id, lbl) => results[lvl].push({ id, label: lbl, ok: true });
   const fail = (lvl, id, lbl, msg) => results[lvl].push({ id, label: lbl, ok: false, msg });
   const refExpired = (ref) => ref.expiry && new Date(ref.expiry) < now;
@@ -18,7 +18,9 @@ async function smokeTest(silent) {
   const c = typeof cl === 'function' ? cl() : null;
   if (c && c.name && c.asins && c.asins.length >= SMOKE_REF.asinMin.val)
     pass('vital','V1', 'Client actif : ' + c.name + ' (' + c.asins.length + ' ASINs)');
-  else fail('vital','V1','Client actif', !c ? 'Aucun client' : 'Seulement ' + (c?.asins?.length||0) + ' ASINs');
+  else if (c && c.name && c.catalogueXML && c.catalogueXML.length > 0)
+    pass('vital','V1', 'Client actif : ' + c.name + ' (catalogueXML ' + c.catalogueXML.length + ' lignes — CSV non encore importé)');
+  else fail('vital','V1','Client actif', !c ? 'Aucun client' : 'Seulement ' + (c && c.asins ? c.asins.length : 0) + ' ASINs');
 
   // V2 — Tableau de bord
   try {
@@ -93,35 +95,35 @@ async function smokeTest(silent) {
     else fail('vital','V8','Agent SEO', e || 'Contenu SEO absent');
   } catch(ex) { fail('vital','V8','Agent SEO', ex.message); }
 
-  // V9a — CA 2024
+  // V9a — CA 2024 [manuel — recalibrer après reimport Gers]
   if (!refExpired(SMOKE_REF.ca2024)) {
     const v = Math.round(c?.annualData?.['2024']?.ventes?.totalCA||0);
-    if (v === 0) pass('vital','V9a','CA 2024 : non importé (optionnel)');
+    if (v === 0) pass('manual','V9a','CA 2024 : non importé (optionnel)');
     else if (inTol(v, SMOKE_REF.ca2024.val, SMOKE_REF.ca2024.tol))
-      pass('vital','V9a','CA 2024 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
-    else fail('vital','V9a','CA 2024 dévié','Attendu ~' + SMOKE_REF.ca2024.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
+      pass('manual','V9a','CA 2024 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
+    else fail('manual','V9a','CA 2024 dévié','Attendu ~' + SMOKE_REF.ca2024.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
   }
 
-  // V9b — CA 2025
+  // V9b — CA 2025 [manuel — recalibrer après reimport Gers]
   if (!refExpired(SMOKE_REF.ca2025)) {
     const v = Math.round(c?.annualData?.['2025']?.ventes?.totalCA||0);
-    if (v === 0) pass('vital','V9b','CA 2025 : non importé (optionnel)');
+    if (v === 0) pass('manual','V9b','CA 2025 : non importé (optionnel)');
     else if (inTol(v, SMOKE_REF.ca2025.val, SMOKE_REF.ca2025.tol))
-      pass('vital','V9b','CA 2025 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
-    else fail('vital','V9b','CA 2025 dévié','Attendu ~' + SMOKE_REF.ca2025.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
+      pass('manual','V9b','CA 2025 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
+    else fail('manual','V9b','CA 2025 dévié','Attendu ~' + SMOKE_REF.ca2025.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
   }
 
-  // V9c — ASINs catalogue
+  // V9c — ASINs catalogue [manuel — recalibrer après reimport Gers]
   const asinCnt = c?.asins?.length||0;
-  if (asinCnt >= SMOKE_REF.asinMin.val) pass('vital','V9c','Catalogue : ' + asinCnt + ' ASINs');
-  else fail('vital','V9c','Catalogue ASINs', asinCnt + ' < minimum ' + SMOKE_REF.asinMin.val);
+  if (asinCnt >= SMOKE_REF.asinMin.val) pass('manual','V9c','Catalogue : ' + asinCnt + ' ASINs');
+  else fail('manual','V9c','Catalogue ASINs', asinCnt + ' < minimum ' + SMOKE_REF.asinMin.val);
 
-  // V9d — ASIN de référence : invariants pipeline (PAS la santé business)
+  // V9d — ASIN de référence : invariants pipeline [manuel — recalibrer après reimport Gers]
   // v3.1.70 — On vérifie que l'import n'a pas cassé la cohérence des données,
   //          pas que le CA est dans une fourchette (volatile par nature)
   const refA = c?.asins?.find(a => a.asin === SMOKE_REF.asinRef.asin);
   if (!refA) {
-    fail('vital','V9d','ASIN réf. ABSENT du catalogue après import', SMOKE_REF.asinRef.asin);
+    fail('manual','V9d','ASIN réf. ABSENT du catalogue après import', SMOKE_REF.asinRef.asin);
   } else {
     const rev = Math.round(refA.revenue || 0);
     const units = refA.units || refA.orderedUnits || 0;
@@ -146,9 +148,9 @@ async function smokeTest(silent) {
 
     if (checks.length === 0) {
       const detail = rev === 0 ? 'pas de vente cette semaine (OK)' : rev + '€ / ' + units + 'u (cohérent)';
-      pass('vital','V9d','ASIN réf. ' + SMOKE_REF.asinRef.asin + ' : ' + detail);
+      pass('manual','V9d','ASIN réf. ' + SMOKE_REF.asinRef.asin + ' : ' + detail);
     } else {
-      fail('vital','V9d','ASIN réf. cohérence pipeline', checks.join(' | '));
+      fail('manual','V9d','ASIN réf. cohérence pipeline', checks.join(' | '));
     }
   }
 
@@ -215,9 +217,11 @@ async function smokeTest(silent) {
   // Score et résumé
   const vFails = results.vital.filter(t => !t.ok);
   const iFails = results.important.filter(t => !t.ok);
+  const mFails = results.manual.filter(t => !t.ok);
   results.summary = {
     vitalTotal: results.vital.length, vitalOk: results.vital.filter(t=>t.ok).length, vitalFails: vFails.length,
     importantTotal: results.important.length, importantOk: results.important.filter(t=>t.ok).length, importantFails: iFails.length,
+    manualTotal: results.manual.length, manualOk: results.manual.filter(t=>t.ok).length, manualFails: mFails.length,
     status: vFails.length > 0 ? 'CRITICAL' : iFails.length > 0 ? 'WARNING' : 'OK'
   };
   try { localStorage.setItem('ap-smoketest-last', JSON.stringify(results)); } catch(e) {}
@@ -237,10 +241,15 @@ function renderSmokeResult(r) {
     : 'Smoke test OK — ' + s.vitalOk + '/' + s.vitalTotal + ' vitaux · ' + s.importantOk + '/' + s.importantTotal + ' importants';
   const fails = [...(r.vital||[]),...(r.important||[])].filter(t=>!t.ok);
   const detail = fails.map(t => '<span style="display:block;font-size:10px;margin-top:2px">&#8594; ' + t.id + ' ' + t.label + (t.msg?' : <em>'+t.msg+'</em>':'') + '</span>').join('');
+  const mFails = (r.manual||[]).filter(t=>!t.ok);
+  const manualDetail = mFails.length > 0
+    ? '<span style="display:block;font-size:10px;margin-top:6px;color:#888;border-top:1px solid #ddd;padding-top:4px">[MANUEL — à recalibrer] ' +
+      mFails.map(t => t.id + ' ' + t.label + (t.msg ? ' : ' + t.msg : '')).join(' · ') + '</span>'
+    : '';
   const div = document.createElement('div');
   div.id = 'smoke-banner';
   div.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9999;max-width:440px;padding:10px 14px;border-radius:8px;border-left:4px solid '+bd+';background:'+bg+';box-shadow:0 2px 8px rgba(0,0,0,0.12);font-size:12px;font-family:var(--font,sans-serif);cursor:default';
-  div.innerHTML = '<strong>' + icon + ' ' + lbl + '</strong> <span style="color:#888;font-size:10px">' + APP_VERSION + ' · ' + new Date(r.ts).toLocaleTimeString('fr-FR') + '</span>' + detail
+  div.innerHTML = '<strong>' + icon + ' ' + lbl + '</strong> <span style="color:#888;font-size:10px">' + APP_VERSION + ' · ' + new Date(r.ts).toLocaleTimeString('fr-FR') + '</span>' + detail + manualDetail
     + '<button onclick="this.parentElement.remove()" style="position:absolute;top:4px;right:6px;background:none;border:none;font-size:14px;cursor:pointer;color:#888">&#215;</button>';
   document.body.appendChild(div);
   if (s.status === 'OK') setTimeout(() => div.remove(), 8000);
