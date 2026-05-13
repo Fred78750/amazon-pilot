@@ -634,7 +634,7 @@ function parseCSVFile(text, filename) {
     if (!asin || asin.length < 5) continue;
     // Pour les CSV multi-boutiques (Gers Équipement) : lire le marché par ligne depuis "Code de la boutique"
     const boutiqueCode = findCol(row, 'code de la boutique', 'store_id', 'marketplace_id') || '';
-    const itemMarket = BOUTIQUE_CODES[boutiqueCode.trim()] || market;
+    const itemMarket = BOUTIQUE_CODES[boutiqueCode.trim()] || MARKET_CODES[boutiqueCode.trim().toUpperCase()] || market;
     const item = { asin, title: findCol(row, 'nom du produit', 'product title') || '', brand: findCol(row, 'marque', 'brand') || '', market: itemMarket, periodStart, periodEnd, periodType, distributorView };
     if (fileType === 'ventes') {
       // v3.1.70 — On stocke explicitement les 2 métriques CA :
