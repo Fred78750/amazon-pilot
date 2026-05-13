@@ -84,7 +84,8 @@ Tout patch doit être minimal et ciblé :
 | v3.5.4 | ✅ Stable staging | e4ee36e |
 | v3.5.5 | ✅ Stable staging | 8f0e5b4 |
 | v3.5.6 | ✅ Stable staging | bca06c2 |
-| v3.5.7 | ✅ Stable staging+preprod | 61f0725 |
+| v3.5.7 | ✅ Stable | 61f0725 |
+| v3.5.8 | ✅ Stable staging+preprod | 6d63e15 |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -103,8 +104,8 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | v3.4.41 | https://amazon.foliow.app |
-| Recette (staging) | v3.5.7 | https://d9xny9istvl53.cloudfront.net |
-| Preprod | v3.5.7 | https://preprod.amazon.foliow.app |
+| Recette (staging) | v3.5.8 | https://d9xny9istvl53.cloudfront.net |
+| Preprod | v3.5.8 | https://preprod.amazon.foliow.app |
 
 ---
 
@@ -213,6 +214,7 @@ Un numéro = un build = un livrable testable et revertable individuellement.
 - [x] v3.5.5 : Onglets marchés avec drapeaux et CA — `getMarketTabs` + `renderMarketTabs` dans `renderDashboard` et `renderAsins` → `src/core.js`
 - [x] v3.5.6 : Garde-fous import CSV — `checkImportCoherence` (marques + marchés), panneau récap pré-fusion, bandeau client visible → `src/core.js`
 - [x] v3.5.7 : Garde-fou import XML matrice tarifaire — `ficheHandleXML` vérifie vendor codes XML vs `c.accounts[].vendorCode` → `src/core.js`
+- [x] v3.5.8 : Fix smoke test V3 + V8 — noms d'écrans incorrects (`go('revue')` → `go('weekly')`, `go('agentseo')` → `go('seo')`) → `src/smoke.js`
 
 ---
 
@@ -255,4 +257,4 @@ Les ASINs avec `ficheOptimisee` créée via fusion wizard n'ont pas de synthèse
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 13 mai 2026 (v3.5.7 staging+preprod)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 13 mai 2026 (v3.5.8 staging+preprod)**
