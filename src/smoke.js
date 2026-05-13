@@ -182,9 +182,9 @@ async function smokeTest(silent) {
   try {
     if (typeof go === 'function') go('import');
     await new Promise(r => setTimeout(r, 200));
-    const poZone = document.getElementById('po-drop-zone');
+    const poZone = document.getElementById('po-section-3');
     if (poZone) pass('important','I4','Zone PO Import (présente)');
-    else fail('important','I4','Zone PO Import','po-drop-zone absent');
+    else fail('important','I4','Zone PO Import','po-section-3 absent');
   } catch(ex) { fail('important','I4','Zone PO Import',ex.message); }
 
   // I5 — Guide ASN embarqué
