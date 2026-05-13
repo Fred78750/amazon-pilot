@@ -86,7 +86,7 @@ Tout patch doit être minimal et ciblé :
 | v3.5.6 | ✅ Stable staging | bca06c2 |
 | v3.5.7 | ✅ Stable | 61f0725 |
 | v3.5.8 | ✅ Stable | 6d63e15 |
-| v3.5.9 | ✅ Stable staging | fadbc7a |
+| v3.5.9 | ✅ Stable staging+preprod | fadbc7a |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -106,7 +106,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 |---|---|---|
 | Production (main) | v3.4.41 | https://amazon.foliow.app |
 | Recette (staging) | v3.5.9 | https://d9xny9istvl53.cloudfront.net |
-| Preprod | v3.5.8 | https://preprod.amazon.foliow.app |
+| Preprod | v3.5.9 | https://preprod.amazon.foliow.app |
 
 ---
 
@@ -259,4 +259,4 @@ Les ASINs avec `ficheOptimisee` créée via fusion wizard n'ont pas de synthèse
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 13 mai 2026 (v3.5.9 staging)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 13 mai 2026 (v3.5.9 staging+preprod)**
