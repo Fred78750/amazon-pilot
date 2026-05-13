@@ -31,7 +31,7 @@ async function smokeTest(silent) {
 
   // V3 — Revue Hebdo
   try {
-    if (typeof go === 'function') go('revue');
+    if (typeof go === 'function') go('weekly');
     await new Promise(r => setTimeout(r, 300));
     const e = getErr(); const acts = c?.weeklyActions||[];
     if (!e && acts.length > 0) pass('vital','V3','Revue Hebdo (' + acts.length + ' actions)');
@@ -85,7 +85,7 @@ async function smokeTest(silent) {
 
   // V8 — Agent SEO
   try {
-    if (typeof go === 'function') go('agentseo');
+    if (typeof go === 'function') go('seo');
     await new Promise(r => setTimeout(r, 300));
     const e = getErr(); const txt = document.body.innerText;
     const hasSEO = txt.includes('SEO') || txt.includes('titre') || txt.includes('bullet');
@@ -180,9 +180,9 @@ async function smokeTest(silent) {
   try {
     if (typeof go === 'function') go('import');
     await new Promise(r => setTimeout(r, 200));
-    const poZone = document.getElementById('po-drop-zone');
+    const poZone = document.getElementById('po-section-3');
     if (poZone) pass('important','I4','Zone PO Import (présente)');
-    else fail('important','I4','Zone PO Import','po-drop-zone absent');
+    else fail('important','I4','Zone PO Import','po-section-3 absent');
   } catch(ex) { fail('important','I4','Zone PO Import',ex.message); }
 
   // I5 — Guide ASN embarqué

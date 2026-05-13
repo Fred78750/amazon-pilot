@@ -44,7 +44,7 @@ function calcBuyBoxAlerts(c) {
     const joursAvantLimite = _apro?.joursAvantLimite ?? null;
     const stockUrgent = couvertureSem !== null && couvertureSem < 3;
 
-    const entry = { asin: a.asin, title: a.title, brand: a.brand, rPct, prevRetail, delta, cause, zeroWeeks, revenue: getRevenue(a,c), segment: calcSegment(a, c.asins.reduce((s,x)=>s+(getRevenue(x,c)||0),0), c), sellableUnits: a.sellableUnits, couvertureSem, joursAvantLimite, stockUrgent };
+    const entry = { asin: a.asin, title: a.title, brand: a.brand, market: a.market, rPct, prevRetail, delta, cause, zeroWeeks, revenue: getRevenue(a,c), segment: calcSegment(a, c.asins.reduce((s,x)=>s+(getRevenue(x,c)||0),0), c), sellableUnits: a.sellableUnits, couvertureSem, joursAvantLimite, stockUrgent };
 
     if (isSuppressed)                          suppressed.push(entry);
     else if (isCritical)                       critical.push(entry);
@@ -126,12 +126,17 @@ function renderBuyBox() {
   if (!c) return renderWelcome();
   if (!c.asins?.length) return `<div class="alr alr-a">Importez d'abord des données CSV.</div>`;
 
-  const { critical, warning, suppressed } = calcBuyBoxAlerts(c);
+  const { critical: critRaw, warning: warnRaw, suppressed: suppRaw } = calcBuyBoxAlerts(c);
+  const mktFilt = e => filters.market === 'all' || e.market === filters.market;
+  const critical = critRaw.filter(mktFilt);
+  const warning = warnRaw.filter(mktFilt);
+  const suppressed = suppRaw.filter(mktFilt);
   const allProblems = [...suppressed, ...critical, ...warning];
   const phase = window._bbPhase || 'list';
   const selectedAsin = window._bbSelectedAsin || null;
 
   let h = `<div style="max-width:960px">`;
+  h += renderMarketTabs(c, filters.market);
 
   if (phase === 'list') {
     // ── PHASE 1 : Vue d'ensemble ─────────────────────────────────
