@@ -1,6 +1,90 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 7 mai 2026 (v3.4.18)
+**Dernière mise à jour :** 11 mai 2026 (v3.4.41)
+
+---
+
+# ⛔ RÈGLES ANTI-RÉGRESSION — PRIORITÉ ABSOLUE
+
+Ces règles s'appliquent à CHAQUE commit, sans exception, même pour un patch d'une ligne.
+
+## 1. CHECKLIST OBLIGATOIRE AVANT TOUT PUSH
+
+Claude Code doit exécuter CE CHECKLIST dans l'ordre avant chaque `git push` :
+
+### Validation code
+- [ ] `node --check src/seo.js` → doit retourner OK
+- [ ] `node --check src/core.js` → doit retourner OK
+- [ ] `python build.py` → vérifier taille JS (écart max ±10% vs version précédente)
+- [ ] `node --check amazon-pilot-vX.Y.Z.html` → doit retourner OK
+
+### Test smoke sur preprod (OBLIGATOIRE après chaque déploiement)
+Claude Code ouvre preprod avec Claude in Chrome et vérifie :
+- [ ] Un ASIN avec fiche déjà générée s'affiche correctement (titre non vide, bullets présents)
+- [ ] La synthèse stratégique est visible (POSITIONNEMENT, LEVIERS, ERREURS, OPPORTUNITÉ)
+- [ ] Console DevTools → zéro erreur JS rouge
+- [ ] Le bouton "Générer la fiche" fonctionne sur un nouvel ASIN
+
+Si UN SEUL point échoue → REVERT IMMÉDIAT + rapport à Fred + STOP.
+
+## 2. RÈGLE PATCH DE DEBUG
+
+Tout patch contenant des `console.log` de debug :
+- NE JAMAIS commiter directement dans staging
+- Créer une branche `debug/xxx` séparée
+- Supprimer TOUS les console.log avant le push final vers staging
+- Re-valider le checklist complet après suppression
+
+## 3. RÈGLE REVERT IMMÉDIAT
+
+En cas de régression constatée (rendu cassé, erreur JS, données vides) :
+1. `git revert HEAD --no-edit` immédiatement
+2. Redéployer la version stable sur staging ET preprod
+3. Rapport détaillé à Fred
+4. STOP — ne pas tenter de corriger par-dessus un bug
+
+```bash
+# Commande revert standard
+git revert HEAD --no-edit
+git push origin staging
+python build.py --version [version-stable]
+aws s3 cp amazon-pilot-v[version-stable].html s3://amazon-pilot-recette/index.html \
+  --cache-control "no-cache,no-store,must-revalidate"
+aws s3 cp amazon-pilot-v[version-stable].html s3://amazon-pilot-preprod/index.html \
+  --cache-control "no-cache,no-store,must-revalidate"
+aws cloudfront create-invalidation --distribution-id EVQ30COFUNGA7 --paths "/*"
+aws cloudfront create-invalidation --distribution-id E3CODYJ437XKU5 --paths "/*"
+```
+
+## 4. RÈGLE PATCH CIBLÉ
+
+Tout patch doit être minimal et ciblé :
+- Un patch = une correction = un commit
+- Ne jamais grouper plusieurs corrections non liées dans un même commit
+- Si le patch touche `drawSEOContent` ou `parseSEOResponse` → test smoke obligatoire
+  sur un ASIN avec fiche déjà générée ET sur une nouvelle génération
+
+## 5. VERSIONS STABLES DE RÉFÉRENCE
+
+| Version | Statut | Hash git |
+|---------|--------|----------|
+| v3.4.27 | ✅ Stable | d9738ca |
+| v3.4.28 | ✅ Stable | d747085 |
+| v3.4.29 | ✅ Stable | 201fadc |
+| v3.4.30 | ✅ Stable | 6a37a60 |
+| v3.4.31 | ✅ Stable | d127eae |
+| v3.4.32 | ⛔ Annulé (bug données) | 3a2f3ad |
+| v3.4.29 (wizard) | ✅ Stable | 393b553 |
+| v3.4.30 (wizard) | ✅ Stable | 8845fb0 |
+| v3.4.31 (wizard) | ✅ Stable | b7a668b |
+| v3.4.41 | ✅ Stable — **prod** | cd3e709 |
+| v3.5.1 | ✅ Stable staging | — |
+| v3.5.2 | ✅ Stable staging | — |
+| v3.5.3 | ✅ Stable staging | 56e8dcc |
+| v3.5.4 | ✅ Stable staging | e4ee36e |
+
+En cas de doute, revenir à la dernière version marquée ✅ Stable.
+Mettre à jour ce tableau après chaque merge main validé par Fred.
 
 ---
 
@@ -15,9 +99,9 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | v3.4.18 | https://amazon.foliow.app |
-| Recette (staging) | v3.4.18 | https://d9xny9istvl53.cloudfront.net |
-| Preprod | v3.4.18 | https://preprod.amazon.foliow.app |
+| Production (main) | v3.4.41 | https://amazon.foliow.app |
+| Recette (staging) | v3.5.4 | https://d9xny9istvl53.cloudfront.net |
+| Preprod | v3.5.3 | https://preprod.amazon.foliow.app |
 
 ---
 
@@ -70,6 +154,11 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ## RÈGLES DE DÉVELOPPEMENT GRAVÉES
 
+### Règle versioning strict
+Chaque commit fonctionnel = nouvelle version (`build.py --version X.Y.Z`).
+Jamais de patches empilés sous le même numéro de version.
+Un numéro = un build = un livrable testable et revertable individuellement.
+
 ### Règles absolues — ne jamais remettre en cause
 - `node --check` obligatoire avant toute livraison
 - Jamais de commit direct sur `main`
@@ -85,12 +174,14 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 - `window.onerror` (pas `addEventListener('error')`) pour intercepter erreurs extension
 - ISO week numbers (`targetWeek = currentWeek - 1`) pour détection données manquantes
 - Deploy : `--cache-control "no-cache,no-store,must-revalidate"` sur tout upload S3
+- `renderSEOSection` (core.js) et `drawSEOContent` (seo.js) sont deux fonctions de rendu DISTINCTES — tout ajout de champ doit être appliqué dans LES DEUX
 
 ### Localisation des fonctions SEO (gravée — ne pas chercher dans core.js)
 - `buildSEOPrompt`, `parseSEOResponse`, `renderAgentVC` → **`src/seo.js`**
+- `drawSEOContent` → **`src/seo.js`** (SEO drawer uniquement)
+- `renderSEOSection` → **`src/core.js`** (vue détail ASIN)
 - Tous les helpers `avc*` (`avcStepWrap`, `avcToggleStep`, `avcLookupAsin`, `avcConfirmMarket`, `avcConfirmSKU`, `avcLaunchSEO`, `avcCopyScript`, `avcMarkDone`, etc.) → **`src/seo.js`**
 - `runSEOFiche`, `callAPI`, `askClaude` → **`src/core.js`**
-- `buildSEOPrompt`, `parseSEOResponse` → **`src/seo.js`** (pas `core.js` — corrigé audit Cowork)
 
 ### Règles patches
 - Chaque modification = un `str_replace` avec ancien texte exact et nouveau texte exact
@@ -110,39 +201,24 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ---
 
-## TÂCHES EN COURS (session v3.4.16 — toutes terminées)
+## TÂCHES EN COURS (session v3.5.x — toutes terminées)
 
-- [x] Fix `parseSEOResponse` : strip `**` sur description → `src/seo.js`
-- [x] Fix `buildSEOPrompt` : directive DESCRIPTION HTML structurée 5 blocs → `src/seo.js`
-- [x] Fix `buildSEOPrompt` : directive BACKEND_KEYWORDS 5 blocs + liste INTERDIT → `src/seo.js`
-- [x] Fix bloc INTERDIT : ajout "incassable", "homologué", "certifié", "compatible tous modèles" → `src/seo.js`
-- [x] Strip `**` sur 4 champs synthèse (`positionnement`, `leviers`, `erreurs`, `opportunite`) → `src/seo.js`
-- [x] Guard `apiKey` dans `runSEOFiche` → `src/core.js`
-- [x] Refonte `renderAgentVC` : wizard 5 étapes, `avcStepWrap`, accordéon, SKU obligatoire étape 3, multi-VC étape 5 → `src/seo.js`
-- [x] Fix `renderOnboarding` : `c.` → `nc.` (wizStep 3, bloc PO) — `ReferenceError: c is not defined` → `src/core.js`
-- [x] Fix wizard SKU : `oninput` → `onchange` (BUG1 — 1er char seulement) → `src/seo.js`
-- [x] Fix wizard étape 5 : bouton "📤 Script VC →" dans branche ficheReady (BUG2 — étape 5 jamais atteinte) → `src/seo.js`
-- [x] Fix `go('agentseo')` → `go('seo')` : écran vide sur "Voir fiche complète" et "← Retour" → `src/seo.js`
-- [x] Fix R1 (Cowork) : `backendKW` per-market dans `showVCConfirmModal` → `src/seo.js`
-- [x] Fix R2 (Cowork) : `seoLaunchModify` route vers `goAgentVC` si multi-VC → `src/seo.js`
-- [x] PATCH 1–4 : wizard Agent VC complet (seoLaunchModify, _doVCCopy supprimé, showVCConfirmModal supprimé, bouton Optimiser+Publier VC dans renderSEOSection) → `src/seo.js` + `src/core.js`
-- [x] PATCH 5 : "Voir fiche complète" → `selectedAsin=agentVCState.asin;go('asins')` (était `go('seo')`) → `src/seo.js`
-- [x] PATCH 6 : Boutons "SEO"+"VC" fusionnés en "🚀 Optimiser" → `goAgentVC(asin)` pour ASINs "À surveiller" — suppression auto-génération drawer → `src/seo.js`
-- [x] v3.4.11 : `btn-p` → `btn-or` sur boutons "Optimiser + Publier VC" (core.js L.7877 + L.7979)
-- [x] v3.4.12 : `seoSearchGo` — `openSEODrawer` → `goAgentVC` → `src/seo.js`
-- [x] v3.4.13 : `render()` après `refreshSEODrawer()` dans `runSEOFiche` (UI bloquée post-génération) → `src/core.js`
-- [x] v3.4.13 : champ SKU étape 3 — `onchange` → `oninput` → `src/seo.js`
-- [x] v3.4.14 : `avcCopyScript` — fallback `execCommand` + pattern `_avcDone` (clipboard silencieux) → `src/seo.js`
-- [x] v3.4.15 : `avcCopyScript` — fallback `ficheOptimisee` si `seoResults` vide (après reload) → `src/seo.js`
-- [x] v3.4.16 : `avcCopyScript` — `navigator.clipboard` → `execCommand` pur (textarea fixed+opacity:0), toast ✅/⚠️ différencié → `src/seo.js`
-- [x] v3.4.16 : boutons étape 5 — `JSON.stringify(vc)` → `'\'' + vc + '\''` (guillemets doubles cassaient l'attribut onclick sur 3 lignes : L.505 onchange, L.507 avcCopyScript, L.509 avcMarkDone) → `src/seo.js`
+- [x] v3.5.1 : Désignations françaises (`migrateXMLTitles`) + Vue consolidée multi-marchés (`consolidateAsins`) → `src/core.js`
+- [x] v3.5.2 : Fix bug critique CSV market collision — `MARKET_CODES` fallback dans `parseCSVFile()` → `src/core.js`
+- [x] v3.5.3 : Suppression doublon section 1.5 Purchase Orders dans `renderImport()` → `src/core.js`
+- [x] v3.5.4 : Fix smoke test I4 — sélecteur `po-section-3` (remplace `po-drop-zone` supprimé en v3.5.3) → `src/smoke.js`
 
 ---
 
 ## TÂCHES SUIVANTES
 
-- [ ] (optionnel) Aligner rendu étape 5 wizard sur `ficheOptimisee` : afficher bouton "Copier" même si `seoResults` vide (actuellement affiche "Générez d'abord la fiche SEO" mais `avcCopyScript` fonctionne quand même)
-- [ ] Tests pre-merge main restants (nécessitent API key + données multi-VC) : description HTML, synthèse sans `**`, multi-VC Cogex
+- [ ] **Priorité 1** — Fred doit réimporter le CSV Gers multi-marchés (IT/ES/DE/NL/BE) après fix MARKET_CODES v3.5.2 pour tester consolidation vue "Tous"
+- [ ] **Priorité 2** — Déployer v3.5.4 en preprod après validation staging par Fred
+- [ ] **Priorité 3** — Fix scroll étape C : `renderWizardStep` (`src/seo.js`) — div wrappant `${content}` → `overflow:visible`, supprimer `overflow:hidden`/`max-height` → `v3.5.5`
+- [ ] Sessions comparatives Claude vs ChatGPT (3 ASINs Cogex) → alimenter `EXEMPLES_GPT_REFERENCE.md`
+- [ ] Vérifier B07DGD6W4Y + B00BBU4Z4K sur Amazon.fr : 5 bullets non vides
+- [ ] Qualité prompt SEO — refonte `buildSEOPrompt` → `src/seo.js`
+- [ ] Enrichissement web `seoFetchFiche` — vérifier lecture fiche Amazon réelle → `src/seo.js`
 
 ---
 
@@ -160,19 +236,18 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | "Voir fiche complète" → `selectedAsin=agentVCState.asin;go('asins')` | `go('seo')` perdait le contexte ASIN — fix PATCH 5 | mai 2026 |
 | `avcCopyScript` fallback `ficheOptimisee` | `seoResults` session-only — après reload, fiche lue dans IndexedDB | mai 2026 |
 | Tous points d'entrée wizard cartographiés avant refacto | `seoSearchGo` oublié → `openSEODrawer` au lieu de `goAgentVC` — corrigé v3.4.12 | mai 2026 |
+| `renderSEOSection` ≠ `drawSEOContent` | Deux fonctions de rendu distinctes — tout nouveau champ SEO doit être dans les DEUX | mai 2026 |
 
 ---
 
-## TESTS À FAIRE AVANT MERGE MAIN (v3.4.10)
+## RÈGLES AJOUTÉES (session 11 mai 2026)
 
-- [ ] Générer fiche SEO sur B07DPCH7XC → vérifier description = HTML structuré (`<p>`, `<strong>`, `<ul><li>`) sans `**`
-- [ ] Vérifier champs synthèse (positionnement, leviers, erreurs, opportunite) sans `**`
-- [ ] Tester guard apiKey vide → message `__ERR_NOKEY__` (pas d'erreur 401 muette)
-- [ ] Wizard Agent VC : étape 3 bouton Confirmer bloqué si SKU vide
-- [ ] Wizard Agent VC : étape 5 multi-VC → un script par vendor code (COGEX + 3J6MN)
-- [ ] Tester URL VC : COGEX + SKU `B07DPCH7XC` → URL correcte
-- [ ] Tester URL VC : 3J6MN + SKU `643416` → URL correcte
+### Règle `forEach` + `await`
+Les callbacks `forEach` sont synchrones — jamais utiliser `await` à l'intérieur. Utiliser une boucle `for` indexée ou `for...of`.
+
+### Règle smoke test synthèse
+Les ASINs avec `ficheOptimisee` créée via fusion wizard n'ont pas de synthèse stratégique. Le smoke test doit utiliser un ASIN avec vraie génération SEO (`runSEOFiche`) pour valider positionnement/leviers/erreurs/opportunite.
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 7 mai 2026 (v3.4.18)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 13 mai 2026 (v3.5.4 staging)**

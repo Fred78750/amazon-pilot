@@ -10,7 +10,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.1.70';
+const APP_VERSION = '3.5.4';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -147,14 +147,126 @@ const BOUTIQUE_CODES = {
   'ATVPDKIKX0DER':  '.com',   // USA
   'A1VC38T7YXB528': '.jp',    // Japon
 };
-const WIZ_STEPS = ['Identité', 'Config Amazon', 'Contraintes', 'Historique', 'Récapitulatif'];
+const WIZ_STEPS = ['Identité', 'Config Amazon', 'Comptes VC & Catalogue', 'Contraintes', 'Historique', 'Récapitulatif'];
+
+const MARKETPLACES_FULL = [
+  // Europe
+  { market: '.fr',     flag: '🇫🇷', name: 'France',               region: 'Europe' },
+  { market: '.de',     flag: '🇩🇪', name: 'Allemagne',             region: 'Europe' },
+  { market: '.it',     flag: '🇮🇹', name: 'Italie',                region: 'Europe' },
+  { market: '.es',     flag: '🇪🇸', name: 'Espagne',               region: 'Europe' },
+  { market: '.nl',     flag: '🇳🇱', name: 'Pays-Bas',              region: 'Europe' },
+  { market: '.be',     flag: '🇧🇪', name: 'Belgique',              region: 'Europe' },
+  { market: '.co.uk',  flag: '🇬🇧', name: 'Royaume-Uni',           region: 'Europe' },
+  { market: '.se',     flag: '🇸🇪', name: 'Suède',                 region: 'Europe' },
+  { market: '.pl',     flag: '🇵🇱', name: 'Pologne',               region: 'Europe' },
+  { market: '.com.tr', flag: '🇹🇷', name: 'Turquie',               region: 'Europe' },
+  // Amérique du Nord
+  { market: '.com',    flag: '🇺🇸', name: 'États-Unis',            region: 'Amérique du Nord' },
+  { market: '.ca',     flag: '🇨🇦', name: 'Canada',                region: 'Amérique du Nord' },
+  { market: '.com.mx', flag: '🇲🇽', name: 'Mexique',               region: 'Amérique du Nord' },
+  // Amérique du Sud
+  { market: '.com.br', flag: '🇧🇷', name: 'Brésil',                region: 'Amérique du Sud' },
+  // Asie-Pacifique
+  { market: '.co.jp',  flag: '🇯🇵', name: 'Japon',                 region: 'Asie-Pacifique' },
+  { market: '.in',     flag: '🇮🇳', name: 'Inde',                  region: 'Asie-Pacifique' },
+  { market: '.com.au', flag: '🇦🇺', name: 'Australie',             region: 'Asie-Pacifique' },
+  { market: '.sg',     flag: '🇸🇬', name: 'Singapour',             region: 'Asie-Pacifique' },
+  // Moyen-Orient & Afrique
+  { market: '.ae',     flag: '🇦🇪', name: 'Émirats Arabes Unis',   region: 'Moyen-Orient & Afrique' },
+  { market: '.sa',     flag: '🇸🇦', name: 'Arabie Saoudite',       region: 'Moyen-Orient & Afrique' },
+  { market: '.eg',     flag: '🇪🇬', name: 'Égypte',                region: 'Moyen-Orient & Afrique' },
+  { market: '.co.za',  flag: '🇿🇦', name: 'Afrique du Sud',        region: 'Moyen-Orient & Afrique' },
+];
+
+function marketOptionsHTML(selected) {
+  var html = '';
+  var lastRegion = '';
+  for (var i = 0; i < MARKETPLACES_FULL.length; i++) {
+    var m = MARKETPLACES_FULL[i];
+    if (m.region !== lastRegion) {
+      if (lastRegion) html += '</optgroup>';
+      html += '<optgroup label="' + m.region + '">';
+      lastRegion = m.region;
+    }
+    html += '<option value="' + m.market + '"' + (m.market === selected ? ' selected' : '') + '>' + m.flag + ' ' + m.name + '</option>';
+  }
+  if (lastRegion) html += '</optgroup>';
+  return html;
+}
+
+function parseMatriceTarifXML(xmlText) {
+  var parser = new DOMParser();
+  var doc = parser.parseFromString(xmlText, 'text/xml');
+  var ns = 'urn:schemas-microsoft-com:office:spreadsheet';
+
+  var worksheets = doc.getElementsByTagNameNS(ns, 'Worksheet');
+  var costSheet = null;
+  for (var i = 0; i < worksheets.length; i++) {
+    if (worksheets[i].getAttribute('ss:Name') === 'Cost') {
+      costSheet = worksheets[i]; break;
+    }
+  }
+  if (!costSheet) return { error: 'Onglet "Cost" non trouvé dans le XML' };
+
+  var table = costSheet.getElementsByTagNameNS(ns, 'Table')[0];
+  var rows = table.getElementsByTagNameNS(ns, 'Row');
+
+  var results = [];
+  var vcCounts = {};
+  var statusCounts = {};
+
+  // Les 6 premières lignes sont header/meta — données à partir de l'index 6
+  for (var r = 6; r < rows.length; r++) {
+    var cells = rows[r].getElementsByTagNameNS(ns, 'Cell');
+    var vals = {};
+    var colIdx = 0;
+    for (var c = 0; c < cells.length; c++) {
+      var idxAttr = cells[c].getAttribute('ss:Index');
+      if (idxAttr) colIdx = parseInt(idxAttr) - 1;
+      var dataEl = cells[c].getElementsByTagNameNS(ns, 'Data')[0];
+      vals[colIdx] = dataEl ? dataEl.textContent : '';
+      colIdx++;
+    }
+
+    var asin = (vals[2] || '').trim();
+    if (!asin.startsWith('B')) continue;
+
+    var vc = (vals[1] || '').trim();
+    var status = (vals[6] || '').trim();
+
+    if (vc && vc !== 'None') vcCounts[vc] = (vcCounts[vc] || 0) + 1;
+    if (status && status !== 'None') statusCounts[status] = (statusCounts[status] || 0) + 1;
+
+    results.push({
+      asin: asin,
+      ean: (vals[3] || '').trim(),
+      model: (vals[4] || '').trim(),
+      description: (vals[5] || '').trim(),
+      vendorCode: vc,
+      status: status,
+      cost: parseFloat((vals[8] || '0').replace(',', '.')) || 0
+    });
+  }
+
+  return {
+    items: results,
+    summary: {
+      totalASINs: new Set(results.map(function(r) { return r.asin; })).size,
+      totalLines: results.length,
+      vendorCodes: vcCounts,
+      statuses: statusCounts
+    }
+  };
+}
 
 function freshClient() {
   return {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2,5),
     name: '', brand: '', sector: '', contactOp: '', reason: '',
     brands: [],  // [{ name: 'COGEX', role: 'fabricant' }] role: 'fabricant'|'revendeur'
-    model: '1P (Vendor Central)', vendorCode: '', markets: ['.fr'], mainMarket: '.fr',
+    model: '1P (Vendor Central)', vendorCode: '', accounts: [],  // [{ id, market, vendorCode, role: 'BO'|'catalogue', label }]
+    markets: ['.fr'], mainMarket: '.fr',
     fulfillment: 'Amazon (Vendor Direct)',
     stockDeporte: false, btr: 'Autorisé', btrNote: '', threeP: true,
     budget: '', pricingPolicy: 'Prix libre',
@@ -173,6 +285,7 @@ function freshClient() {
     moq: 0,              // quantité minimale de commande (0 = pas de contrainte)
     // ── Catalogue ASIN ↔ SKU fournisseur ──
     catalogue: [],       // [{ asin, sku, ean, description, prixAchat, vendorCode }]
+    catalogueXML: [],    // [{ asin, ean, model, description, vendorCode, status, cost }] — source: matrice tarifaire XML
     pos: [],             // [{ poId, asin, sku, title, vendorCode, qty, qtyAccepted,
     ficheOptimisee: {},  // asin => marche => {titre,bullets,description,nomType,backendKW,generatedAt} + actions[]
     // ── Données enrichies ──
@@ -206,6 +319,32 @@ function openDB() {
     req.onsuccess = e => { _db = e.target.result; resolve(_db); };
     req.onerror = () => reject(req.error);
   });
+}
+
+function migrateXMLTitles(clients) {
+  // Migration silencieuse : enrichit les titres existants depuis catalogueXML (désignations FR)
+  // S'applique une fois par ASIN (skip si titleOriginal déjà présent)
+  clients.forEach(function(c) {
+    if (!c.catalogueXML || c.catalogueXML.length === 0) return;
+    if (!c.asins || c.asins.length === 0) return;
+    var xmlByAsin = {};
+    for (var xi = 0; xi < c.catalogueXML.length; xi++) {
+      var xItem = c.catalogueXML[xi];
+      if (xItem.asin && !xmlByAsin[xItem.asin]) xmlByAsin[xItem.asin] = xItem;
+    }
+    for (var ai = 0; ai < c.asins.length; ai++) {
+      var a = c.asins[ai];
+      if (a.titleOriginal) continue; // déjà enrichi
+      var xmlMatch = xmlByAsin[a.asin];
+      if (xmlMatch && xmlMatch.description) {
+        if (a.title) a.titleOriginal = a.title;
+        a.title = xmlMatch.description;
+        if (!a.ean && xmlMatch.ean) a.ean = xmlMatch.ean;
+        if (!a.model && xmlMatch.model) a.model = xmlMatch.model;
+      }
+    }
+  });
+  return clients;
 }
 
 function migrateSnapshotRevenue(clients) {
@@ -280,6 +419,8 @@ async function load() {
         stockTarget:    c.stockTarget    ?? 8,
         moq:            c.moq            ?? 0,
         catalogue:      c.catalogue      || [],
+        catalogueXML:   c.catalogueXML   || [],
+        accounts:       c.accounts       || [],
         pos:            c.pos            || [],
         ficheOptimisee: c.ficheOptimisee || {},
         ppmData:        c.ppmData        || {},
@@ -290,6 +431,7 @@ async function load() {
       activeId = clients[0].id;
       screen = 'dashboard';
       log(`✓ IndexedDB: ${clients.length} client(s), ${clients.reduce((s,c)=>s+(c.asins?.length||0),0)} ASINs`, 'ok');
+      migrateXMLTitles(clients);
       migrateSnapshotRevenue(clients);
       await save();
     } else {
@@ -492,7 +634,7 @@ function parseCSVFile(text, filename) {
     if (!asin || asin.length < 5) continue;
     // Pour les CSV multi-boutiques (Gers Équipement) : lire le marché par ligne depuis "Code de la boutique"
     const boutiqueCode = findCol(row, 'code de la boutique', 'store_id', 'marketplace_id') || '';
-    const itemMarket = BOUTIQUE_CODES[boutiqueCode.trim()] || market;
+    const itemMarket = BOUTIQUE_CODES[boutiqueCode.trim()] || MARKET_CODES[boutiqueCode.trim().toUpperCase()] || market;
     const item = { asin, title: findCol(row, 'nom du produit', 'product title') || '', brand: findCol(row, 'marque', 'brand') || '', market: itemMarket, periodStart, periodEnd, periodType, distributorView };
     if (fileType === 'ventes') {
       // v3.1.70 — On stocke explicitement les 2 métriques CA :
@@ -917,6 +1059,31 @@ function mergeImportData(client, parsedFiles) {
   }
 
   client.asins = Array.from(asinMap.values());
+
+  // ── Enrichissement titres depuis catalogueXML (désignations françaises) ──
+  if (client.catalogueXML && client.catalogueXML.length > 0) {
+    var xmlByAsin = {};
+    for (var xi = 0; xi < client.catalogueXML.length; xi++) {
+      var xItem = client.catalogueXML[xi];
+      if (xItem.asin && !xmlByAsin[xItem.asin]) {
+        xmlByAsin[xItem.asin] = xItem;
+      }
+    }
+    for (var ai = 0; ai < client.asins.length; ai++) {
+      var asinEntry = client.asins[ai];
+      var xmlMatch = xmlByAsin[asinEntry.asin];
+      if (xmlMatch && xmlMatch.description) {
+        if (!asinEntry.titleOriginal && asinEntry.title) {
+          asinEntry.titleOriginal = asinEntry.title;
+        }
+        asinEntry.title = xmlMatch.description;
+        if (!asinEntry.ean && xmlMatch.ean) asinEntry.ean = xmlMatch.ean;
+        if (!asinEntry.model && xmlMatch.model) asinEntry.model = xmlMatch.model;
+      }
+    }
+    log('\u{1F1EB}\u{1F1F7} Titres enrichis depuis catalogueXML: ' + Object.keys(xmlByAsin).length + ' ASINs referencés', 'ok');
+  }
+
   client.csvImported = client.asins.length > 0;
   if (!client.history) client.history = { weekly: [], monthly: [], yearly: [] };
   if (totalCA > 0 || totalGV > 0) {
@@ -2122,6 +2289,237 @@ RÈGLES ABSOLUES:
 - Réponds en français, structure avec des émojis, sois concis et actionnable`;
 }
 const cl = () => clients.find(c => c.id === activeId) || null;
+
+function saveClientSafe(c) {
+  if (!c || !c.asins || c.asins.length === 0) {
+    console.error('[ABORT] saveClientSafe — asins vide ou corrompu, longueur:', c?.asins?.length);
+    return false;
+  }
+  save();
+  return true;
+}
+
+function toggleFicheAmazon(asin) {
+  const el = document.getElementById('fiche-amazon-' + asin);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function saveFicheAmazon(asin, val) {
+  const c = cl(); if (!c) return;
+  const a = c.asins.find(x => x.asin === asin);
+  if (a) { a.ficheAmazon = val; save(); }
+}
+
+function saveFicheGPT(asin, val) {
+  const c = cl(); if (!c) return;
+  const a = c.asins.find(x => x.asin === asin);
+  if (a) { a.ficheGPT = val; save(); }
+}
+
+function saveFicheChallenge(asin, val) {
+  const c = cl(); if (!c) return;
+  const a = c.asins.find(x => x.asin === asin);
+  if (a) { a.ficheChallenge = val; save(); }
+}
+
+function exportExemplesGPT(asin, market) {
+  const c = cl(); if (!c) return;
+  const a = c.asins.find(x => x.asin === asin);
+  if (!a || !a.ficheChallenge) return;
+  const ch = a.ficheChallenge[market];
+  if (!ch) return;
+  const date = new Date().toISOString().slice(0, 10);
+  const md = [
+    '# Exemple GPT Reference — ' + asin + ' (' + market + ')',
+    '**Date :** ' + date,
+    '**ASIN :** ' + asin,
+    '',
+    '## Titre retenu',
+    ch.titreFusion || '',
+    '',
+    '## Bullets retenus',
+    (ch.bulletsFusion || []).map((b, i) => '**B' + (i+1) + ':** ' + b).join('\n\n'),
+    '',
+    '## Verdict comparaison',
+    ch.verdict || '',
+    '',
+    '## Autocritique Claude',
+    ch.autocritique || '',
+    '',
+    '---',
+  ].join('\n');
+  const blob = new Blob([md], {type: 'text/markdown'});
+  const url = URL.createObjectURL(blob);
+  const a2 = document.createElement('a');
+  a2.href = url;
+  a2.download = 'exemple_gpt_' + asin + '_' + date + '.md';
+  a2.click();
+  URL.revokeObjectURL(url);
+}
+
+async function runChallengeGPT(asin, market) {
+  const c = cl(); if (!c) return;
+  const a = c.asins.find(x => x.asin === asin);
+  if (!a) return;
+  const seoR = seoResults[asin] && seoResults[asin][market];
+  if (!seoR) { alert('Générez d\'abord la fiche SEO avant de challenger.'); return; }
+  if (!a.ficheGPT) { alert('Collez la sortie GPT avant d\'analyser.'); return; }
+
+  challengeLoading = asin;
+  render();
+
+  const prompt = 'Tu es un expert Amazon SEO. Compare objectivement ces deux fiches produit.\n\n'
+    + '=== FICHE CLAUDE ===\n'
+    + 'TITRE: ' + (seoR.titre || '') + '\n'
+    + 'BULLET_1: ' + (seoR.bullets?.[0] || '') + '\n'
+    + 'BULLET_2: ' + (seoR.bullets?.[1] || '') + '\n'
+    + 'BULLET_3: ' + (seoR.bullets?.[2] || '') + '\n'
+    + 'BULLET_4: ' + (seoR.bullets?.[3] || '') + '\n'
+    + 'BULLET_5: ' + (seoR.bullets?.[4] || '') + '\n'
+    + 'DESCRIPTION: ' + (seoR.description || '') + '\n'
+    + 'BACKEND_KEYWORDS: ' + (seoR.backendKW || '') + '\n\n'
+    + '=== FICHE GPT ===\n'
+    + a.ficheGPT + '\n\n'
+    + 'Pour chaque champ (titre, bullet 1-5, description, backend keywords), réponds EXACTEMENT dans ce format :\n\n'
+    + 'VERDICT_TITRE: [Claude|GPT|Égalité] — [raison en une phrase]\n'
+    + 'FUSION_TITRE: [meilleure version du titre]\n'
+    + 'VERDICT_B1: [Claude|GPT|Égalité] — [raison]\n'
+    + 'FUSION_B1: [meilleur bullet 1]\n'
+    + 'VERDICT_B2: [Claude|GPT|Égalité] — [raison]\n'
+    + 'FUSION_B2: [meilleur bullet 2]\n'
+    + 'VERDICT_B3: [Claude|GPT|Égalité] — [raison]\n'
+    + 'FUSION_B3: [meilleur bullet 3]\n'
+    + 'VERDICT_B4: [Claude|GPT|Égalité] — [raison]\n'
+    + 'FUSION_B4: [meilleur bullet 4]\n'
+    + 'VERDICT_B5: [Claude|GPT|Égalité] — [raison]\n'
+    + 'FUSION_B5: [meilleur bullet 5]\n'
+    + 'VERDICT_DESC: [Claude|GPT|Égalité] — [raison]\n'
+    + 'FUSION_DESC: [meilleure description HTML]\n'
+    + 'VERDICT_BACKEND: [Claude|GPT|Égalité] — [raison]\n'
+    + 'FUSION_BACKEND: [meilleurs backend keywords]\n'
+    + 'AUTOCRITIQUE_CLAUDE: [ce que Claude doit améliorer — 2-3 points concrets]\n'
+    + 'SCORE_CLAUDE: [X/10]\n'
+    + 'SCORE_GPT: [X/10]';
+
+  try {
+    const result = await callAPI('', prompt);
+    const ch = parseChallengeResponse(result);
+    if (!a.ficheChallenge) a.ficheChallenge = {};
+    a.ficheChallenge[market] = ch;
+    save();
+  } catch(e) {
+    console.error('Challenge error:', e);
+  }
+  challengeLoading = null;
+  render();
+}
+
+function parseChallengeResponse(text) {
+  const lines = text.split('\n');
+  const result = {};
+  let currentKey = null;
+  let currentVal = [];
+  const KEYS = [
+    'VERDICT_TITRE','FUSION_TITRE',
+    'VERDICT_B1','FUSION_B1','VERDICT_B2','FUSION_B2',
+    'VERDICT_B3','FUSION_B3','VERDICT_B4','FUSION_B4',
+    'VERDICT_B5','FUSION_B5',
+    'VERDICT_DESC','FUSION_DESC',
+    'VERDICT_BACKEND','FUSION_BACKEND',
+    'AUTOCRITIQUE_CLAUDE','SCORE_CLAUDE','SCORE_GPT'
+  ];
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\r$/, ''); // strip CRLF résiduel
+    const match = line.match(/^([A-Z_0-9]+):\s*(.*)/);
+    if (match && KEYS.includes(match[1])) {
+      if (currentKey) result[currentKey] = currentVal.join('\n').replace(/\*\*/g,'').trim();
+      currentKey = match[1];
+      currentVal = [match[2]];
+    } else if (currentKey) {
+      currentVal.push(line);
+    }
+  }
+  if (currentKey) result[currentKey] = currentVal.join('\n').replace(/\*\*/g,'').trim();
+  const g = (k) => result[k] || '';
+  return {
+    verdictTitre:   g('VERDICT_TITRE'),
+    fusionTitre:    g('FUSION_TITRE'),
+    verdictB1:      g('VERDICT_B1'),
+    fusionB1:       g('FUSION_B1'),
+    verdictB2:      g('VERDICT_B2'),
+    fusionB2:       g('FUSION_B2'),
+    verdictB3:      g('VERDICT_B3'),
+    fusionB3:       g('FUSION_B3'),
+    verdictB4:      g('VERDICT_B4'),
+    fusionB4:       g('FUSION_B4'),
+    verdictB5:      g('VERDICT_B5'),
+    fusionB5:       g('FUSION_B5'),
+    verdictDesc:    g('VERDICT_DESC'),
+    fusionDesc:     g('FUSION_DESC'),
+    verdictBackend: g('VERDICT_BACKEND'),
+    fusionBackend:  g('FUSION_BACKEND'),
+    autocritique:   g('AUTOCRITIQUE_CLAUDE'),
+    scoreClaude:    g('SCORE_CLAUDE'),
+    scoreGPT:       g('SCORE_GPT'),
+    titreFusion:    g('FUSION_TITRE'),
+    bulletsFusion:  [g('FUSION_B1'), g('FUSION_B2'), g('FUSION_B3'), g('FUSION_B4'), g('FUSION_B5')],
+    verdict: [
+      'Titre: '       + g('VERDICT_TITRE'),
+      'B1: '          + g('VERDICT_B1'),
+      'B2: '          + g('VERDICT_B2'),
+      'B3: '          + g('VERDICT_B3'),
+      'B4: '          + g('VERDICT_B4'),
+      'B5: '          + g('VERDICT_B5'),
+      'Description: ' + g('VERDICT_DESC'),
+      'Backend: '     + g('VERDICT_BACKEND'),
+    ].join('\n'),
+  };
+}
+
+function updateFusionField(asin, market, key, val) {
+  const c = cl(); if (!c) return;
+  const a = c.asins.find(x => x.asin === asin);
+  if (a && a.ficheChallenge && a.ficheChallenge[market]) {
+    a.ficheChallenge[market][key] = val;
+    save();
+  }
+}
+
+function copyFicheFusion(asin, market) {
+  const c = cl(); if (!c) return;
+  const a = c.asins.find(x => x.asin === asin);
+  if (!a || !a.ficheChallenge || !a.ficheChallenge[market]) return;
+  const ch = a.ficheChallenge[market];
+  const text = [
+    'TITRE: ' + (ch.fusionTitre || ''),
+    'BULLET_1: ' + (ch.fusionB1 || ''),
+    'BULLET_2: ' + (ch.fusionB2 || ''),
+    'BULLET_3: ' + (ch.fusionB3 || ''),
+    'BULLET_4: ' + (ch.fusionB4 || ''),
+    'BULLET_5: ' + (ch.fusionB5 || ''),
+    'DESCRIPTION: ' + (ch.fusionDesc || ''),
+    'BACKEND_KEYWORDS: ' + (ch.fusionBackend || ''),
+  ].join('\n\n');
+  navigator.clipboard.writeText(text).catch(() => {
+    document.execCommand('copy');
+  });
+}
+
+// applyFusionAndPublish supprimé — remplacé par wizardSaveAndPublish (v3.4.29)
+
+// Utilitaire maintenance — purge les ficheChallenge corrompues (parsées avec l'ancien parser regex)
+// Appeler UNE SEULE FOIS depuis la console preprod après déploiement v3.4.34
+function clearAllFicheChallenge() {
+  const c = cl(); if (!c) return;
+  if (!c.asins || c.asins.length === 0) { console.error('[CLEAR] asins vide — abandon'); return; }
+  let count = 0;
+  c.asins.forEach(a => {
+    if (a.ficheChallenge) { delete a.ficheChallenge; count++; }
+  });
+  saveClientSafe(c);
+  console.log('[CLEAR] ficheChallenge supprimé sur', count, 'ASINs');
+}
+
 const fmt = n => (n || 0).toLocaleString('fr-FR');
 const fmtEur = n => fmt(Math.round(n || 0)) + ' €';
 function esc(s) {
@@ -2138,6 +2536,89 @@ function shortName(a) {
   const dash = t.indexOf(' - ');
   if (dash > 10 && dash < 50) t = t.slice(0, dash);
   return t.slice(0, 45) + (t.length > 45 ? '…' : '');
+}
+
+function consolidateAsins(asins, client) {
+  // Consolide les entrées multi-marchés en une seule ligne par ASIN physique
+  // Utilisé uniquement pour l'affichage quand filtre marché = "Tous"
+  // NE MODIFIE PAS client.asins — retourne une vue temporaire
+  var byAsin = {};
+  for (var i = 0; i < asins.length; i++) {
+    var a = asins[i];
+    if (!a.asin) continue;
+    if (!byAsin[a.asin]) {
+      byAsin[a.asin] = {
+        asin: a.asin,
+        title: a.title || '',
+        titleOriginal: a.titleOriginal || '',
+        brand: a.brand || '',
+        ean: a.ean || '',
+        model: a.model || '',
+        revenue: 0,
+        orderedRevenue: 0,
+        shippedRevenue: 0,
+        units: 0,
+        orderedUnits: 0,
+        shippedUnits: 0,
+        glanceViews: 0,
+        sellableUnits: 0,
+        returns: 0,
+        markets: [],
+        marketDetails: {},
+        market: '.all',
+        history: [],
+        historyMonthly: [],
+        revenueDelta: null,
+        retailPct: null,
+        segment: null,
+        _consolidated: true
+      };
+    }
+    var co = byAsin[a.asin];
+    var mkt = a.market || '.fr';
+
+    // Accumuler les numériques
+    co.revenue += (a.revenue || 0);
+    co.orderedRevenue += (a.orderedRevenue || 0);
+    co.shippedRevenue += (a.shippedRevenue || 0);
+    co.units += (a.units || 0);
+    co.orderedUnits += (a.orderedUnits || 0);
+    co.shippedUnits += (a.shippedUnits || 0);
+    co.glanceViews += (a.glanceViews || 0);
+    co.sellableUnits += (a.sellableUnits || 0);
+    co.returns += (a.returns || 0);
+
+    // Tracker les marchés
+    if (co.markets.indexOf(mkt) === -1) co.markets.push(mkt);
+
+    // Détail par marché
+    co.marketDetails[mkt] = {
+      revenue: a.revenue || 0,
+      orderedRevenue: a.orderedRevenue || 0,
+      shippedRevenue: a.shippedRevenue || 0,
+      units: a.units || 0,
+      glanceViews: a.glanceViews || 0,
+      sellableUnits: a.sellableUnits || 0,
+      returns: a.returns || 0,
+      revenueDelta: a.revenueDelta || null,
+      retailPct: a.retailPct || null
+    };
+
+    // Préférer le titre FR
+    if (mkt === '.fr' && a.title) co.title = a.title;
+
+    // Agréger les deltas (moyenne pondérée)
+    if (a.revenueDelta != null && a.revenue > 0) {
+      if (co.revenueDelta == null) co.revenueDelta = 0;
+      co.revenueDelta += a.revenueDelta * (a.revenue / (co.revenue || 1));
+    }
+  }
+
+  var result = [];
+  for (var asin in byAsin) {
+    if (byAsin.hasOwnProperty(asin)) result.push(byAsin[asin]);
+  }
+  return result;
 }
 
 function getMainKeyword(a) {
@@ -2249,7 +2730,8 @@ function renderContent() {
     pompier: renderPompier, buybox: renderBuyBox, config: renderConfig, weekly: renderWeeklyReview,
     appros: renderAppros, forecast: renderApprosForecast, agent: renderAgent, potentiel: renderPotentiel,
     seo: renderSEOScreen,
-    agentvc: renderAgentVC
+    agentvc: renderAgentVC,
+    optimisationWizard: renderOptimisationWizard
   };
   try {
     el.innerHTML = (map[screen] || renderWelcome)();
@@ -2337,7 +2819,108 @@ function renderOnboarding() {
       h += `<label class="mk-cb"><input type="checkbox" ${nc.markets.includes(m) ? 'checked' : ''} onchange="toggleMarket('${m}',this.checked)"/>${m}</label>`;
     });
     h += `</div></div></div>`;
+    // ── Section Marques (dans étape 1 Config Amazon) ──
+    h += `<div style="margin-top:16px;border-top:1px solid var(--bd);padding-top:14px">`;
+    h += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">`;
+    h += `<div style="font-weight:600;font-size:13px">🏷️ Marques du client</div>`;
+    h += `<button class="btn btn-sm" onclick="wizAddBrand()">+ Ajouter</button>`;
+    h += `</div>`;
+    var wizBrands = nc.brands || [];
+    if (!wizBrands.length) {
+      h += `<div style="font-size:12px;color:var(--tx3);padding:6px 0">Aucune marque — nécessaire pour la fusion Fab/Appro des imports CSV.</div>`;
+    } else {
+      for (var bi = 0; bi < wizBrands.length; bi++) {
+        var wb = wizBrands[bi];
+        var wbFab = wb.role === 'fabricant';
+        h += `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--s2);border-radius:var(--rd);margin-bottom:4px">`;
+        h += `<span style="flex:1;font-weight:500;font-size:13px">${esc(wb.name)}</span>`;
+        h += `<button class="tog-b btn-sm ${wbFab ? 'sel-ok' : ''}" onclick="wizSetBrandRole(${bi},'fabricant')">🏭 Fabricant</button>`;
+        h += `<button class="tog-b btn-sm ${!wbFab ? 'sel-no' : ''}" onclick="wizSetBrandRole(${bi},'revendeur')">🏪 Revendeur</button>`;
+        h += `<button class="btn btn-sm btn-r" onclick="wizRemoveBrand(${bi})">✕</button>`;
+        h += `</div>`;
+      }
+    }
+    h += `</div>`;
   } else if (wizStep === 2) {
+    // ── Étape 3 : Comptes VC & Catalogue ──
+    h += `<h3 style="font-size:15px;font-weight:700;margin-bottom:14px">Comptes Vendor Central & Catalogue</h3>`;
+
+    // ── Section A : CRUD Comptes VC ──
+    h += `<div class="cd" style="margin-bottom:16px">`;
+    h += `<div class="cd-t space"><span>Comptes Vendor Central</span>`;
+    var totalAccts = nc.accounts ? nc.accounts.length : 0;
+    var totalMkts  = nc.accounts ? new Set(nc.accounts.map(function(a){return a.market;})).size : 0;
+    var totalBO    = nc.accounts ? nc.accounts.filter(function(a){return a.role==='BO';}).length : 0;
+    var totalCat   = nc.accounts ? nc.accounts.filter(function(a){return a.role==='catalogue';}).length : 0;
+    if (totalAccts > 0) h += `<span style="font-size:11px;color:var(--tx2)">${totalAccts} comptes · ${totalMkts} marchés · ${totalBO} BO · ${totalCat} catalogue</span>`;
+    h += `</div>`;
+    h += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:12px">`;
+    h += `<div><label class="fg-lb">Marché</label><select id="newAcctMarket" class="fg-in">${marketOptionsHTML('.fr')}</select></div>`;
+    h += `<div><label class="fg-lb">Vendor Code</label><input id="newAcctVC" class="fg-in" placeholder="Ex: GERA3" style="text-transform:uppercase"/></div>`;
+    h += `<div><label class="fg-lb">Rôle</label><select id="newAcctRole" class="fg-in"><option value="BO">Bon de Commande</option><option value="catalogue">Fournisseur catalogue</option></select></div>`;
+    h += `<div><label class="fg-lb">Label (optionnel)</label><input id="newAcctLabel" class="fg-in" placeholder="Ex: Principal FR"/></div>`;
+    h += `<div><button class="btn btn-p" style="padding:6px 12px" onclick="wizAddAccount()">+ Ajouter</button></div>`;
+    h += `</div>`;
+    if (nc.accounts && nc.accounts.length > 0) {
+      h += `<table style="width:100%;border-collapse:collapse;font-size:12px">`;
+      h += `<thead><tr style="background:var(--s2)">`;
+      h += `<th style="padding:6px 8px;text-align:left">Marché</th><th style="padding:6px 8px;text-align:left">Vendor Code</th>`;
+      h += `<th style="padding:6px 8px;text-align:left">Rôle</th><th style="padding:6px 8px;text-align:left">Label</th><th></th>`;
+      h += `</tr></thead><tbody>`;
+      for (var ai = 0; ai < nc.accounts.length; ai++) {
+        var acc = nc.accounts[ai];
+        var mobj = MARKETPLACES_FULL.find(function(m){return m.market===acc.market;});
+        var mLabel = mobj ? mobj.flag + ' ' + mobj.name : acc.market;
+        h += `<tr style="border-bottom:1px solid var(--bd2)">`;
+        h += `<td style="padding:6px 8px">${mLabel}</td>`;
+        h += `<td style="padding:6px 8px;font-weight:600">${esc(acc.vendorCode)}</td>`;
+        h += `<td style="padding:6px 8px"><span style="padding:2px 8px;border-radius:20px;font-size:11px;background:${acc.role==='BO'?'var(--b-bg)':'var(--s2)'};color:${acc.role==='BO'?'var(--b)':'var(--tx2)'}">${acc.role==='BO'?'Bon de Commande':'Catalogue'}</span></td>`;
+        h += `<td style="padding:6px 8px;color:var(--tx2)">${esc(acc.label||'')}</td>`;
+        h += `<td style="padding:6px 8px"><button class="btn" style="padding:3px 8px;font-size:11px" onclick="wizRemoveAccount('${esc(acc.id)}')">✕</button></td>`;
+        h += `</tr>`;
+      }
+      h += `</tbody></table>`;
+    }
+    h += `</div>`;
+
+    // ── Section B : Import Matrice Tarifaire XML ──
+    h += `<div class="cd">`;
+    h += `<div class="cd-t space"><span>Matrice Tarifaire XML <span style="font-size:11px;color:var(--r,#b42)">obligatoire</span></span>`;
+    if (nc.catalogueXML && nc.catalogueXML.length > 0 && nc.xmlSummary) {
+      h += `<span style="font-size:11px;color:var(--g,#3b6d11)">✓ ${nc.xmlSummary.totalASINs} ASINs importés</span>`;
+    }
+    h += `</div>`;
+    if (!nc.catalogueXML || nc.catalogueXML.length === 0) {
+      h += `<div class="import-zone" style="padding:20px;margin-bottom:10px" onclick="document.getElementById('wiz-xml-input').click()">`;
+      h += `<div style="font-size:24px;margin-bottom:6px">📄</div>`;
+      h += `<p style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:2px">Déposez la Matrice Tarifaire XML</p>`;
+      h += `<p style="font-size:11px;color:var(--tx3)">Format XML Spreadsheet 2003 — onglet "Cost" requis</p>`;
+      h += `<input type="file" id="wiz-xml-input" accept=".xml" style="display:none" onchange="wizHandleXML(this)"/>`;
+      h += `</div>`;
+    } else {
+      var xs = nc.xmlSummary;
+      h += `<div style="padding:10px 14px;background:var(--g-bg,#eaf6e0);border:1px solid var(--g-bd,#b7dfa0);border-radius:var(--rd);margin-bottom:10px">`;
+      h += `<strong>${xs.totalASINs} ASINs</strong> · ${xs.totalLines} lignes`;
+      if (xs.vendorCodes) {
+        var vcKeys = Object.keys(xs.vendorCodes);
+        if (vcKeys.length) h += ` · VC : ` + vcKeys.map(function(k){return k + ' (' + xs.vendorCodes[k] + ')';}).join(', ');
+      }
+      h += `</div>`;
+      h += `<button class="btn" style="font-size:12px" onclick="document.getElementById('wiz-xml-reinput').click()">🔄 Réimporter</button>`;
+      h += `<input type="file" id="wiz-xml-reinput" accept=".xml" style="display:none" onchange="wizHandleXML(this)"/>`;
+    }
+    h += `</div>`;
+
+    // Message de validation
+    var canNext2 = nc.accounts && nc.accounts.length > 0 && nc.catalogueXML && nc.catalogueXML.length > 0;
+    if (!canNext2) {
+      h += `<div id="wiz-step2-err" class="alr alr-a" style="margin-top:10px">`;
+      if (!nc.accounts || nc.accounts.length === 0) h += `⚠️ Ajoutez au moins un compte Vendor Central.<br>`;
+      if (!nc.catalogueXML || nc.catalogueXML.length === 0) h += `⚠️ Importez la matrice tarifaire XML.`;
+      h += `</div>`;
+    }
+
+  } else if (wizStep === 3) {
     h += `<h3 style="font-size:15px;font-weight:700;margin-bottom:14px">Contraintes internes</h3>`;
     h += `<div class="alr alr-a" style="margin-bottom:16px">Ces contraintes filtrent les recommandations IA — un levier interdit ne sera jamais proposé.</div>`;
     h += `<div class="fg2">`;
@@ -2352,7 +2935,7 @@ function renderOnboarding() {
     h += fgSel('Born to Run', nc.btr, ['Autorisé', 'Conditionnel', 'Interdit'], "newClient.btr=this.value");
     h += fgEl('Budget Ads mensuel', nc.budget, "newClient.budget=this.value", '5 000 € ou 8% du CA');
     h += `</div>`;
-  } else if (wizStep === 3) {
+  } else if (wizStep === 4) {
     // ── Étape Historique avec zone de dépôt intégrée ──
     const currentY = new Date().getFullYear();
     const prevY = currentY - 1;
@@ -2443,7 +3026,7 @@ function renderOnboarding() {
       💡 <span>Dans Vendor Central : <strong>Analytiques → Tableau de bord</strong> → sélectionnez la période → Exporter CSV</span>
     </div>`;
 
-  } else if (wizStep === 4) {
+  } else if (wizStep === 5) {
     // ── Récapitulatif ──
     h += `<h3 style="font-size:15px;font-weight:700;margin-bottom:14px">Récapitulatif — ${esc(nc.name)}</h3>`;
     h += `<div class="rec-grid">`;
@@ -2459,8 +3042,10 @@ function renderOnboarding() {
 
   h += `<div style="display:flex;justify-content:space-between;margin-top:20px">`;
   h += `<button class="btn" onclick="${wizStep > 0 ? 'wizGo('+(wizStep-1)+')' : 'go(clients.length?\'dashboard\':\'welcome\')'}"> ${wizStep > 0 ? '← Précédent' : 'Annuler'}</button>`;
-  if (wizStep < 4) h += `<button class="btn btn-p" onclick="wizNext()">Suivant →</button>`;
-  else h += `<button class="btn btn-g" onclick="finishOnboarding()">Créer & importer →</button>`;
+  if (wizStep < 5) {
+    var canProceed = !(wizStep === 2 && (!(nc.accounts && nc.accounts.length > 0) || !(nc.catalogueXML && nc.catalogueXML.length > 0)));
+    h += `<button class="btn btn-p" onclick="wizNext()" ${canProceed ? '' : 'disabled style="opacity:0.45;cursor:not-allowed"'}>Suivant →</button>`;
+  } else h += `<button class="btn btn-g" onclick="finishOnboarding()">Créer & importer →</button>`;
   h += `</div></div></div>`;
   return h;
 }
@@ -2652,32 +3237,6 @@ function renderImport() {
   h += `</div>`;
 
   // ══════════════════════════════════════════════════════
-  // ÉTAPE 1.5 — Purchase Orders
-  // ═════════════════════════════════════════════════════
-  {
-    const poImportDate = c.poImportDate ? new Date(c.poImportDate).toLocaleDateString('fr-FR') : null;
-    const poCount = c.poData ? Object.keys(c.poData).length : 0;
-    const poLowFill = c.poData ? Object.values(c.poData).filter(d => d.fillRate < 80).length : 0;
-    h += `<div class="cd" style="margin-top:12px">
-      <div class="cd-t space">
-        <span>1.5 — Purchase Orders <span style="font-size:10px;color:var(--tx3);font-weight:400">optionnel</span></span>
-        ${poImportDate ? `<span style="font-size:11px;color:var(--g,#3b6d11)">✓ Importé le ${poImportDate} · ${poCount} ASINs · ${poLowFill} fill rate < 80%</span>` : ''}
-      </div>
-      <p style="font-size:12px;color:var(--tx2);margin-bottom:10px">Fichier POItemExport depuis VC → Commandes. Calcule le fill rate réel et détecte les fins de série.</p>
-      <div id="po-drop-zone" class="import-zone" style="cursor:pointer" onclick="document.getElementById('po-file-input').click()">
-        <p style="font-size:13px;font-weight:600;margin-bottom:4px">${poImportDate ? 'Remplacer le fichier PO' : 'Déposez le fichier PO'}</p>
-        <p style="font-size:10px;color:var(--tx3)">POItemExport_YYYY-MM-DD.csv — export Vendor Central</p>
-        <input type="file" id="po-file-input" accept=".csv" style="display:none" onchange="handlePOImport(this.files)">
-      </div>
-      <div style="margin-top:10px;padding:8px 12px;background:var(--b-l,#e6f1fb);border-radius:var(--rd);display:flex;align-items:center;gap:10px">
-        <span style="font-size:16px">&#128203;</span>
-        <div style="flex:1;font-size:11px"><strong>Guide ASN / BOL / Carrier Central</strong><br><span style="color:var(--tx2)">Comprendre les écarts de réception et piloter ton transporteur</span></div>
-        <button class="btn btn-p" style="font-size:11px;padding:5px 10px;flex-shrink:0" onclick="downloadGuideASN()">&#8595; Télécharger PDF</button>
-      </div>
-    </div>`;
-  }
-
-  // ══════════════════════════════════════════════════════
   // ÉTAPE 2 — Données hebdomadaires
   // ══════════════════════════════════════════════════════
   const hasV  = !!pendingFiles.ventes;
@@ -2783,9 +3342,26 @@ function renderImport() {
   const lastPODate = lastPO?.importedAt ? new Date(lastPO.importedAt).toLocaleDateString('fr-FR') : null;
   const _poMkt     = c.mainMarket || '.fr';
 
-  h += '<div class="cd">';
+  h += '<div class="cd" id="po-section-3">';
   h += '<div class="cd-t space"><span>3 — Bons de commande <span style="font-size:10px;font-weight:400;color:var(--tx3)">(confirmés — mise à jour libre)</span></span>' + (posLoaded ? '<span class="pill pill-g">✓ Chargés</span>' : '<span class="pill pill-gr">Non chargé</span>') + '</div>';
   h += '<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Export XLS/CSV depuis Vendor Central → Gérer les bons de commande → Confirmés.</p>';
+
+  // ── Comptes BO attendus (si c.accounts renseigné) ──
+  var boAccts = (c.accounts || []).filter(function(a) { return a.role === 'BO'; });
+  if (boAccts.length > 0) {
+    h += '<div style="padding:10px 14px;background:var(--b-bg,#e8f0fb);border:1px solid var(--b-bd,#b0c8f0);border-radius:var(--rdl);margin-bottom:12px;font-size:12px">';
+    h += '<div style="font-weight:600;margin-bottom:4px">📦 Comptes Bon de Commande — ' + boAccts.length + ' PO attendus</div>';
+    h += '<div style="color:var(--tx2)">';
+    var boLabels = [];
+    for (var bai = 0; bai < boAccts.length; bai++) {
+      var ba = boAccts[bai];
+      var bamp = MARKETPLACES_FULL.find(function(m) { return m.market === ba.market; });
+      var baflag = bamp ? bamp.flag : '';
+      boLabels.push(baflag + ' ' + ba.vendorCode + ' (' + ba.market.replace('.', '').toUpperCase() + ')');
+    }
+    h += boLabels.join(' · ');
+    h += '</div></div>';
+  }
 
   if (posLoaded) {
     h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">';
@@ -2797,6 +3373,26 @@ function renderImport() {
         + '</div>';
     });
     h += '</div>';
+    // ── Bilan VCs trouvés vs attendus ──
+    if (boAccts.length > 0) {
+      var vcInPos = {};
+      for (var pi = 0; pi < (c.pos||[]).length; pi++) {
+        var pvc = (c.pos[pi].vendorCode || '').trim();
+        if (pvc) vcInPos[pvc] = (vcInPos[pvc] || 0) + 1;
+      }
+      h += '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px">';
+      for (var bci = 0; bci < boAccts.length; bci++) {
+        var bca = boAccts[bci];
+        var bcFound = !!vcInPos[bca.vendorCode];
+        var bcLines = vcInPos[bca.vendorCode] || 0;
+        var bcFlag = (MARKETPLACES_FULL.find(function(m){return m.market===bca.market;})||{}).flag||'';
+        h += '<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:5px 10px;background:' + (bcFound?'var(--g-bg)':'var(--a-bg,#fff8e1)') + ';border-radius:var(--rd);border:1px solid ' + (bcFound?'var(--g-bd)':'var(--a-bd,#f0c040)') + '">';
+        h += (bcFound ? '✅' : '⚠️') + ' <strong>' + bcFlag + ' ' + bca.vendorCode + '</strong>';
+        h += bcFound ? ' — ' + bcLines + ' lignes' : ' — non importé (fichier manquant ?)';
+        h += '</div>';
+      }
+      h += '</div>';
+    }
   }
   h += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
   h += '<label class="btn btn-sm" style="cursor:pointer">📁 ' + (posLoaded?'Recharger les POs':'Charger les POs (XLS/CSV)') + '<input type="file" accept=".xls,.xlsx,.csv,.txt" multiple onchange="handlePOFile(this)" style="display:none"/></label>';
@@ -3370,12 +3966,15 @@ function renderDashboard() {
   h += `</div>`;
 
   const asins = getFilteredAsins(c);
-  const totalCA = asins.reduce((s, a) => s + (getRevenue(a,c)||0), 0);
-  const totalUnits = asins.reduce((s, a) => s + (getUnits(a,c)||0), 0);
-  const totalGV = asins.reduce((s, a) => s + (a.glanceViews || 0), 0);
-  const totalStock = asins.reduce((s, a) => s + (a.sellableUnits || 0), 0);
-  const lowStockN = asins.filter(a => a.sellableUnits > 0 && a.sellableUnits < 50 && (getRevenue(a,c)||0) > 50).length;
-  const declineN = asins.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) < -10).length;
+  // Consolidation multi-marchés quand filtre = "Tous"
+  var dashAsins = (filters.market === 'all' && c.markets && c.markets.length > 1) ? consolidateAsins(asins, c) : asins;
+
+  const totalCA = dashAsins.reduce((s, a) => s + (getRevenue(a,c)||0), 0);
+  const totalUnits = dashAsins.reduce((s, a) => s + (getUnits(a,c)||0), 0);
+  const totalGV = dashAsins.reduce((s, a) => s + (a.glanceViews || 0), 0);
+  const totalStock = dashAsins.reduce((s, a) => s + (a.sellableUnits || 0), 0);
+  const lowStockN = dashAsins.filter(a => a.sellableUnits > 0 && a.sellableUnits < 50 && (getRevenue(a,c)||0) > 50).length;
+  const declineN = dashAsins.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) < -10).length;
 
   // Période des données courantes
   const dashImport = c.imports?.filter(i=>i.type==='ventes'&&(i.periodType==='weekly'||!i.periodType)).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
@@ -3386,7 +3985,7 @@ function renderDashboard() {
   h += `<div class="kpi"><div class="kpi-lb">CA ${kpiMode === 'shipped' ? 'Expédié' : 'Commandé'}</div><div class="kpi-v">${fmtEur(totalCA)}</div>${dashPeriodTag}</div>`;
   h += `<div class="kpi"><div class="kpi-lb">Unités</div><div class="kpi-v">${fmt(totalUnits)}</div>${dashPeriodTag}</div>`;
   h += `<div class="kpi"><div class="kpi-lb">Glance Views</div><div class="kpi-v">${fmt(totalGV)}</div>${dashPeriodTag}</div>`;
-  h += `<div class="kpi"><div class="kpi-lb">ASINs</div><div class="kpi-v">${asins.length}</div></div>`;
+  h += `<div class="kpi"><div class="kpi-lb">ASINs</div><div class="kpi-v">${dashAsins.length}</div></div>`;
   h += `<div class="kpi"><div class="kpi-lb">Stock</div><div class="kpi-v">${fmt(totalStock)}u</div>${dashPeriodTag}</div>`;
   h += `<div class="kpi${declineN>0?' al':''}"><div class="kpi-lb">CA en baisse</div><div class="kpi-v">${declineN}</div>${dashPeriodTag}</div>`;
   h += `<div class="kpi${lowStockN>0?' warn':''}"><div class="kpi-lb">Stock faible</div><div class="kpi-v">${lowStockN}</div></div>`;
@@ -3426,10 +4025,10 @@ function renderDashboard() {
 
   const searchActive = asinSearch && asinSearch.trim();
   const exportLabel = searchActive
-    ? `⬇ Export (${asins.length} sélectionnés)`
+    ? `⬇ Export (${dashAsins.length} sélectionnés)`
     : `⬇ Export CSV`;
   h += `<div class="cd"><div class="cd-t space">
-    <span>📦 ASINs ${searchActive ? '<span style="color:var(--or);font-size:11px">— ' + asins.length + ' résultat' + (asins.length>1?'s':'') + ' pour \"' + esc(asinSearch) + '\"</span>' : '(' + asins.length + ')'}</span>
+    <span>📦 ASINs ${searchActive ? '<span style="color:var(--or);font-size:11px">— ' + dashAsins.length + ' résultat' + (dashAsins.length>1?'s':'') + ' pour \"' + esc(asinSearch) + '\"</span>' : '(' + dashAsins.length + ')'}</span>
     <button class="btn btn-sm" onclick="exportAsinsCsv()">${exportLabel} CSV</button><button class="btn btn-sm" onclick="exportAsinsXlsx()" style="margin-left:4px">⬇ XLSX</button>
   </div>`;
   // Période courante détectée
@@ -3443,17 +4042,26 @@ function renderDashboard() {
     <th class="r">CA</th><th class="r">Δ</th><th>Tendance</th><th class="r">GV</th><th class="r">Stock</th><th></th>
   </tr></thead><tbody>`;
 
-  asins.sort((a,b) => (getRevenue(b,c)||0)-(getRevenue(a,c)||0)).slice(0, 50).forEach(a => {
+  dashAsins.sort((a,b) => (getRevenue(b,c)||0)-(getRevenue(a,c)||0)).slice(0, 50).forEach(a => {
     const health = calcHealth(a);
     const hCls = healthClass(health);
     const seg = calcSegment(a, totalCA, c);
     const isLow = a.sellableUnits > 0 && a.sellableUnits < 50;
     const isDec = (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) < -10;
     const rc = isDec ? 'al-row' : isLow ? 'warn-row' : '';
+    var marketsFlags = '';
+    if (a._consolidated && a.markets && a.markets.length > 1) {
+      marketsFlags = ' <span style="font-size:10px;opacity:0.7">';
+      for (var mi = 0; mi < a.markets.length; mi++) {
+        var mpf = MARKETPLACES_FULL.find(function(x) { return x.market === a.markets[mi]; });
+        if (mpf) marketsFlags += mpf.flag;
+      }
+      marketsFlags += '</span>';
+    }
     h += `<tr class="${rc}">
       <td><div class="hs hs-sm ${hCls}">${health}</div></td>
       <td style="max-width:220px">
-        <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(a.title)}">${esc(shortName(a))}</div>
+        <div style="font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(a.title)}">${esc(shortName(a))}${marketsFlags}</div>
         <div class="mono" style="font-size:10px;color:var(--tx3)">${a.asin}</div>
       </td>
       <td>${segBadge(seg)}</td>
@@ -3473,7 +4081,7 @@ function renderDashboard() {
     </tr>`;
   });
   h += `</tbody></table></div>`;
-  if (asins.length > 50) h += `<p style="font-size:10px;color:var(--tx3);margin-top:6px">50 premiers sur ${asins.length}</p>`;
+  if (dashAsins.length > 50) h += `<p style="font-size:10px;color:var(--tx3);margin-top:6px">50 premiers sur ${dashAsins.length}</p>`;
   h += `</div>`;
   return h;
 }
@@ -3883,8 +4491,10 @@ function renderAsins() {
   const c = cl();
   if (!c?.asins?.length) return `<div class="alr alr-a">Importez d'abord des données CSV.</div>`;
   const asins = getFilteredAsins(c);
-  const totalCA = asins.reduce((s, a) => s + (getRevenue(a,c)||0), 0);
-  const withRevenue = asins.filter(a => (getRevenue(a,c)||0) > 0);
+  // Consolidation multi-marchés quand filtre = "Tous"
+  var displayAsins = (filters.market === 'all' && c.markets && c.markets.length > 1) ? consolidateAsins(asins, c) : asins;
+  const totalCA = displayAsins.reduce((s, a) => s + (getRevenue(a,c)||0), 0);
+  const withRevenue = displayAsins.filter(a => (getRevenue(a,c)||0) > 0);
   let h = '';
 
   if (!selectedAsin) {
@@ -4009,7 +4619,7 @@ function renderAsins() {
           <option value="C"${filters.segment==='C'?' selected':''}>🥉 C</option>
         </select>
       </div>
-      <span style="color:var(--tx3);font-size:11px;margin-left:auto">${withRevenue.length} ASINs avec CA / ${asins.length} total</span>
+      <span style="color:var(--tx3);font-size:11px;margin-left:auto">${withRevenue.length} ASINs avec CA / ${displayAsins.length} total</span>
       <button class="btn btn-sm" onclick="exportAsinsCsv()">⬇ CSV</button><button class="btn btn-sm" onclick="exportAsinsXlsx()" style="margin-left:4px">⬇ XLSX</button>
     </div>`;
 
@@ -4071,12 +4681,21 @@ function renderAsins() {
       const isDec = delta < -10;
       const rc = isDec ? 'al-row' : isLow ? 'warn-row' : '';
       const rank = visible.indexOf(a) + 1;
+      var asinRowFlags = '';
+      if (a._consolidated && a.markets && a.markets.length > 1) {
+        asinRowFlags = ' <span style="font-size:10px;opacity:0.7">';
+        for (var rfi = 0; rfi < a.markets.length; rfi++) {
+          var rfmp = MARKETPLACES_FULL.find(function(x) { return x.market === a.markets[rfi]; });
+          if (rfmp) asinRowFlags += rfmp.flag;
+        }
+        asinRowFlags += '</span>';
+      }
       h += `<tr class="${rc}" style="cursor:pointer" onclick="selectAsin('${esc(a.asin)}')">
         <td style="text-align:center;font-size:11px;font-weight:700;color:var(--tx3)">${rank}</td>
         <td><div class="hs hs-sm ${healthClass(health)}">${health}</div></td>
         <td>
-          <div style="font-weight:500;font-size:12px;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(a.title)}">${esc(shortName(a))}</div>
-          <div style="font-size:10px;color:var(--tx3);font-family:var(--fm)">${a.asin} <span style="margin-left:4px;opacity:.6">${a.market||'.fr'}</span>${a.sourcingOnly ? '<span style="margin-left:4px;font-size:9px;font-weight:700;color:var(--a);background:var(--a-bg);border-radius:3px;padding:1px 4px">Appro</span>' : ''}</div>
+          <div style="font-weight:500;font-size:12px;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(a.title)}">${esc(shortName(a))}${asinRowFlags}</div>
+          <div style="font-size:10px;color:var(--tx3);font-family:var(--fm)">${a.asin} <span style="margin-left:4px;opacity:.6">${a._consolidated ? '🌍' : (a.market||'.fr')}</span>${a.sourcingOnly ? '<span style="margin-left:4px;font-size:9px;font-weight:700;color:var(--a);background:var(--a-bg);border-radius:3px;padding:1px 4px">Appro</span>' : ''}</div>
         </td>
         <td>${segBadge(seg)}</td>
         <td class="r" style="font-weight:600">${fmtEur(getRevenue(a,c)||0)}</td>
@@ -4110,6 +4729,29 @@ function renderAsins() {
     const keyword = getMainKeyword(a);
 
     h += `<button class="btn btn-sm" onclick="selectedAsin=null;render()" style="margin-bottom:14px">← Retour</button>`;
+
+    // ── Encadré récapitulatif multi-marchés ──────────────────────────
+    var allEntries = c.asins.filter(function(x) { return x.asin === selectedAsin; });
+    if (allEntries.length > 1) {
+      var totalRevMkt = 0, totalUnitsMkt = 0;
+      var mktHtml = '';
+      for (var ei = 0; ei < allEntries.length; ei++) {
+        var e = allEntries[ei];
+        var mkt = e.market || '.fr';
+        var mp = MARKETPLACES_FULL.find(function(x) { return x.market === mkt; });
+        var flag = mp ? mp.flag : '';
+        var rev = getRevenue(e, c) || 0;
+        var units = getUnits(e, c) || 0;
+        totalRevMkt += rev;
+        totalUnitsMkt += units;
+        mktHtml += '<span style="margin-right:12px">' + flag + ' ' + mkt.replace('.','').toUpperCase() + ': <b>' + rev.toLocaleString('fr-FR') + '€</b> · ' + units + 'u</span>';
+      }
+      h += '<div style="padding:12px 14px;background:var(--accent-bg);border:1px solid var(--accent-bd);border-radius:var(--rdl);margin-bottom:12px;font-size:12px">';
+      h += '<div style="font-weight:600;margin-bottom:6px">\u{1F30D} Cet ASIN est vendu dans ' + allEntries.length + ' marchés</div>';
+      h += '<div style="margin-bottom:4px;flex-wrap:wrap;display:flex;gap:4px">' + mktHtml + '</div>';
+      h += '<div style="font-weight:600;color:var(--accent)">Total consolidé : ' + totalRevMkt.toLocaleString('fr-FR') + '€ · ' + totalUnitsMkt + ' unités</div>';
+      h += '</div>';
+    }
 
     h += `<div class="cd" style="display:flex;gap:18px;align-items:flex-start">`;
     h += `<div class="hs hs-lg ${healthClass(health)}">${health}</div>`;
@@ -6905,6 +7547,77 @@ function renderFiche() {
   });
   h += `</div></div></div>`;
 
+  // ── Section Comptes Vendor Central ────────────────────────────────
+  var fAccts = c.accounts || [];
+  var fTotalMkts = new Set(fAccts.map(function(a){return a.market;})).size;
+  var fTotalBO   = fAccts.filter(function(a){return a.role==='BO';}).length;
+  var fTotalCat  = fAccts.filter(function(a){return a.role==='catalogue';}).length;
+  h += `<div class="cd"><div class="cd-t space">`;
+  h += `<span>🏢 Comptes Vendor Central</span>`;
+  if (fAccts.length > 0) h += `<span style="font-size:11px;color:var(--tx2)">${fAccts.length} comptes · ${fTotalMkts} marchés · ${fTotalBO} BO · ${fTotalCat} catalogue</span>`;
+  h += `</div>`;
+  h += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:12px">`;
+  h += `<div><label class="fg-lb">Marché</label><select id="newAcctMarket" class="fg-in">${marketOptionsHTML('.fr')}</select></div>`;
+  h += `<div><label class="fg-lb">Vendor Code</label><input id="newAcctVC" class="fg-in" placeholder="Ex: GERA3" style="text-transform:uppercase"/></div>`;
+  h += `<div><label class="fg-lb">Rôle</label><select id="newAcctRole" class="fg-in"><option value="BO">Bon de Commande</option><option value="catalogue">Fournisseur catalogue</option></select></div>`;
+  h += `<div><label class="fg-lb">Label (optionnel)</label><input id="newAcctLabel" class="fg-in" placeholder="Ex: Principal FR"/></div>`;
+  h += `<div><button class="btn btn-p" style="padding:6px 12px" onclick="addClientAccount()">+ Ajouter</button></div>`;
+  h += `</div>`;
+  if (fAccts.length > 0) {
+    h += `<table style="width:100%;border-collapse:collapse;font-size:12px">`;
+    h += `<thead><tr style="background:var(--s2)">`;
+    h += `<th style="padding:6px 8px;text-align:left">Marché</th><th style="padding:6px 8px;text-align:left">Vendor Code</th>`;
+    h += `<th style="padding:6px 8px;text-align:left">Rôle</th><th style="padding:6px 8px;text-align:left">Label</th><th></th>`;
+    h += `</tr></thead><tbody>`;
+    for (var fai = 0; fai < fAccts.length; fai++) {
+      var facc = fAccts[fai];
+      var fmobj = MARKETPLACES_FULL.find(function(m){return m.market===facc.market;});
+      var fmLabel = fmobj ? fmobj.flag + ' ' + fmobj.name : facc.market;
+      h += `<tr style="border-bottom:1px solid var(--bd2)">`;
+      h += `<td style="padding:6px 8px">${fmLabel}</td>`;
+      h += `<td style="padding:6px 8px"><input class="fg-in" style="font-size:12px;padding:3px 6px;font-weight:600" value="${esc(facc.vendorCode)}" onchange="updateClientAccount('${esc(facc.id)}','vendorCode',this.value)"/></td>`;
+      h += `<td style="padding:6px 8px"><select class="fg-in" style="font-size:12px;padding:3px 6px" onchange="updateClientAccount('${esc(facc.id)}','role',this.value)"><option value="BO"${facc.role==='BO'?' selected':''}>Bon de Commande</option><option value="catalogue"${facc.role==='catalogue'?' selected':''}>Catalogue</option></select></td>`;
+      h += `<td style="padding:6px 8px"><input class="fg-in" style="font-size:12px;padding:3px 6px" value="${esc(facc.label||'')}" onchange="updateClientAccount('${esc(facc.id)}','label',this.value)"/></td>`;
+      h += `<td style="padding:6px 8px"><button class="btn btn-sm btn-r" onclick="removeClientAccount('${esc(facc.id)}')">✕</button></td>`;
+      h += `</tr>`;
+    }
+    h += `</tbody></table>`;
+  } else {
+    h += `<div style="font-size:12px;color:var(--tx3);padding:8px 0">Aucun compte VC — ajoutez-en un via le formulaire ci-dessus.</div>`;
+  }
+  h += `</div>`;
+
+  // ── Section Catalogue (Matrice Tarifaire) ────────────────────────
+  var catXML = c.catalogueXML || [];
+  h += `<div class="cd"><div class="cd-t space">`;
+  h += `<span>📦 Catalogue (Matrice Tarifaire)</span>`;
+  if (catXML.length > 0) h += `<span style="font-size:11px;color:var(--g,#3b6d11)">✓ ${new Set(catXML.map(function(x){return x.asin;})).size} ASINs</span>`;
+  h += `</div>`;
+  if (catXML.length > 0) {
+    var cxVC = {};
+    var cxSt = {};
+    for (var cxi = 0; cxi < catXML.length; cxi++) {
+      var cxr = catXML[cxi];
+      if (cxr.vendorCode && cxr.vendorCode !== 'None') cxVC[cxr.vendorCode] = (cxVC[cxr.vendorCode]||0)+1;
+      if (cxr.status && cxr.status !== 'None') cxSt[cxr.status] = (cxSt[cxr.status]||0)+1;
+    }
+    h += `<div style="font-size:12px;margin-bottom:8px">`;
+    h += `<strong>${new Set(catXML.map(function(x){return x.asin;})).size} ASINs</strong> · ${catXML.length} lignes`;
+    var cxVCKeys = Object.keys(cxVC);
+    if (cxVCKeys.length) h += ` · VC : ` + cxVCKeys.map(function(k){return k + ' (' + cxVC[k] + ')';}).join(', ');
+    var cxStKeys = Object.keys(cxSt);
+    if (cxStKeys.length) h += `<br>Statuts : ` + cxStKeys.map(function(k){return k + ' (' + cxSt[k] + ')';}).join(', ');
+    if (c.xmlImportDate) h += `<br><span style="color:var(--tx3)">Importé le ${new Date(c.xmlImportDate).toLocaleDateString('fr-FR')}</span>`;
+    h += `</div>`;
+    h += `<button class="btn" style="font-size:12px" onclick="document.getElementById('fiche-xml-reimport').click()">🔄 Réimporter la matrice tarifaire</button>`;
+    h += `<input type="file" id="fiche-xml-reimport" accept=".xml" style="display:none" onchange="ficheHandleXML(this)"/>`;
+  } else {
+    h += `<div style="font-size:12px;color:var(--tx3);margin-bottom:8px">Aucune matrice tarifaire importée.</div>`;
+    h += `<button class="btn btn-p" style="font-size:12px" onclick="document.getElementById('fiche-xml-import').click()">📄 Importer la matrice tarifaire</button>`;
+    h += `<input type="file" id="fiche-xml-import" accept=".xml" style="display:none" onchange="ficheHandleXML(this)"/>`;
+  }
+  h += `</div>`;
+
   // ── Section Marques du client ────────────────────────────────────
   h += `<div class="cd"><div class="cd-t space"><span>🏷️ Marques du client</span>
     <button class="btn btn-sm" onclick="addClientBrand()">+ Ajouter</button>
@@ -7740,6 +8453,44 @@ ${dec.slice(0,12).map(a => {
 
 // État SEO global
 let seoLoading = false;
+let challengeLoading = null; // asin en cours de challenge GPT
+
+// ── Wizard Optimisation ──────────────────────────────────────────────────────
+let wizardState = {
+  asin: null, market: null, sku: null,
+  step: 'a', ficheReady: false, challengeReady: false,
+  progress: null, isRegen: false,
+  collapsed: {}
+};
+
+function resetWizard() {
+  wizardState = {
+    asin: null, market: null, sku: null,
+    step: 'a', ficheReady: false, challengeReady: false,
+    progress: null, isRegen: false,
+    collapsed: {}
+  };
+}
+
+function toggleWizardStep(id) {
+  // collapsed[id] !== false = pliée (défaut undefined ou true)
+  // collapsed[id] === false = dépliée
+  wizardState.collapsed[id] = (wizardState.collapsed[id] === false);
+  render();
+}
+
+function openWizard(asin, market, isRegen) {
+  resetWizard();
+  wizardState.asin    = asin;
+  wizardState.market  = market || '.fr';
+  wizardState.isRegen = !!isRegen;
+  go('optimisationWizard');
+}
+
+function closeWizard() {
+  resetWizard();
+  go('asins');
+}
 let seoResults = {}; // { asin: { '.fr': {...}, backendKW: '...', _progress: {...} } }
 let seoActiveTab = null;
 let seoDrawerAsin = null;
@@ -7873,9 +8624,31 @@ function renderSEOSection(a, c) {
     h += '<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Génère la fiche optimisée pour les ' + marketsToProcess.length + ' marché(s) : ';
     h += marketsToProcess.map(function(m) { return (MARKET_LANG[m]?.flag || '') + ' ' + (MARKET_LANG[m]?.label || m); }).join(', ');
     h += '.</p>';
+    h += `<div class="cd" style="padding:1.25rem;margin-bottom:12px">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+    <div style="width:22px;height:22px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:#3C3489;flex-shrink:0">2</div>
+    <span style="font-size:14px;font-weight:500">Enrichissement produit</span>
+    <span style="font-size:11px;padding:2px 8px;border-radius:6px;background:#EEEDFE;color:#3C3489">optionnel · recommandé</span>
+  </div>
+  <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Coller la fiche Amazon pour une analyse plus précise — concurrents, avis, specs réelles</div>
+  <textarea class="fg-in" id="fiche-amazon-${esc(a.asin)}"
+    style="height:90px;font-size:12px;resize:vertical"
+    placeholder="Collez ici le contenu de la page Amazon.fr (titre actuel, bullets, description, avis clients, produits associés)..."
+    oninput="saveFicheAmazon('${esc(a.asin)}', this.value)"
+  >${esc(a.ficheAmazon || '')}</textarea>
+  <div style="font-size:11px;color:var(--muted2);margin-top:6px">Sauvegardée automatiquement. Alimente aussi l'Analyse IA et la Buy Box.</div>
+  ${a.ficheAmazon ? `
+  <button class="btn-sm" style="margin-top:8px;color:var(--danger)" onclick="saveFicheAmazon('${esc(a.asin)}','');document.getElementById('fiche-amazon-${esc(a.asin)}').value='';render()">
+    Effacer
+  </button>` : ''}
+</div>`;
+    if (a.ficheAmazon) {
+      h += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--ok-bg, #EAF3DE);border-radius:6px;margin-bottom:10px">
+    <span style="font-size:12px;color:var(--ok)">✓ Fiche Amazon enrichie — analyse plus précise</span>
+  </div>`;
+    }
     h += '<div style="display:flex;gap:8px;flex-wrap:wrap">';
-    h += '<button class="btn btn-p" onclick="runSEOFiche(' + _asinJ + ',seoActiveTab||(cl()&&(cl().mainMarket||\'.fr\')),seoMotcle[' + _asinJ + ']||extractSearchKeyword(' + _asinJ + ',cl()))" ' + (seoLoading ? 'disabled' : '') + '>✍️ Générer la fiche (' + marketsToProcess.length + ' langue' + (marketsToProcess.length > 1 ? 's' : '') + ')</button>';
-    h += '<button class="btn btn-or" onclick="goAgentVC(' + _asinJ + ')">📤 Optimiser + Publier VC</button>';
+    h += '<button class="btn btn-p" onclick="openWizard(' + _asinJ + ',(cl()&&(cl().mainMarket||\'.fr\')),false)" ' + (seoLoading ? 'disabled' : '') + '>✨ Optimiser la fiche Article</button>';
     h += '</div>';
     h += '</div>';
     return h;
@@ -7964,6 +8737,12 @@ function renderSEOSection(a, c) {
     h += '</div>';
   }
 
+  // ALERTES_FRED
+  h += `<div class="alr alr-w" style="margin-bottom:12px;${r.alertesFred ? '' : 'display:none'}">
+    ⚠️ <strong>Points à vérifier avant publication :</strong><br>
+    ${esc(r.alertesFred || '')}
+  </div>`;
+
   // Synthèse stratégique
   if (r.positionnement || r.leviers || r.erreurs || r.opportunite) {
     h += '<div style="margin-bottom:12px;padding:10px 12px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd)">';
@@ -7975,10 +8754,16 @@ function renderSEOSection(a, c) {
     h += '</div>';
   }
 
+  // POINT_IMPORTANT
+  h += `<div class="cd" style="padding:12px;margin-bottom:12px;border-left:3px solid var(--or);${r.pointImportant ? '' : 'display:none'}">
+    🔥 <strong>Point clé :</strong> ${esc(r.pointImportant || '')}
+  </div>`;
+
   // Tout copier
   h += '<button class="btn btn-sm btn-p" onclick="copySEOField(' + asinJson + ',' + mktJson + ',\'all\')">📋 Tout copier (' + (MARKET_LANG[activeMkt]?.label || activeMkt) + ')</button>';
-  h += '<div style="margin-top:10px;display:flex;gap:8px">';
-  h += '<button class="btn btn-or" onclick="goAgentVC(' + _asinJ + ')">📤 Optimiser + Publier VC</button>';
+  h += '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">';
+  h += '<button class="btn btn-p" onclick="publishVC(' + _asinJ + ',' + mktJson + ')">📤 Publier dans VC</button>';
+  h += '<button class="btn btn-or" onclick="openWizard(' + _asinJ + ',' + mktJson + ',true)">🔄 Régénérer</button>';
   h += '</div>';
   h += '</div>';
   return h;
@@ -8087,7 +8872,180 @@ function go(s) {
 }
 function goAgentVC(asin) { agentVCParam = asin; go('agentvc'); }
 
+function publishVC(asin, market) {
+  const c = cl(); if (!c) return;
+  const a = c.asins.find(x => x.asin === asin);
+  if (!a) return;
+  const mkt = market || c.mainMarket || '.fr';
+  const fiche = (seoResults[asin] && seoResults[asin][mkt])
+    || (c.ficheOptimisee && c.ficheOptimisee[asin] && c.ficheOptimisee[asin][mkt]);
+  if (!fiche) { alert('Aucune fiche optimisée disponible pour cet ASIN.'); return; }
+  // Charger la fiche dans seoResults pour que le wizard VC la trouve
+  if (!seoResults[asin]) seoResults[asin] = {};
+  seoResults[asin][mkt] = fiche;
+  // Navigation directe vers l'étape 4 (résultat fiche)
+  if (typeof agentVCState !== 'undefined') {
+    agentVCState.asin     = asin;
+    agentVCState.market   = mkt;
+    agentVCState.sku      = a.sku || asin;
+    agentVCState.step     = 4;
+    agentVCState.progress = null;
+  }
+  go('agentvc');
+}
 
+function wizardNextStep(step) {
+  wizardState.step = step;
+  render();
+}
+
+function wizardRunSEO() {
+  const c = cl(); if (!c) return;
+  wizardState.step = 'c';
+  wizardState.progress = 'seo';
+  render();
+  const keyword = seoMotcle[wizardState.asin] || extractSearchKeyword(wizardState.asin, c);
+  runSEOFiche(wizardState.asin, wizardState.market, keyword)
+    .then(function() {
+      wizardState.progress = null;
+      wizardState.ficheReady = true;
+      wizardState.step = 'd';
+      render();
+    })
+    .catch(function(e) {
+      wizardState.progress = null;
+      console.error('SEO error:', e);
+      render();
+    });
+}
+
+function wizardRunChallenge() {
+  wizardState.step = 'e';
+  wizardState.progress = 'challenge';
+  render();
+  runChallengeGPT(wizardState.asin, wizardState.market)
+    .then(function() {
+      wizardState.progress = null;
+      wizardState.challengeReady = true;
+      wizardState.step = 'e';
+      render();
+    })
+    .catch(function(e) {
+      wizardState.progress = null;
+      console.error('Challenge error:', e);
+      render();
+    });
+}
+
+function wizardSaveAndChoose() {
+  wizardState.step = 'g';
+  render();
+}
+
+function updateWizardField(asin, mkt, field, val) {
+  const c = cl(); if (!c) return;
+  const a = c.asins.find(x => x.asin === asin);
+  if (!a) return;
+  const ch = a.ficheChallenge && a.ficheChallenge[mkt];
+  if (ch) {
+    const map = {
+      titre: 'fusionTitre', description: 'fusionDesc', backendKW: 'fusionBackend',
+      bullet0: 'fusionB1', bullet1: 'fusionB2', bullet2: 'fusionB3',
+      bullet3: 'fusionB4', bullet4: 'fusionB5'
+    };
+    if (map[field]) ch[map[field]] = val;
+  } else if (seoResults[asin] && seoResults[asin][mkt]) {
+    const r = seoResults[asin][mkt];
+    if (field === 'titre') r.titre = val;
+    else if (field === 'description') r.description = val;
+    else if (field === 'backendKW') r.backendKW = val;
+    else if (field.startsWith('bullet')) r.bullets[parseInt(field.replace('bullet',''))] = val;
+  }
+}
+
+function wizardSave(asin, mkt) {
+  const c = cl(); if (!c) return;
+  if (!c.asins || c.asins.length === 0) {
+    console.error('[ABORT] wizardSave — asins vide'); return;
+  }
+  const a = c.asins.find(x => x.asin === asin);
+  if (!a) return;
+  const ch = a.ficheChallenge && a.ficheChallenge[mkt];
+  const seoR = seoResults[asin] && seoResults[asin][mkt];
+  const fiche = {
+    titre:          (ch && ch.fusionTitre)   || (seoR && seoR.titre)       || '',
+    bullets:        ch
+      ? [ch.fusionB1, ch.fusionB2, ch.fusionB3, ch.fusionB4, ch.fusionB5]
+      : (seoR && seoR.bullets) || [],
+    description:    (ch && ch.fusionDesc)    || (seoR && seoR.description) || '',
+    backendKW:      (ch && ch.fusionBackend) || (seoR && seoR.backendKW)   || '',
+    positionnement: (seoR && seoR.positionnement) || '',
+    leviers:        (seoR && seoR.leviers)        || '',
+    erreurs:        (seoR && seoR.erreurs)         || '',
+    opportunite:    (seoR && seoR.opportunite)     || '',
+    pointImportant: (seoR && seoR.pointImportant)  || '',
+    alertesFred:    (seoR && seoR.alertesFred)     || '',
+    generatedAt:    new Date().toISOString(),
+  };
+  if (!c.ficheOptimisee) c.ficheOptimisee = {};
+  // COPIE PROFONDE — jamais de référence directe
+  c.ficheOptimisee[asin] = {};
+  c.ficheOptimisee[asin][mkt] = JSON.parse(JSON.stringify(fiche));
+  // Réinjecter dans seoResults
+  if (!seoResults[asin]) seoResults[asin] = {};
+  seoResults[asin][mkt] = c.ficheOptimisee[asin][mkt];
+  // Vérification défensive avant save
+  if (!c.asins || c.asins.length === 0) {
+    console.error('[ABORT] wizardSave post-assign — asins corrompu'); return;
+  }
+  saveClientSafe(c);
+  closeWizard();
+}
+
+function wizardSaveAndPublish(asin, mkt) {
+  const c = cl(); if (!c) return;
+  const a = c.asins.find(x => x.asin === asin);
+  if (!a) return;
+  // Sauvegarder la fiche (sans closeWizard pour enchaîner la navigation)
+  if (!c.asins || c.asins.length === 0) {
+    console.error('[ABORT] wizardSaveAndPublish — asins vide'); return;
+  }
+  const ch = a.ficheChallenge && a.ficheChallenge[mkt];
+  const seoR = seoResults[asin] && seoResults[asin][mkt];
+  const fiche = {
+    titre:          (ch && ch.fusionTitre)   || (seoR && seoR.titre)       || '',
+    bullets:        ch
+      ? [ch.fusionB1, ch.fusionB2, ch.fusionB3, ch.fusionB4, ch.fusionB5]
+      : (seoR && seoR.bullets) || [],
+    description:    (ch && ch.fusionDesc)    || (seoR && seoR.description) || '',
+    backendKW:      (ch && ch.fusionBackend) || (seoR && seoR.backendKW)   || '',
+    positionnement: (seoR && seoR.positionnement) || '',
+    leviers:        (seoR && seoR.leviers)        || '',
+    erreurs:        (seoR && seoR.erreurs)         || '',
+    opportunite:    (seoR && seoR.opportunite)     || '',
+    pointImportant: (seoR && seoR.pointImportant)  || '',
+    alertesFred:    (seoR && seoR.alertesFred)     || '',
+    generatedAt:    new Date().toISOString(),
+  };
+  if (!c.ficheOptimisee) c.ficheOptimisee = {};
+  c.ficheOptimisee[asin] = {};
+  c.ficheOptimisee[asin][mkt] = JSON.parse(JSON.stringify(fiche));
+  if (!seoResults[asin]) seoResults[asin] = {};
+  seoResults[asin][mkt] = c.ficheOptimisee[asin][mkt];
+  saveClientSafe(c);
+  // Naviguer vers Agent VC étape 4 — publication
+  if (typeof agentVCState !== 'undefined') {
+    agentVCState.asin     = asin;
+    agentVCState.market   = mkt;
+    agentVCState.sku      = wizardState.sku || a.sku || asin;
+    agentVCState.step     = 4;
+    agentVCState.progress = null;
+  }
+  resetWizard();
+  go('agentvc');
+}
+
+// goAgentSEO + goAgentSEOPublish supprimés — remplacés par openWizard/publishVC (v3.4.29)
 
 function deleteAnnualData(year) {
   const c = cl();
@@ -8154,10 +9112,130 @@ function goFilteredAsins(preset) {
 function selClient(id) { activeId = id; screen = 'dashboard'; selectedAsin = null; aiResult = ''; render(); }
 function startOnboarding() { newClient = freshClient(); wizStep = 0; screen = 'onboarding'; render(); }
 function wizGo(step) { wizStep = step; render(); }
-function wizNext() { if (wizStep === 0 && !newClient.name.trim()) { alert('Nom du client requis'); return; } wizStep++; render(); }
+function wizNext() {
+  if (wizStep === 0 && !newClient.name.trim()) { alert('Nom du client requis'); return; }
+  if (wizStep === 2) {
+    if (!newClient.accounts || newClient.accounts.length === 0) { return; }
+    if (!newClient.catalogueXML || newClient.catalogueXML.length === 0) { return; }
+  }
+  wizStep++; render();
+}
 function finishOnboarding() { clients.push(newClient); activeId = newClient.id; save(); screen = 'import'; render(); }
+function wizAddBrand() {
+  var name = prompt('Nom de la marque :');
+  if (!name || !name.trim()) return;
+  if (!newClient.brands) newClient.brands = [];
+  if (newClient.brands.some(function(b) { return norm(b.name) === norm(name.trim()); })) {
+    showToast('Marque déjà présente', '', 'warn'); return;
+  }
+  newClient.brands.push({ name: name.trim(), role: 'fabricant' });
+  render();
+}
+function wizSetBrandRole(idx, role) {
+  if (!newClient.brands || !newClient.brands[idx]) return;
+  newClient.brands[idx].role = role;
+  render();
+}
+function wizRemoveBrand(idx) {
+  if (!newClient.brands) return;
+  newClient.brands.splice(idx, 1);
+  render();
+}
+function wizAddAccount() {
+  var market = document.getElementById('newAcctMarket') ? document.getElementById('newAcctMarket').value : '.fr';
+  var vc = document.getElementById('newAcctVC') ? document.getElementById('newAcctVC').value.trim().toUpperCase() : '';
+  var role = document.getElementById('newAcctRole') ? document.getElementById('newAcctRole').value : 'BO';
+  var label = document.getElementById('newAcctLabel') ? document.getElementById('newAcctLabel').value.trim() : '';
+  if (!vc) { alert('Vendor Code obligatoire'); return; }
+  if (!newClient.accounts) newClient.accounts = [];
+  if (newClient.accounts.some(function(a) { return a.vendorCode === vc && a.market === market; })) {
+    alert('Ce vendor code existe déjà sur ce marché'); return;
+  }
+  newClient.accounts.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    market: market, vendorCode: vc, role: role, label: label
+  });
+  render();
+}
+function wizRemoveAccount(accountId) {
+  if (!newClient.accounts) return;
+  newClient.accounts = newClient.accounts.filter(function(a) { return a.id !== accountId; });
+  render();
+}
+function wizHandleXML(input) {
+  var file = input.files && input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var result = parseMatriceTarifXML(e.target.result);
+    if (result.error) { alert('Erreur XML : ' + result.error); return; }
+    newClient.catalogueXML = result.items;
+    newClient.xmlSummary = result.summary;
+    newClient.xmlImportDate = new Date().toISOString();
+    render();
+  };
+  reader.readAsText(file);
+}
 function toggleMarket(m, checked) { if (checked && !newClient.markets.includes(m)) newClient.markets.push(m); if (!checked) newClient.markets = newClient.markets.filter(x => x !== m); render(); }
 function toggleClientMarket(m, checked) { const c = cl(); if (!c) return; if (checked && !c.markets.includes(m)) c.markets.push(m); if (!checked) c.markets = c.markets.filter(x => x !== m); save(); render(); }
+
+function addClientAccount() {
+  var c = cl();
+  if (!c) return;
+  var market = document.getElementById('newAcctMarket') ? document.getElementById('newAcctMarket').value : '.fr';
+  var vc = document.getElementById('newAcctVC') ? document.getElementById('newAcctVC').value.trim().toUpperCase() : '';
+  var role = document.getElementById('newAcctRole') ? document.getElementById('newAcctRole').value : 'BO';
+  var label = document.getElementById('newAcctLabel') ? document.getElementById('newAcctLabel').value.trim() : '';
+  if (!vc) { showToast('⚠️ Vendor Code obligatoire', '', 'warn'); return; }
+  if (!c.accounts) c.accounts = [];
+  if (c.accounts.some(function(a) { return a.vendorCode === vc && a.market === market; })) {
+    showToast('⚠️ Ce vendor code existe déjà sur ce marché', '', 'warn'); return;
+  }
+  c.accounts.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    market: market, vendorCode: vc, role: role, label: label
+  });
+  save(); render();
+}
+
+function removeClientAccount(accountId) {
+  var c = cl();
+  if (!c || !c.accounts) return;
+  var acc = c.accounts.find(function(a) { return a.id === accountId; });
+  if (!acc) return;
+  if (!confirm('Supprimer ' + acc.vendorCode + ' ?')) return;
+  c.accounts = c.accounts.filter(function(a) { return a.id !== accountId; });
+  save(); render();
+}
+
+function updateClientAccount(accountId, field, value) {
+  var c = cl();
+  if (!c || !c.accounts) return;
+  var acc = c.accounts.find(function(a) { return a.id === accountId; });
+  if (!acc) return;
+  if (field === 'vendorCode') value = value.toUpperCase();
+  acc[field] = value;
+  save();
+  // Pas de render() complet pour éviter de perdre le focus sur les inline edits
+}
+
+function ficheHandleXML(input) {
+  var c = cl();
+  if (!c) return;
+  var file = input.files && input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var result = parseMatriceTarifXML(e.target.result);
+    if (result.error) { alert('Erreur XML : ' + result.error); return; }
+    c.catalogueXML = result.items;
+    c.xmlSummary = result.summary;
+    c.xmlImportDate = new Date().toISOString();
+    save(); render();
+  };
+  reader.readAsText(file);
+}
+
 function ncSet(key, val) { newClient[key] = val; render(); }
 function updClient(key, val) { const c = cl(); if (c) { c[key] = val; save(); } }
 function deleteClient(id) { clients = clients.filter(c => c.id !== id); activeId = clients.length ? clients[0].id : null; screen = clients.length ? 'dashboard' : 'welcome'; save(); render(); }
@@ -8676,7 +9754,7 @@ function initDragDrop() {
     if (!files.length) return;
     const dt = new DataTransfer();
     files.forEach(f => dt.items.add(f));
-    if (screen === 'onboarding' && wizStep === 3) {
+    if (screen === 'onboarding' && wizStep === 4) {
       // Drop pendant l'étape Historique
       const input = document.getElementById('hist-files');
       if (input) { input.files = dt.files; handleHistCSV(input); }
@@ -8705,6 +9783,13 @@ function initDragDrop() {
 async function init() {
   try {
     await load();
+    // Réinjecter TOUTES les ficheOptimisee dans seoResults au démarrage
+    clients.forEach(function(c) {
+      if (!c.ficheOptimisee) return;
+      Object.keys(c.ficheOptimisee).forEach(function(asin) {
+        if (!seoResults[asin]) seoResults[asin] = c.ficheOptimisee[asin];
+      });
+    });
     initDragDrop();
     if (!clients.length) screen = 'welcome';
     try {
