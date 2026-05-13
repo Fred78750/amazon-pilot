@@ -150,6 +150,11 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 ## RÈGLES DE DÉVELOPPEMENT GRAVÉES
 
+### Règle versioning strict
+Chaque commit fonctionnel = nouvelle version (`build.py --version X.Y.Z`).
+Jamais de patches empilés sous le même numéro de version.
+Un numéro = un build = un livrable testable et revertable individuellement.
+
 ### Règles absolues — ne jamais remettre en cause
 - `node --check` obligatoire avant toute livraison
 - Jamais de commit direct sur `main`
@@ -241,4 +246,4 @@ Les ASINs avec `ficheOptimisee` créée via fusion wizard n'ont pas de synthèse
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 11 mai 2026 (v3.4.41)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 12 mai 2026 (v3.5.2 staging)**
