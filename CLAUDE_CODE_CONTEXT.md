@@ -82,6 +82,7 @@ Tout patch doit être minimal et ciblé :
 | v3.5.2 | ✅ Stable staging | — |
 | v3.5.3 | ✅ Stable staging | 56e8dcc |
 | v3.5.4 | ✅ Stable staging | e4ee36e |
+| v3.5.5 | ✅ Stable staging | 8f0e5b4 |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -100,7 +101,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | v3.4.41 | https://amazon.foliow.app |
-| Recette (staging) | v3.5.4 | https://d9xny9istvl53.cloudfront.net |
+| Recette (staging) | v3.5.5 | https://d9xny9istvl53.cloudfront.net |
 | Preprod | v3.5.3 | https://preprod.amazon.foliow.app |
 
 ---
@@ -207,14 +208,15 @@ Un numéro = un build = un livrable testable et revertable individuellement.
 - [x] v3.5.2 : Fix bug critique CSV market collision — `MARKET_CODES` fallback dans `parseCSVFile()` → `src/core.js`
 - [x] v3.5.3 : Suppression doublon section 1.5 Purchase Orders dans `renderImport()` → `src/core.js`
 - [x] v3.5.4 : Fix smoke test I4 — sélecteur `po-section-3` (remplace `po-drop-zone` supprimé en v3.5.3) → `src/smoke.js`
+- [x] v3.5.5 : Onglets marchés avec drapeaux et CA — `getMarketTabs` + `renderMarketTabs` dans `renderDashboard` et `renderAsins` → `src/core.js`
 
 ---
 
 ## TÂCHES SUIVANTES
 
-- [ ] **Priorité 1** — Fred doit réimporter le CSV Gers multi-marchés (IT/ES/DE/NL/BE) après fix MARKET_CODES v3.5.2 pour tester consolidation vue "Tous"
-- [ ] **Priorité 2** — Déployer v3.5.4 en preprod après validation staging par Fred
-- [ ] **Priorité 3** — Fix scroll étape C : `renderWizardStep` (`src/seo.js`) — div wrappant `${content}` → `overflow:visible`, supprimer `overflow:hidden`/`max-height` → `v3.5.5`
+- [ ] **Priorité 1** — Fred doit réimporter le CSV Gers multi-marchés (IT/ES/DE/NL/BE) après fix MARKET_CODES v3.5.2 pour tester onglets marchés + consolidation vue "Tous"
+- [ ] **Priorité 2** — Déployer v3.5.5 en preprod après validation staging par Fred
+- [ ] **Priorité 3** — Fix scroll étape C : `renderWizardStep` (`src/seo.js`) — div wrappant `${content}` → `overflow:visible`, supprimer `overflow:hidden`/`max-height` → `v3.5.6`
 - [ ] Sessions comparatives Claude vs ChatGPT (3 ASINs Cogex) → alimenter `EXEMPLES_GPT_REFERENCE.md`
 - [ ] Vérifier B07DGD6W4Y + B00BBU4Z4K sur Amazon.fr : 5 bullets non vides
 - [ ] Qualité prompt SEO — refonte `buildSEOPrompt` → `src/seo.js`
@@ -250,4 +252,4 @@ Les ASINs avec `ficheOptimisee` créée via fusion wizard n'ont pas de synthèse
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 13 mai 2026 (v3.5.4 staging)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 13 mai 2026 (v3.5.5 staging)**
