@@ -248,24 +248,22 @@ Un ASIN peut avoir 2 VC (COGEX + 3J6MN), SKU différent par VC. Le SKU ne peut p
 
 | Propriété | Valeur |
 |---|---|
-| Marchés | FR, ES, NL, DE, BE, IT |
+| Marchés | FR, ES, DE, IT, NL, BE, GB |
 | Prefix S3 | `gers/` |
 | Marques déclarées | SIREM, SITRAM, TEFAL (distribuées) |
 
-**Comptes VC Gers — 8 comptes :** *(à compléter par Fred avec les vendor codes exacts par marché)*
+**Comptes VC Gers — 8 comptes :**
 
 | Vendor Code | Marché | Rôle | Label |
 |---|---|---|---|
 | GERA3 | .fr | BO | France BO |
-| SITRB | .fr | catalogue | France catalogue |
-| *(à renseigner)* | .es | BO | Espagne |
-| *(à renseigner)* | .de | BO | Allemagne |
-| *(à renseigner)* | .it | BO | Italie |
-| *(à renseigner)* | .nl | BO | Pays-Bas |
-| *(à renseigner)* | .be | BO | Belgique |
-| *(à renseigner)* | — | catalogue | Compte catalogue multi-marchés |
-
-> ⚠️ Fred doit compléter ce tableau avec les vendor codes réels. Le garde-fou `ficheHandleXML` utilise `c.accounts[].vendorCode` pour valider l'import XML.
+| SITRB | .fr | BO | France BO (secondaire) |
+| GES18 | .es | BO | Espagne BO |
+| USOMB | .es | BO | Espagne BO (secondaire) |
+| AJ8EM | .be | catalogue | Belgique catalogue |
+| HG934 | .de | catalogue | Allemagne catalogue |
+| 9Y8D0 | .it | catalogue | Italie catalogue |
+| IL8ZD | .nl | catalogue | Pays-Bas catalogue |
 
 ---
 
@@ -287,7 +285,7 @@ Un ASIN peut avoir 2 VC (COGEX + 3J6MN), SKU différent par VC. Le SKU ne peut p
 
 ### Correction immédiate
 - [ ] **v3.5.10** — Fix scroll étape C : `renderWizardStep` (`src/seo.js`) — div wrappant `${content}` → `overflow:visible`, supprimer `overflow:hidden`/`max-height`
-- [ ] Fred complète les 8 comptes VC Gers dans la fiche client (vendor codes ES, DE, IT, NL, BE)
+- [x] Fred complète les 8 comptes VC Gers dans la fiche client (vendor codes ES, DE, IT, NL, BE) — fait 13 mai 2026
 
 ### Refonte UX dashboard
 - [ ] Refonte `renderDashboard` — layout KPI + graphique repensé, zone synthèse IA plus visible
