@@ -33,7 +33,7 @@ async function smokeTest(silent) {
 
   // V3 — Revue Hebdo
   try {
-    if (typeof go === 'function') go('revue');
+    if (typeof go === 'function') go('weekly');
     await new Promise(r => setTimeout(r, 300));
     const e = getErr(); const acts = c?.weeklyActions||[];
     if (!e && acts.length > 0) pass('vital','V3','Revue Hebdo (' + acts.length + ' actions)');
@@ -87,7 +87,7 @@ async function smokeTest(silent) {
 
   // V8 — Agent SEO
   try {
-    if (typeof go === 'function') go('agentseo');
+    if (typeof go === 'function') go('seo');
     await new Promise(r => setTimeout(r, 300));
     const e = getErr(); const txt = document.body.innerText;
     const hasSEO = txt.includes('SEO') || txt.includes('titre') || txt.includes('bullet');
