@@ -85,6 +85,8 @@ Tout patch doit être minimal et ciblé :
 | v3.5.5 | ✅ Stable staging | 8f0e5b4 |
 | v3.5.6 | ✅ Stable staging | bca06c2 |
 | v3.5.7 | ✅ Stable staging+preprod | 61f0725 |
+| v3.5.9 | ✅ Stable — **prod** | a0789ce |
+| v3.6.0 | ✅ Stable staging+preprod | dead585 |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -102,9 +104,9 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | v3.4.41 | https://amazon.foliow.app |
-| Recette (staging) | v3.5.7 | https://d9xny9istvl53.cloudfront.net |
-| Preprod | v3.5.7 | https://preprod.amazon.foliow.app |
+| Production (main) | v3.5.9 | https://amazon.foliow.app |
+| Recette (staging) | v3.6.0 | https://d9xny9istvl53.cloudfront.net |
+| Preprod | v3.6.0 | https://preprod.amazon.foliow.app |
 
 ---
 
@@ -204,22 +206,18 @@ Un numéro = un build = un livrable testable et revertable individuellement.
 
 ---
 
-## TÂCHES EN COURS (session v3.5.x — toutes terminées)
+## TÂCHES EN COURS (session v3.6.x)
 
-- [x] v3.5.1 : Désignations françaises (`migrateXMLTitles`) + Vue consolidée multi-marchés (`consolidateAsins`) → `src/core.js`
-- [x] v3.5.2 : Fix bug critique CSV market collision — `MARKET_CODES` fallback dans `parseCSVFile()` → `src/core.js`
-- [x] v3.5.3 : Suppression doublon section 1.5 Purchase Orders dans `renderImport()` → `src/core.js`
-- [x] v3.5.4 : Fix smoke test I4 — sélecteur `po-section-3` (remplace `po-drop-zone` supprimé en v3.5.3) → `src/smoke.js`
-- [x] v3.5.5 : Onglets marchés avec drapeaux et CA — `getMarketTabs` + `renderMarketTabs` dans `renderDashboard` et `renderAsins` → `src/core.js`
-- [x] v3.5.6 : Garde-fous import CSV — `checkImportCoherence` (marques + marchés), panneau récap pré-fusion, bandeau client visible → `src/core.js`
-- [x] v3.5.7 : Garde-fou import XML matrice tarifaire — `ficheHandleXML` vérifie vendor codes XML vs `c.accounts[].vendorCode` → `src/core.js`
+- [x] v3.5.8 : Fix scroll étape C wizard — `renderWizardStep` overflow:visible → `src/seo.js`
+- [x] v3.5.9 : Onglets marchés Diagnostic CA + Buy Box — `renderMarketTabs` dans `renderPompier` + `renderBuyBox` / `calcBuyBoxAlerts` market field → `src/core.js` + `src/buybox.js`
+- [x] v3.6.0 : Import défauts livraison + rendez-vous + bolSource — `freshClient()`, `load()` migration, parsers CSV, `renderImport`, `renderFiche` → `src/core.js`
 
 ---
 
 ## TÂCHES SUIVANTES
 
-- [ ] **Priorité 1** — Fred doit réimporter le CSV Gers multi-marchés (IT/ES/DE/NL/BE) après fix MARKET_CODES v3.5.2 pour tester onglets marchés + consolidation vue "Tous"
-- [ ] **Priorité 2** — Fix scroll étape C : `renderWizardStep` (`src/seo.js`) — div wrappant `${content}` → `overflow:visible`, supprimer `overflow:hidden`/`max-height` → `v3.5.8`
+- [ ] **GO Fred requis** — merge v3.6.0 staging → main (smoke tests preprod validés 17 mai 2026)
+- [ ] **v3.6.1** — UX Buy Box : affichage défauts/rendez-vous dans `renderBuyBox` (actuellement données seules)
 - [ ] Sessions comparatives Claude vs ChatGPT (3 ASINs Cogex) → alimenter `EXEMPLES_GPT_REFERENCE.md`
 - [ ] Vérifier B07DGD6W4Y + B00BBU4Z4K sur Amazon.fr : 5 bullets non vides
 - [ ] Qualité prompt SEO — refonte `buildSEOPrompt` → `src/seo.js`
@@ -255,4 +253,19 @@ Les ASINs avec `ficheOptimisee` créée via fusion wizard n'ont pas de synthèse
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 13 mai 2026 (v3.5.7 staging+preprod)**
+## RÈGLE AJOUTÉE (session 17 mai 2026)
+
+### Règle imports async + client actif
+Dans les tests et les callbacks `fetch().then()`, jamais utiliser `cl()` pour obtenir le client cible — `cl()` retourne le client **actif au moment de l'exécution du callback**, qui peut avoir changé entre le lancement du fetch et sa résolution. Toujours capturer la référence au client **avant** le fetch :
+```javascript
+var targetClient = cl(); // capturé AVANT le fetch
+fetch(url).then(function(r) { return r.text(); }).then(function(csv) {
+  targetClient.deliveryDefects = parsed.items; // référence capturée, pas cl()
+  selClient(targetClient.id); // switcher avant save()
+  save();
+});
+```
+
+---
+
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 17 mai 2026 (v3.6.0 staging+preprod)**
