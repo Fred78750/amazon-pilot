@@ -408,4 +408,16 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 18 mai 2026 (v3.6.1.5 anti-régression OK — GO merge en attente)**
+## RÉCAPS DE SESSION (dans le repo — racine)
+
+| Fichier | Contenu |
+|---|---|
+| `20260507_RECAP_ET_PLAN_v3_4_16.md` | Session 7 mai 2026 |
+| `20260507_RECAP_ET_PLAN_v3_4_20.md` | Session 7 mai 2026 |
+| `20260508_RECAP_ET_PLAN_v3_4_24.md` | Session 8 mai 2026 |
+| `20260510_RECAP_SESSION_v3_4_29.md` | Session 10 mai 2026 |
+| `20260518_RECAP_SESSION_v3_6_1_5.md` | Session 18 mai 2026 — v3.6.1.5 en prod — Note 8/10 |
+
+---
+
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 18 mai 2026 (v3.6.1.5 en prod — fae7d79)**
