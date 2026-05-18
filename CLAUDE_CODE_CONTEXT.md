@@ -377,13 +377,13 @@ Depuis v3.6.1, V5 vérifie `body.includes("Carnet d'enquête")` (Phase 2 nouveau
 ### Architecture Buy Box v3.6.1+ (discordance INSTRUCTIONS)
 Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. En réalité, **toutes les fonctions Buy Box sont dans `src/buybox.js`** (injecté via `// @buybox` dans core.js au build). Les patches 4-8 doivent toujours cibler `src/buybox.js`.
 
-### Déploiement preprod (ordre strict)
-1. `git push origin staging` (push principal)
-2. `git checkout preprod && git merge staging` + résolution conflits + `git push origin preprod`
-3. `aws s3 cp amazon-pilot-latest.html s3://amazon-pilot-preprod/index.html`
-4. `aws cloudfront create-invalidation --distribution-id E3CODYJ437XKU5 --paths "/*"`
-5. `until curl -s ... | grep -q "X.Y.Z"; do sleep 6; done`
-6. Hard reload navigateur (nouveau tab) pour bypasser cache browser
+### Déploiement — ordre ABSOLU (staging d'abord, preprod ensuite)
+1. `git push origin staging`
+2. **STAGING d'abord** : `aws s3 cp amazon-pilot-latest.html s3://amazon-pilot-recette/index.html --cache-control "no-cache,no-store,must-revalidate"` + `aws cloudfront create-invalidation --distribution-id EVQ30COFUNGA7 --paths "/*"` → vérifier `curl` sur `https://d9xny9istvl53.cloudfront.net/`
+3. **PREPROD ensuite** (seulement après staging OK) : `git checkout preprod && git merge staging` + résolution conflits + `git push origin preprod` + `aws s3 cp amazon-pilot-latest.html s3://amazon-pilot-preprod/index.html` + `aws cloudfront create-invalidation --distribution-id E3CODYJ437XKU5 --paths "/*"` → vérifier `curl` sur `https://preprod.amazon.foliow.app/`
+4. Hard reload navigateur (nouveau tab) pour bypasser cache browser
+
+**Ne jamais sauter l'étape staging** — même si le code est sur la branche `staging`, il doit être déployé sur le CloudFront recette AVANT preprod.
 
 ---
 
