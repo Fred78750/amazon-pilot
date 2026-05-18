@@ -110,6 +110,26 @@ function buyboxOpenCase(c, asin) {
     ],
     conclusion: { state: 'locked', proposedAction: '', outcome: null, closedAt: null }
   };
+  // Pré-évaluation automatique de 3 hypothèses
+  var autoEvals = buyboxAutoEvaluateHypotheses(c, asin);
+  for (var ke = 0; ke < autoEvals.length; ke++) {
+    var ev = autoEvals[ke];
+    var h = newCase.hypotheses.find(function(x) { return x.id === ev.id; });
+    if (!h) continue;
+    h.status    = ev.status;
+    h.evidence  = ev.evidence;
+    h.auto      = true;
+    h.updatedAt = nowISO;
+    var hypoLabel = (BUYBOX_HYPOTHESES.find(function(x) { return x.id === ev.id; }) || {}).label || ev.id;
+    var verb = ev.status === 'investigate' ? 'orientée vers À investiguer (auto)'
+             : ev.status === 'rejected'    ? 'écartée automatiquement (auto)'
+             :                              'pré-évaluée (auto)';
+    newCase.journal.push({
+      ts: nowISO, type: 'auto',
+      content: 'Hypothèse "' + hypoLabel + '" ' + verb + ' — ' + ev.evidence,
+      author: 'system'
+    });
+  }
   buyboxGetCases(c).push(newCase);
   save();
   return newCase;
@@ -120,6 +140,10 @@ function buyboxUpdateHypothesis(c, caseId, hypoId, fields) {
   if (!cs) return;
   var h = cs.hypotheses.find(function(x) { return x.id === hypoId; });
   if (!h) return;
+  // Si l'utilisateur surcharge un marquage auto, la décision devient humaine
+  if (h.auto && fields.status && fields.status !== h.status) {
+    h.auto = false;
+  }
   for (var k in fields) {
     if (Object.prototype.hasOwnProperty.call(fields, k)) h[k] = fields[k];
   }
@@ -182,6 +206,58 @@ function buyboxCloseCase(c, caseId, outcome, proposedAction) {
     author: 'system'
   });
   save();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BUY BOX v3.6.1.3 — Pré-évaluation automatique de 3 hypothèses
+// ═══════════════════════════════════════════════════════════════════
+
+function buyboxAutoEvaluateHypotheses(c, asin) {
+  var a = (c.asins || []).find(function(x) { return x.asin === asin; });
+  if (!a) return [];
+
+  var evaluations = [];
+  var hist = a.history || [];
+
+  // ── Stock insuffisant ─────────────────────────────────────────────
+  var stock     = parseNum(a.sellableUnits) || 0;
+  var unitRevs  = hist.slice(-4).map(function(h) { return parseNum(h.units) || 0; });
+  var velocity  = unitRevs.length > 0
+    ? unitRevs.reduce(function(s, v) { return s + v; }, 0) / unitRevs.length
+    : 0;
+  var couvSem = velocity > 0 ? stock / velocity : (stock > 0 ? 99 : 0);
+
+  if (stock < 10 || couvSem < 1) {
+    evaluations.push({ id: 'stock-insufficient', status: 'investigate',
+      evidence: 'Stock ' + stock + ' u. · couverture ' + couvSem.toFixed(1) + ' sem.' });
+  } else if (stock > 50 && couvSem > 4) {
+    evaluations.push({ id: 'stock-insufficient', status: 'rejected',
+      evidence: 'Stock ' + stock + ' u. · couverture ' + couvSem.toFixed(1) + ' sem.' });
+  }
+
+  // ── PO non confirmé ───────────────────────────────────────────────
+  var poQty = parseNum(a.openPOQty) || 0;
+  if (poQty > 0) {
+    evaluations.push({ id: 'po-not-confirmed', status: 'rejected',
+      evidence: 'PO ouvert ' + poQty + ' u. — hypothèse non pertinente.' });
+  } else if (poQty === 0 && stock < 30) {
+    evaluations.push({ id: 'po-not-confirmed', status: 'investigate',
+      evidence: 'Aucun PO ouvert · stock ' + stock + ' u. — risque rupture.' });
+  }
+
+  // ── Listing inactif ───────────────────────────────────────────────
+  var gvS0 = parseNum(a.glanceViews) || 0;
+  var gvS1 = hist.length >= 2 ? (parseNum(hist[hist.length - 2].glanceViews) || 0) : 0;
+
+  if (gvS0 === 0 && gvS1 === 0) {
+    evaluations.push({ id: 'listing-inactive', status: 'investigate',
+      evidence: 'GV S-0 et S-1 à 0 — listing potentiellement inactif.' });
+  } else if (gvS0 > 100) {
+    evaluations.push({ id: 'listing-inactive', status: 'rejected',
+      evidence: 'GV ' + gvS0 + ' cette semaine — listing actif.' });
+  }
+
+  return evaluations;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -602,7 +678,10 @@ function renderBuyBoxCase(c, asin) {
     h += '<div style="font-weight:500;margin-bottom:1px;' + (isRejected ? 'text-decoration:line-through;text-decoration-color:var(--tx3);' : '') + '">' + def.label + '</div>';
     h += '<div style="color:var(--tx3);font-size:10px;">' + def.hint + '</div>';
     // Select statut
-    h += '<div style="margin-top:4px;display:flex;gap:4px;align-items:center;">';
+    h += '<div style="margin-top:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap;">';
+    if (hypo.auto) {
+      h += '<span style="display:inline-block;padding:2px 6px;font-size:10px;background:var(--b-bg,rgba(0,122,255,.08));color:var(--b);border-radius:4px;flex-shrink:0;" title="Évaluée automatiquement à l\'ouverture du dossier">⚙ auto</span>';
+    }
     h += '<select style="font-size:10px;padding:2px 4px;background:var(--s2);border:0.5px solid var(--bd2);border-radius:4px;color:var(--tx);" onchange="buyboxUpdateHypothesis(cl(),\'' + caseId + '\',\'' + hypo.id + '\',{status:this.value});render();">';
     statusOpts.forEach(function(opt) {
       h += '<option value="' + opt.val + '"' + (hypo.status === opt.val ? ' selected' : '') + '>' + opt.label + '</option>';
