@@ -212,6 +212,24 @@ Quand Fred est prêt :
 - Optionnel : tabs "Fragile" basé sur delta négatif ≥ 2 sem consécutives
 - Format C ERP Gers (parser XLSX onglet "Feuil4", header L.2) si toujours pertinent
 
+### Priorité 2-bis — Moteur de recherche ASINs transversal
+
+Besoin identifié fin de session 18 mai : **4 écrans listent des ASINs mais n'ont pas de moteur de recherche**, contrairement à "Analyse ASINs" qui en a un.
+
+Écrans concernés :
+- **Buy Box** (Phase 1 et Phase 2)
+- **Appros**
+- **Prévisionnel**
+- **Diagnostic CA**
+
+Approche recommandée : **factoriser le composant de recherche existant** dans Analyse ASINs (probablement dans `renderAsins`) en un helper réutilisable, puis l'intégrer dans les 4 écrans. À traiter dans v3.6.2 ou en patch séparé v3.6.2.x.
+
+À vérifier au moment du dev :
+- Localisation du moteur de recherche actuel dans `renderAsins`
+- Possibilité d'extraire en helper (`renderAsinSearch(list, options)` par exemple)
+- UX : input + filtre live, ou aussi des tris/filtres avancés ?
+- Cohérence avec les filtres existants (cycle de vie, tabs, etc.) — éviter conflits
+
 ### Priorité 3 — v3.6.3 — Suggestion IA hypothèses sémantiques
 
 Quand v3.6.2 est en prod et les données fiabilisées :
