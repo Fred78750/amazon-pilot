@@ -219,24 +219,55 @@ function buyboxAutoEvaluateHypotheses(c, asin) {
   var evaluations = [];
   var hist = a.history || [];
 
-  // ── Stock insuffisant ─────────────────────────────────────────────
-  var stock     = parseNum(a.sellableUnits) || 0;
-  var unitRevs  = hist.slice(-4).map(function(h) { return parseNum(h.units) || 0; });
-  var velocity  = unitRevs.length > 0
-    ? unitRevs.reduce(function(s, v) { return s + v; }, 0) / unitRevs.length
-    : 0;
-  var couvSem = velocity > 0 ? stock / velocity : (stock > 0 ? 99 : 0);
+  // ── Stock insuffisant — algorithme dynamique v3.6.1.4 ─────────────
+  var stock = parseNum(a.sellableUnits) || 0;
+  var poQty = parseNum(a.openPOQty) || 0;
 
-  if (stock < 10 || couvSem < 1) {
-    evaluations.push({ id: 'stock-insufficient', status: 'investigate',
-      evidence: 'Stock ' + stock + ' u. · couverture ' + couvSem.toFixed(1) + ' sem.' });
-  } else if (stock > 50 && couvSem > 4) {
-    evaluations.push({ id: 'stock-insufficient', status: 'rejected',
-      evidence: 'Stock ' + stock + ' u. · couverture ' + couvSem.toFixed(1) + ' sem.' });
+  var recentUnits = hist.slice(-4).map(function(h) { return parseNum(h.units) || 0; });
+  var v = recentUnits.length > 0
+    ? recentUnits.reduce(function(s, u) { return s + u; }, 0) / recentUnits.length
+    : null;
+
+  var longHist = hist.slice(-16, -4).map(function(h) { return parseNum(h.units) || 0; });
+  var hl = longHist.length > 0
+    ? longHist.reduce(function(s, u) { return s + u; }, 0) / longHist.length
+    : 0;
+
+  var couvStock  = (v !== null && v > 0) ? stock / v : null;
+  var couvTotale = (v !== null && v > 0) ? (stock + poQty) / v : null;
+
+  var stockStatus   = null;
+  var stockEvidence = '';
+
+  if (v === null) {
+    stockStatus = null; // pas d'historique — pas de marquage
+  } else if (v === 0) {
+    if (hl >= 5) {
+      stockStatus   = null; // ambigü — reste 'todo'
+    } else {
+      stockStatus   = 'rejected';
+      stockEvidence = 'Aucune vente (v=0) et historique faible — produit dormant.';
+    }
+  } else if (couvStock < 2 && couvTotale < 4) {
+    stockStatus   = 'investigate';
+    stockEvidence = 'Stock ' + stock + ' u. (' + couvStock.toFixed(1) + ' sem) + PO ' + poQty + ' u. = couv totale ' + couvTotale.toFixed(1) + ' sem — rupture imminente.';
+  } else if (couvStock < 2 && couvTotale >= 4) {
+    stockStatus   = 'rejected';
+    stockEvidence = 'Stock ' + stock + ' u. (' + couvStock.toFixed(1) + ' sem) mais PO ' + poQty + ' u. couvre ' + couvTotale.toFixed(1) + ' sem — pas d\'urgence stock.';
+  } else if (couvStock < 4 && couvTotale < 6) {
+    stockStatus   = 'investigate';
+    stockEvidence = 'Stock ' + stock + ' u. (' + couvStock.toFixed(1) + ' sem), couv totale ' + couvTotale.toFixed(1) + ' sem — tension à surveiller.';
+  } else if (couvTotale > 12) {
+    stockStatus   = 'rejected';
+    stockEvidence = 'Couv totale ' + couvTotale.toFixed(1) + ' sem — surplus, stock pas le sujet.';
+  }
+
+  if (stockStatus !== null) {
+    evaluations.push({ id: 'stock-insufficient', status: stockStatus, evidence: stockEvidence });
   }
 
   // ── PO non confirmé ───────────────────────────────────────────────
-  var poQty = parseNum(a.openPOQty) || 0;
+  // (poQty déjà déclaré ci-dessus)
   if (poQty > 0) {
     evaluations.push({ id: 'po-not-confirmed', status: 'rejected',
       evidence: 'PO ouvert ' + poQty + ' u. — hypothèse non pertinente.' });
@@ -277,9 +308,15 @@ function computeBuyboxFacts(c, asin) {
   var hist = a.history || [];
   var rPct9w = hist.length >= 9 ? parseNum(String((hist[hist.length - 9].retailPct || '').toString()).replace(',', '.').replace(/[^0-9.]/g, '')) : null;
 
-  // Stock Amazon + couverture
-  var stockAmz = a.sellableUnits || 0;
-  var couv = (e && e.couvertureSem !== null && e.couvertureSem !== undefined) ? e.couvertureSem : null;
+  // Stock Amazon + couverture dynamique v3.6.1.4
+  var stockAmz   = parseNum(a.sellableUnits) || 0;
+  var poAmz      = parseNum(a.openPOQty) || 0;
+  var ruFacts    = hist.slice(-4).map(function(h) { return parseNum(h.units) || 0; });
+  var velFacts   = ruFacts.length > 0 && ruFacts.some(function(u) { return u > 0; })
+    ? ruFacts.reduce(function(s, u) { return s + u; }, 0) / ruFacts.length
+    : null;
+  var couvStockF  = (velFacts !== null && velFacts > 0) ? stockAmz / velFacts : null;
+  var couvTotaleF = (velFacts !== null && velFacts > 0) ? (stockAmz + poAmz) / velFacts : null;
 
   // PO ouvert
   var openPO = parseNum(a.openPOQty) || 0;
@@ -310,7 +347,13 @@ function computeBuyboxFacts(c, asin) {
 
   return {
     retailPct:       { current: rPctNow, nineWeeksAgo: rPct9w },
-    stockAmazon:     { units: stockAmz, couverture: couv },
+    stockAmazon:     {
+      units:             stockAmz,
+      couverture:        couvStockF,
+      couvertureTotale:  couvTotaleF,
+      velocity:          velFacts,
+      velocityFormatted: velFacts !== null ? velFacts.toFixed(1).replace('.', ',') + ' u./sem' : '—'
+    },
     po:              { open: openPO, event: lastPOEvent },
     defects:         { count: defectsRecent, label: defectsLabel },
     price:           priceNow,
@@ -610,8 +653,13 @@ function renderBuyBoxCase(c, asin) {
     h += '<div style="color:var(--tx2);">Retail% actuel</div>';
     h += '<div style="text-align:right;font-weight:500;color:' + (rPctNow < 80 ? 'var(--r)' : 'var(--tx)') + ';">' + rPctStr + ' <span style="color:var(--tx3);font-weight:400;font-size:10px;">' + rPct9Str + '</span></div>';
     h += '<div style="color:var(--tx2);">Stock Amazon</div>';
-    var couvStr = facts.stockAmazon.couverture !== null ? ' · couv. ' + facts.stockAmazon.couverture + ' sem.' : '';
-    h += '<div style="text-align:right;">' + facts.stockAmazon.units + ' u.' + couvStr + '</div>';
+    var couvFmtF = (facts.stockAmazon.couverture !== null && facts.stockAmazon.couverture !== undefined)
+      ? facts.stockAmazon.couverture.toFixed(1).replace('.', ',') + ' sem'
+      : null;
+    var velFmtF  = facts.stockAmazon.velocityFormatted && facts.stockAmazon.velocityFormatted !== '—'
+      ? facts.stockAmazon.velocityFormatted : null;
+    var stockDetail = [velFmtF ? 'vél. ' + velFmtF : null, couvFmtF ? 'couv. ' + couvFmtF : null].filter(Boolean).join(' · ');
+    h += '<div style="text-align:right;">' + facts.stockAmazon.units + ' u.' + (stockDetail ? ' · ' + stockDetail : '') + '</div>';
     h += '<div style="color:var(--tx2);">PO ouvert</div>';
     h += '<div style="text-align:right;">' + facts.po.event + '</div>';
     h += '<div style="color:var(--tx2);">Défauts livraison</div>';
