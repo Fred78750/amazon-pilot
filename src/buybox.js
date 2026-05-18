@@ -15,7 +15,7 @@ function calcBuyBoxAlerts(c) {
 
     // Vérifier historique pour détecter baisse vs S-1 et 0% chronique
     const hist = a.history || [];
-    const prevRetail = hist.length >= 1 ? parseNum(hist[hist.length - 1].retailPct) : null;
+    const prevRetail = hist.length >= 2 ? parseNum(hist[hist.length - 2].retailPct) : null;
     const zeroWeeks = hist.filter(h => parseNum(h.retailPct) === 0).length + (rPct === 0 ? 1 : 0);
 
     const delta = prevRetail !== null ? rPct - prevRetail : null;
