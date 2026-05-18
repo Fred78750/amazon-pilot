@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 13 mai 2026 (v3.5.9 prod)
+**Dernière mise à jour :** 18 mai 2026 (v3.6.1 validée UX preprod — en test usage réel)
 
 ---
 
@@ -87,6 +87,8 @@ Tout patch doit être minimal et ciblé :
 | v3.5.7 | ✅ Stable | 61f0725 |
 | v3.5.8 | ✅ Stable | 6d63e15 |
 | v3.5.9 | ✅ Stable — **prod** | a0789ce |
+| v3.6.0 | ✅ Stable staging+preprod | dead585 |
+| v3.6.1 | ✅ Stable staging+preprod — **en test usage réel Cogex+Gers** | df21047 |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -116,8 +118,11 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | v3.5.9 | https://amazon.foliow.app |
-| Recette (staging) | v3.5.9 | https://d9xny9istvl53.cloudfront.net |
-| Preprod | v3.5.9 | https://preprod.amazon.foliow.app |
+| Recette (staging) | v3.6.1 (commit df21047) | https://d9xny9istvl53.cloudfront.net |
+| Preprod | v3.6.1 (commit df21047) — validée UX, en test usage réel | https://preprod.amazon.foliow.app |
+
+⚠️ v3.6.0 + v3.6.1 non encore mergés en main — merge groupé uniquement après GO explicite de Fred à l'issue des tests usage réel (Cogex + Gers, Buy Box cas d'enquête / journal / hypothèses / imports).
+⚠️ Aucun patch de code tant que Fred n'a pas remonté de retour d'usage. Si bug ou frottement UX → attendre les instructions de Fred, ne pas anticiper.
 
 ---
 
@@ -206,8 +211,20 @@ Toutes dans **`src/core.js`** :
 - `addClientAccount` / `removeClientAccount` / `updateClientAccount` — gestion comptes VC dans config client
 - `ficheHandleXML` — import XML matrice tarifaire avec garde-fou vendor codes
 
-Dans **`src/buybox.js`** :
-- `calcBuyBoxAlerts` — champ `market: a.market` ajouté dans chaque `entry` (v3.5.9) pour permettre le filtrage par marché dans `renderBuyBox`
+Dans **`src/buybox.js`** (TOUTES les fonctions Buy Box v3.6.1+) :
+- `calcBuyBoxAlerts` — champ `market: a.market` ajouté dans chaque `entry` (v3.5.9)
+- `buyboxGetCases`, `buyboxGetCase`, `buyboxOpenCase` — moteur de cas v3.6.1
+- `buyboxUpdateHypothesis`, `buyboxAddJournalEntry` — édition cas
+- `buyboxCheckConclusionReady`, `buyboxCloseCase` — conclusion
+- `computeBuyboxFacts(c, asin)` — calcul auto bloc Faits Phase 2
+- `renderBuyBox()` — Phase 1 Identifier (liste ASINs, KPIs, tabs, tableau 7 colonnes)
+- `renderBuyBoxCase(c, asin)` — Phase 2 Carnet d'enquête (Faits, Hypothèses, Journal, Conclusion)
+
+Constantes Buy Box dans **`src/core.js`** (zone après MARKETPLACES_FULL) :
+- `BUYBOX_HYPOTHESES` — 11 hypothèses (7 maquette + 4 orchestrateur). Libellés sectoriels : "BOL non transmis aux opérationnels". Jamais "Cargo" / "Navision".
+- `BUYBOX_HYPO_STATUS` — ['todo','investigate','validated','rejected']
+- `BUYBOX_CONCLUSION_CONDITIONS` — 3 conditions de déverrouillage Conclusion
+- `BUYBOX_CONTEXT_BANNER` — bandeau contexte sectoriel statique (ChannelX janv. 2026)
 
 ### Localisation des fonctions SEO (gravée — ne pas chercher dans core.js)
 - `buildSEOPrompt`, `parseSEOResponse`, `renderAgentVC` → **`src/seo.js`**
@@ -267,38 +284,46 @@ Un ASIN peut avoir 2 VC (COGEX + 3J6MN), SKU différent par VC. Le SKU ne peut p
 
 ---
 
-## TÂCHES EN COURS (session v3.5.x — toutes terminées)
+## TÂCHES TERMINÉES
 
-- [x] v3.5.1 : Désignations françaises (`migrateXMLTitles`) + Vue consolidée multi-marchés (`consolidateAsins`) → `src/core.js`
-- [x] v3.5.2 : Fix bug critique CSV market collision — `MARKET_CODES` fallback dans `parseCSVFile()` → `src/core.js`
-- [x] v3.5.3 : Suppression doublon section 1.5 Purchase Orders dans `renderImport()` → `src/core.js`
-- [x] v3.5.4 : Fix smoke test I4 — sélecteur `po-section-3` (remplace `po-drop-zone` supprimé en v3.5.3) → `src/smoke.js`
-- [x] v3.5.5 : Onglets marchés avec drapeaux et CA — `getMarketTabs` + `renderMarketTabs` dans `renderDashboard` et `renderAsins` → `src/core.js`
-- [x] v3.5.6 : Garde-fous import CSV — `checkImportCoherence` (marques + marchés), panneau récap pré-fusion, bandeau client visible → `src/core.js`
-- [x] v3.5.7 : Garde-fou import XML matrice tarifaire — `ficheHandleXML` vérifie vendor codes XML vs `c.accounts[].vendorCode` → `src/core.js`
-- [x] v3.5.8 : Fix smoke test V3 + V8 — noms d'écrans incorrects (`go('revue')` → `go('weekly')`, `go('agentseo')` → `go('seo')`) → `src/smoke.js`
-- [x] v3.5.9 : Onglets marchés dans Diagnostic CA (`renderPompier`) et Buy Box (`renderBuyBox`) — filtrage marché + `renderMarketTabs` → `src/core.js` + `src/buybox.js`
+- [x] v3.5.1–v3.5.9 : (cf. historique ci-dessous)
+- [x] **v3.6.0** : Import défauts livraison (`importBuyBoxDefects`) + rendez-vous (`importBuyBoxAppointments`) + champ `bolSource` → `src/core.js`
+- [x] **v3.6.1** : Refonte Buy Box Phase 1+2 + toast imports — 9 patches + CSS → smoke 27/27 ✅ (18 mai 2026)
+  - P1 : Constantes `BUYBOX_HYPOTHESES` (11), `BUYBOX_CONCLUSION_CONDITIONS`, `BUYBOX_CONTEXT_BANNER` → `src/core.js`
+  - P2/P3 : `freshClient()` + `load()` migration `buyboxCases[]`, suppression `bbCases`/`bbKnowledge`
+  - P5 : Nouveau moteur `buyboxOpenCase/UpdateHypothesis/AddJournal/CheckConclusionReady/CloseCase`
+  - P4/P4b : Suppression intégrale ancien système (bbGetCases, renderBBPlan, etc.) + smoke.js mis à jour
+  - P8 : `computeBuyboxFacts()` — calcul auto bloc Faits Phase 2
+  - P6 : `renderBuyBox()` Phase 1 maquette (KPIs, tabs Perdue/Compromise/Fragile/Récupérées, tableau 7 colonnes)
+  - P7 : `renderBuyBoxCase()` Phase 2 maquette (Faits, Hypothèses 11, Journal, Conclusion conditionnelle)
+  - P9 : `showToast('alr-g')` après `importBuyBoxDefects` et `importBuyBoxAppointments`
+  - CSS : ~100 lignes Buy Box dans `src/styles.css`
+  - smoke.js V5 : critère mis à jour "Carnet d'enquête" (ex "Plan d'action" supprimé)
 
 ---
 
 ## TÂCHES SUIVANTES
 
-### Correction immédiate
-- [ ] **v3.5.10** — Fix scroll étape C : `renderWizardStep` (`src/seo.js`) — div wrappant `${content}` → `overflow:visible`, supprimer `overflow:hidden`/`max-height`
-- [x] Fred complète les 8 comptes VC Gers dans la fiche client (vendor codes ES, DE, IT, NL, BE) — fait 13 mai 2026
+### v3.6.2 — Buy Box Phase 2 complète + intégration données
+- [ ] Croisement défauts livraison × ASIN (matching PO → ASIN dans `importBuyBoxDefects`)
+- [ ] Filtres cycle de vie réels dans Phase 1 (quand `codeVie` intégré à `c.asins`)
+- [ ] Causes suspectées en colonne Phase 1 (dérivées de l'hypothèse validée du dossier)
+- [ ] `fragile` et `recovered` : logique calcul (delta négatif ≥2 semaines / cas fermé success + Retail% ≥ 95%)
+
+### Correction immédiate (reportée depuis v3.5.10)
+- [ ] Fix scroll étape C : `renderWizardStep` (`src/seo.js`) — div wrappant `${content}` → `overflow:visible`, supprimer `overflow:hidden`/`max-height`
 
 ### Refonte UX dashboard
-- [ ] Refonte `renderDashboard` — layout KPI + graphique repensé, zone synthèse IA plus visible
-- [ ] Onglets marchés dans écran Appros (`renderAppros`) — même principe que v3.5.9
+- [ ] Refonte `renderDashboard` — layout KPI + graphique repensé
+- [ ] Onglets marchés dans écran Appros (`renderAppros`)
 
 ### Import ERP
-- [ ] Écran **Référentiel** : table ASIN ↔ SKU ↔ EAN — jointure ERP via catalogue XML matrice tarifaire
-- [ ] Import ERP : mapping SKU Vendor → EAN → ligne ERP (stock, désignation, prix achat)
+- [ ] Écran **Référentiel** : table ASIN ↔ SKU ↔ EAN
+- [ ] Import ERP : mapping SKU Vendor → EAN → ligne ERP
 
 ### Agent SEO multi-marchés
-- [ ] `buildSEOPrompt` multi-marchés — adapter le prompt pour prendre en compte `market` dans la génération
-- [ ] `seoFetchFiche` — vérifier lecture fiche Amazon réelle par marché → `src/seo.js`
-- [ ] Sessions comparatives Claude vs ChatGPT (3 ASINs Cogex) → alimenter `EXEMPLES_GPT_REFERENCE.md`
+- [ ] `buildSEOPrompt` multi-marchés
+- [ ] Sessions comparatives Claude vs ChatGPT (3 ASINs Cogex)
 
 ---
 
@@ -335,4 +360,42 @@ Les ASINs avec `ficheOptimisee` créée via fusion wizard n'ont pas de synthèse
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 13 mai 2026 (v3.5.9 prod — roadmap v3.5.10+)**
+## RÈGLES AJOUTÉES (session 18 mai 2026)
+
+### Règle async callback + client actif (incident 13 mai 2026)
+Dans un callback `fetch().then()` ou `FileReader.onload`, `cl()` retourne le client **actif au moment de l'exécution**, pas celui actif au lancement. Solution obligatoire :
+```javascript
+var targetId = cl().id; // capturer AVANT le fetch
+fetch(...).then(function() {
+  selClient(targetId); // restaurer DANS le callback
+  save();
+});
+```
+
+### Règle smoke.js V5 — critère Buy Box
+Depuis v3.6.1, V5 vérifie `body.includes("Carnet d'enquête")` (Phase 2 nouveau système). L'ancien critère `body.includes("Plan d")` est supprimé.
+
+### Architecture Buy Box v3.6.1+ (discordance INSTRUCTIONS)
+Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. En réalité, **toutes les fonctions Buy Box sont dans `src/buybox.js`** (injecté via `// @buybox` dans core.js au build). Les patches 4-8 doivent toujours cibler `src/buybox.js`.
+
+### Déploiement — ordre ABSOLU (staging d'abord, preprod ensuite)
+1. `git push origin staging`
+2. **STAGING d'abord** : `aws s3 cp amazon-pilot-latest.html s3://amazon-pilot-recette/index.html --cache-control "no-cache,no-store,must-revalidate"` + `aws cloudfront create-invalidation --distribution-id EVQ30COFUNGA7 --paths "/*"` → vérifier `curl` sur `https://d9xny9istvl53.cloudfront.net/`
+3. **PREPROD ensuite** (seulement après staging OK) : `git checkout preprod && git merge staging` + résolution conflits + `git push origin preprod` + `aws s3 cp amazon-pilot-latest.html s3://amazon-pilot-preprod/index.html` + `aws cloudfront create-invalidation --distribution-id E3CODYJ437XKU5 --paths "/*"` → vérifier `curl` sur `https://preprod.amazon.foliow.app/`
+4. Hard reload navigateur (nouveau tab) pour bypasser cache browser
+
+**Ne jamais sauter l'étape staging** — même si le code est sur la branche `staging`, il doit être déployé sur le CloudFront recette AVANT preprod.
+
+---
+
+---
+
+## ÉTAT SESSION SUIVANTE PROBABLE
+
+- **Si tests OK** → Fred donne GO merge → merge groupé v3.6.0 + v3.6.1 → main → déploiement prod
+- **Si bug/frottement identifié** → Fred ouvre une session et décrit le problème → patch v3.6.1.1 (ou v3.6.2 si scope plus large)
+- **Dans tous les cas** : Fred rouvre la session — Claude Code n'anticipe rien
+
+---
+
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 18 mai 2026 (v3.6.1 validée UX preprod — test usage réel en cours — v3.5.9 prod)**
