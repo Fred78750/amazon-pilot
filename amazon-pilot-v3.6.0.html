@@ -407,120 +407,7 @@ a:hover { text-decoration: underline; }
 #ap-tooltip::after { content:'';position:absolute;top:100%;left:16px;
   border:5px solid transparent;border-top-color:#1e293b; }
 
-/* ══════════════════════════════════════════════════════════════════
-   BUY BOX v3.6.1 — Phase 1 : Identifier
-   ══════════════════════════════════════════════════════════════════ */
 
-/* KPIs grid — réutilise .kpi existant, ajoute .kpis container et modificateurs BB */
-.kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; margin-bottom:14px; }
-.kpi-danger { color:var(--r); }
-.kpi-hint { font-size:11px; color:var(--tx3); margin-top:3px; }
-
-/* Filtres cycle de vie */
-.lc-filters { display:flex; gap:6px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
-.btn-active { border-color:var(--b) !important; color:var(--b) !important; }
-
-/* Tabs Buy Box */
-.tabs { display:flex; border-bottom:1px solid var(--bd2); margin-bottom:0; overflow-x:auto; }
-.tab { padding:8px 14px; cursor:pointer; font-size:12px; border-bottom:2px solid transparent; white-space:nowrap; }
-.tab.active { border-bottom-color:var(--r); color:var(--r); font-weight:500; }
-.tab-badge { background:var(--s2); color:var(--tx2); font-size:11px; padding:1px 7px; border-radius:10px; }
-
-/* Tableau Buy Box */
-.bb-table { border:0.5px solid var(--bd); border-radius:var(--rdl); overflow:hidden; }
-.bb-thead { display:grid; grid-template-columns:60px 1fr 70px 70px 1fr 80px 110px; padding:8px 14px;
-  background:var(--s2); font-size:11px; color:var(--tx3); font-weight:500; border-bottom:0.5px solid var(--bd); }
-.bb-trow { display:grid; grid-template-columns:60px 1fr 70px 70px 1fr 80px 110px; padding:12px 14px;
-  border-bottom:0.5px solid var(--bd); align-items:center; font-size:12px; }
-.bb-trow:last-child { border-bottom:none; }
-.bb-trow:hover { background:var(--s2); }
-.bb-product-name { font-size:12px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-
-/* Badges cycle de vie */
-.badge-best { background:var(--b-bg); color:var(--b); font-size:9px; padding:2px 6px; border-radius:4px; font-weight:500; }
-.badge-perm { background:var(--s2); color:var(--tx2); font-size:9px; padding:2px 6px; border-radius:4px; font-weight:500; }
-.badge-fin  { background:transparent; color:var(--tx3); font-size:9px; padding:2px 6px; border-radius:4px; border:0.5px solid var(--bd2); font-weight:500; }
-
-/* Bandeau contexte sectoriel */
-.context-banner { padding:10px 12px; background:var(--a-bg); border-left:3px solid var(--a); border-radius:var(--rd); font-size:11px; line-height:1.5; }
-.context-title  { font-weight:500; color:var(--a); margin-bottom:3px; }
-
-/* Info-banner bas de page */
-.bb-info-banner { padding:8px 12px; background:var(--b-bg); color:var(--b); font-size:11px; border-radius:var(--rd); }
-
-/* ══════════════════════════════════════════════════════════════════
-   BUY BOX v3.6.1 — Phase 2 : Carnet d'enquête
-   ══════════════════════════════════════════════════════════════════ */
-
-/* Grille 2 colonnes */
-.bb-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-
-/* Carte générique */
-.bb-card { background:var(--s1); border:0.5px solid var(--bd); border-radius:var(--rdl); padding:14px 16px; margin-bottom:14px; }
-.bb-card-header { display:flex; align-items:center; gap:6px; margin-bottom:10px; padding-bottom:8px; border-bottom:0.5px solid var(--bd); }
-.bb-card-title  { font-size:12px; font-weight:500; text-transform:uppercase; letter-spacing:.04em; }
-.bb-card-meta   { font-size:10px; color:var(--tx3); margin-left:auto; }
-
-/* Grille Faits */
-.facts-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 12px; font-size:11px; }
-.facts-grid .label { color:var(--tx2); }
-.facts-grid .value { text-align:right; }
-.facts-grid .value.danger  { color:var(--r); font-weight:500; }
-.facts-grid .value.warning { color:var(--a); font-weight:500; }
-.facts-actions { display:flex; gap:6px; margin-top:10px; padding-top:8px; border-top:0.5px solid var(--bd); }
-
-/* Hypothèses */
-.hypo-row { display:flex; align-items:flex-start; gap:8px; padding:7px 0; border-bottom:0.5px solid var(--bd); font-size:11px; }
-.hypo-row:last-child { border-bottom:none; }
-.hypo-row.dim { opacity:0.6; }
-.hypo-icon { width:16px; flex-shrink:0; text-align:center; font-size:13px; margin-top:1px; }
-.hypo-icon.success { color:var(--g); }
-.hypo-icon.warn    { color:var(--a); }
-.hypo-icon.dim-ic  { color:var(--tx3); }
-.hypo-content { flex:1; min-width:0; }
-.hypo-title { font-weight:500; margin-bottom:1px; }
-.hypo-title.struck { text-decoration:line-through; text-decoration-color:var(--tx3); }
-.hypo-hint { color:var(--tx3); font-size:10px; }
-.hypo-status { font-size:9px; padding:2px 5px; border-radius:3px; font-weight:500; white-space:nowrap; }
-.status-todo        { background:var(--s2); color:var(--tx2); }
-.status-investigate { background:var(--a-bg); color:var(--a); }
-.status-ok          { background:var(--g-bg); color:var(--g); }
-.bb-ai-suggestion   { display:none; } /* réactivation v3.6.3 */
-
-/* Journal */
-.journal-row { display:flex; gap:8px; padding:7px 0; border-bottom:0.5px solid var(--bd); font-size:11px; }
-.journal-row:last-child { border-bottom:none; }
-.journal-time    { flex-shrink:0; width:75px; color:var(--tx3); font-family:var(--fm); font-size:10px; }
-.journal-icon    { font-size:13px; flex-shrink:0; margin-top:1px; }
-.journal-icon.done    { color:var(--g); }
-.journal-icon.pending { color:var(--a); }
-.journal-content     { flex:1; min-width:0; }
-.journal-content .sub { color:var(--tx3); font-size:10px; margin-top:1px; }
-
-/* Carte Conclusion */
-.bb-conclusion-card    { background:var(--s2); border:0.5px dashed var(--bd2); border-radius:var(--rdl); padding:14px; }
-.bb-conclusion-status  { font-size:9px; padding:2px 6px; border-radius:3px; background:var(--s2); color:var(--tx3); font-weight:500; margin-left:auto; }
-.cond-row    { display:flex; align-items:center; gap:6px; padding:3px 0; font-size:11px; }
-.cond-status { color:var(--tx3); margin-left:auto; font-family:var(--fm); font-size:10px; }
-.cond-icon      { font-size:13px; }
-.cond-icon.done { color:var(--g); }
-.cond-icon.todo { color:var(--tx3); }
-.shield-banner  { margin-top:10px; padding:9px 11px; background:var(--s1); border-radius:var(--rd); font-size:10px; color:var(--tx3); line-height:1.5; }
-
-/* Badges Phase 2 header */
-.badge-danger { background:var(--r-bg); color:var(--r); font-size:11px; padding:4px 10px; border-radius:4px; font-weight:500; }
-.badge-muted  { font-size:11px; padding:4px 10px; color:var(--tx2); background:var(--s2); border-radius:4px; }
-
-/* Eyebrow (réutilisé dans Buy Box) */
-.eyebrow { font-size:11px; color:var(--tx3); text-transform:uppercase; letter-spacing:.04em; }
-
-/* Responsive — tableau Buy Box en mobile */
-@media (max-width:900px) {
-  .bb-grid { grid-template-columns:1fr; }
-  .bb-thead, .bb-trow { grid-template-columns:1fr 1fr 60px 60px; }
-  .bb-thead > div:nth-child(5),
-  .bb-trow  > div:nth-child(5) { display:none; }
-}
 
 </style>
 </head>
@@ -564,7 +451,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.6.1';
+const APP_VERSION = '3.6.0';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -687,19 +574,13 @@ async function smokeTest(silent) {
     else fail('vital','V4','Buy Box liste', e || corrupt.length + ' alertes retailPct>100');
   } catch(ex) { fail('vital','V4','Buy Box liste', ex.message); }
 
-  // V5 — Buy Box Phase 2 (carnet d'enquête v3.6.1 — dossier sans crash)
+  // V5 — Buy Box Phase 2 (dossier sans crash)
   try {
-    window._buyboxView = null; window._buyboxAsin = null; // reset état UI
-    if (typeof buyboxOpenCase === 'function' && c) buyboxOpenCase(c, SMOKE_REF.asinRef.asin);
-    window._buyboxView = 'case'; window._buyboxAsin = SMOKE_REF.asinRef.asin;
-    if (typeof render === 'function') render();
+    if (typeof bbOpenCase === 'function' && c) bbOpenCase(c, SMOKE_REF.asinRef.asin);
     await new Promise(r => setTimeout(r, 400));
-    const e = getErr();
-    const hasCase = document.body.innerHTML.includes('Carnet d\'enquête') || document.body.innerHTML.includes('Hypothèses');
-    if (!e && hasCase) pass('vital','V5','Buy Box Phase 2 ouvert (' + SMOKE_REF.asinRef.asin + ')');
-    else fail('vital','V5','Buy Box Phase 2', e || 'DOM Carnet enquête absent');
-    // Remettre sur vue liste avant de continuer
-    window._buyboxView = 'list'; window._buyboxAsin = null;
+    const e = getErr(); const hasPlan = document.body.innerHTML.includes('Plan d');
+    if (!e && hasPlan) pass('vital','V5','Buy Box Phase 2 ouvert (' + SMOKE_REF.asinRef.asin + ')');
+    else fail('vital','V5','Buy Box Phase 2', e || 'DOM Plan d action absent');
     if (typeof go === 'function') { go('buybox'); await new Promise(r=>setTimeout(r,150)); }
   } catch(ex) { fail('vital','V5','Buy Box Phase 2', ex.message); }
 
@@ -995,53 +876,6 @@ const MARKETPLACES_FULL = [
   { market: '.eg',     flag: '🇪🇬', name: 'Égypte',                region: 'Moyen-Orient & Afrique' },
   { market: '.co.za',  flag: '🇿🇦', name: 'Afrique du Sud',        region: 'Moyen-Orient & Afrique' },
 ];
-
-// ═══════════════════════════════════════════════════════════════════
-// BUY BOX v3.6.1 — Constantes
-// ═══════════════════════════════════════════════════════════════════
-
-// 11 hypothèses de cause perte Buy Box (7 maquette + 4 ajouts orchestrateur)
-var BUYBOX_HYPOTHESES = [
-  { id: 'bol-not-transmitted',  label: 'BOL non transmis aux opérationnels',   hint: 'Le numéro de connaissement n\'arrive pas dans les ASN — défauts BOL Mismatch en cascade.' },
-  { id: 'competitor-3p',        label: 'Concurrent 3P prix',                   hint: 'Un vendeur tiers propose un prix inférieur ou détient l\'offre Featured.' },
-  { id: 'stock-insufficient',   label: 'Stock insuffisant',                    hint: 'Stock Amazon < seuil — disponibilité dégradée.' },
-  { id: 'po-not-confirmed',     label: 'PO non confirmé',                      hint: 'PO ouvert mais taux de confirmation < 50 %.' },
-  { id: 'compliance-removed',   label: 'Suppression éligibilité (compliance)', hint: 'Listing retiré pour non-conformité (sécurité, doc, marque).' },
-  { id: 'vendor-auto-pricing',  label: 'Pricing automatique Vendor',           hint: 'Amazon ajuste le retail price en dehors de notre fourchette.' },
-  { id: 'listing-inactive',     label: 'Listing inactif',                      hint: 'Fiche désactivée côté Amazon (statut, image manquante, etc.).' },
-  // Ajouts orchestrateur
-  { id: 'crap-designation',     label: 'CRaP désigné',                         hint: 'Can\'t Realize a Profit — Amazon bloque la Buy Box si la marge devient négative pour eux.' },
-  { id: 'parent-child-shift',   label: 'Variation parent/enfant perdue',       hint: 'L\'enfant a basculé sur un parent qui prend la Featured Offer.' },
-  { id: 'spec-mismatch',        label: 'Spécifications incohérentes',          hint: 'Poids ou dimensions du listing diffèrent du PO — blocage automatique.' },
-  { id: 'market-restriction',   label: 'Restriction marché',                   hint: 'Produit conforme FR mais bloqué sur un autre marché actif.' }
-];
-
-// Statuts des hypothèses
-// 'todo'        — non vérifiée
-// 'investigate' — à investiguer (compatible avec les faits, à creuser)
-// 'validated'   — confirmée comme cause
-// 'rejected'    — écartée (faits contradictoires)
-var BUYBOX_HYPO_STATUS = ['todo', 'investigate', 'validated', 'rejected'];
-
-// Conditions de déverrouillage de la Conclusion (Phase 2)
-var BUYBOX_CONCLUSION_CONDITIONS = [
-  { id: 'min-journal',       label: 'Au moins 3 entrées dans le journal',                    check: function(cs) { return (cs.journal || []).length >= 3; } },
-  { id: 'hypotheses-tested', label: 'Au moins 1 hypothèse validée OU 3 écartées avec faits', check: function(cs) {
-      var hypos = cs.hypotheses || [];
-      var validated = hypos.filter(function(h) { return h.status === 'validated'; }).length;
-      var rejected  = hypos.filter(function(h) { return h.status === 'rejected' && (h.evidence || '').length > 0; }).length;
-      return validated >= 1 || rejected >= 3;
-    }
-  },
-  { id: 'bol-source-known',  label: 'Source du BOL renseignée (fiche client)',               check: function(cs, client) { return !!(client && client.bolSource); } }
-];
-
-// Bandeau contexte sectoriel — statique v3.6.1 (TODO v3.7 : zone admin éditable)
-var BUYBOX_CONTEXT_BANNER = {
-  title: 'Contexte sectoriel — Vendor on-time policy mise à jour Amazon',
-  body:  'Depuis janvier 2026, Amazon mesure la conformité on-time via les ASN Vendor (et non plus via les signaux internes de réception) et a fusionné les catégories de défauts « PO not on time » et « PRO/BOL mismatch ». Seuil de conformité relevé de 90 % à 95 %. Phase d\'observation du 19 janvier au 24 février 2026, facturation effective depuis le 25 février à 3 % du purchase cost.',
-  cite:  'Source : ChannelX, 19 janvier 2026.'
-};
 
 function marketOptionsHTML(selected) {
   var html = '';
@@ -1407,8 +1241,6 @@ function importBuyBoxDefects(file) {
     var s = parsed.summary;
     var vcList = Object.keys(s.vendorCodes).map(function(k) { return k + ' (' + s.vendorCodes[k] + ')'; }).join(', ');
     var sdList = Object.keys(s.subDefects).map(function(k) { return k + ' : ' + s.subDefects[k]; }).join(' · ');
-    // v3.6.1 — toast import défauts
-    showToast('✓ ' + s.totalDefects + ' défauts livraison importés — ' + vcList, 'alr-g', 4000);
     log('✓ ' + s.totalDefects + ' défauts importés — VC : ' + vcList + ' · Sub-Defects : ' + sdList + ' · ' + s.totalUnits + ' unités impactées', 'ok');
     render();
   };
@@ -1437,8 +1269,6 @@ function importBuyBoxAppointments(file) {
     var s = parsed.summary;
     var prefList = Object.keys(s.vBolPrefixes).map(function(k) { return k + 'xxx (' + s.vBolPrefixes[k] + ')'; }).join(', ');
     var shipList = Object.keys(s.shipTo).map(function(k) { return k + ' (' + s.shipTo[k] + ')'; }).join(', ');
-    // v3.6.1 — toast import rendez-vous
-    showToast('✓ ' + s.totalAppointments + ' rendez-vous importés (' + s.sourceLanguage.toUpperCase() + ') — V-BOL : ' + (prefList || 'aucun'), 'alr-g', 4000);
     log('✓ ' + s.totalAppointments + ' rendez-vous importés (' + s.sourceLanguage.toUpperCase() + ') — V-BOL : ' + (prefList || 'aucun') + ' · FC : ' + (shipList || 'aucun'), 'ok');
     render();
   };
@@ -1482,9 +1312,7 @@ function freshClient() {
     deliveryAppointments: [],    // [{ isa, arn, asn, vBol, cBol, vPro, cPro, isd, po, asnQty, initialReceivedQty, issues: [], appointmentCreationDate, fcStatus, scheduledArrival, actualArrival, firstCarrierRequestedDeliveryDate, carrierRequestedDeliveryDate, windowStart, windowEnd, carrier, mode, shipTo, lastUpdated, sourceLanguage }]
     deliveryAppointmentsDate: '', // ISO date du dernier import
     bolSource: '',               // 'ERP' | 'CMS' | 'OMS' | 'TRANSPORTEUR' | 'INCONNU' | ''
-    bolSourceDetail: '',         // texte libre : 'Navision', 'SAP', 'Shopify Plus', etc.
-    // ── Buy Box v3.6.1 — Cas d'enquête ──
-    buyboxCases: []  // [{ id, asin, status, openedAt, closedAt, facts: {snapshot, computedAt}, hypotheses: [{id, status, evidence, updatedAt}], journal: [{ts, type, content, author}], conclusion: {state, proposedAction, outcome, closedAt} }]
+    bolSourceDetail: ''          // texte libre : 'Navision', 'SAP', 'Shopify Plus', etc.
   };
 }
 
@@ -1628,12 +1456,6 @@ async function load() {
         bolSourceDetail:          c.bolSourceDetail          || '',
         // v3.1.71 — migration silencieuse : default KPI primaire = ordered
         kpiPrimaireCA:  c.kpiPrimaireCA  || 'ordered',
-        // v3.6.1 — nouveau champ cas d'enquête
-        buyboxCases: c.buyboxCases || [],
-        // v3.6.1 — suppression silencieuse de l'ancien système (Fred confirme : pas de cas actifs)
-        // L'écrasement DOIT venir après ...c pour ne pas être réintroduit par le spread
-        bbCases:     undefined,
-        bbKnowledge: undefined,
       }));
       activeId = clients[0].id;
       screen = 'dashboard';
@@ -4800,630 +4622,749 @@ function calcBuyBoxAlerts(c) {
   return { critical, warning, suppressed };
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// BUY BOX v3.6.1 — Moteur de cas
-// ═══════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// BUY BOX — Cycle complet 4 phases
+// ══════════════════════════════════════════════════════════════════
 
-function buyboxGenId() {
-  return 'bc_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+// ── Initialisation bbCases et bbKnowledge ─────────────────────────
+function bbGetCases(c) {
+  if (!c.bbCases) c.bbCases = [];
+  return c.bbCases;
 }
-
-function buyboxGetCases(c) {
-  if (!c.buyboxCases) c.buyboxCases = [];
-  return c.buyboxCases;
+function bbGetKnowledge(c) {
+  if (!c.bbKnowledge) c.bbKnowledge = [];
+  return c.bbKnowledge;
 }
-
-// Récupère le cas actif (status !== 'closed') pour un ASIN
-function buyboxGetCase(c, asin) {
-  return buyboxGetCases(c).find(function(x) { return x.asin === asin && x.status !== 'closed'; }) || null;
+function bbGetCase(c, asin) {
+  return bbGetCases(c).find(x => x.asin === asin && x.status !== 'closed') || null;
 }
-
-// Ouvre un nouveau cas pour un ASIN. Si déjà ouvert → retourne l'existant.
-function buyboxOpenCase(c, asin) {
-  var existing = buyboxGetCase(c, asin);
+function bbOpenCase(c, asin, cause) {
+  const existing = bbGetCase(c, asin);
   if (existing) return existing;
-
-  var nowISO = new Date().toISOString();
-  var newCase = {
-    id: buyboxGenId(),
-    asin: asin,
-    status: 'open',
-    openedAt: nowISO,
-    closedAt: null,
-    facts: { snapshot: null, computedAt: null },
-    hypotheses: BUYBOX_HYPOTHESES.map(function(h) {
-      return { id: h.id, status: 'todo', evidence: '', updatedAt: null };
-    }),
-    journal: [
-      { ts: nowISO, type: 'system', content: 'Dossier ouvert automatiquement', author: 'system' }
-    ],
-    conclusion: { state: 'locked', proposedAction: '', outcome: null, closedAt: null }
-  };
-  buyboxGetCases(c).push(newCase);
+  const week = getISOWeek(new Date());
+  const cas = { asin, cause, action: null, note: '', status: 'open',
+    weeks: [{ week, rPct: null, event: 'Détection', ts: new Date().toISOString() }],
+    openedAt: new Date().toISOString(), resolvedAt: null, success: null };
+  bbGetCases(c).push(cas);
   save();
-  return newCase;
+  return cas;
 }
-
-function buyboxUpdateHypothesis(c, caseId, hypoId, fields) {
-  var cs = buyboxGetCases(c).find(function(x) { return x.id === caseId; });
-  if (!cs) return;
-  var h = cs.hypotheses.find(function(x) { return x.id === hypoId; });
-  if (!h) return;
-  for (var k in fields) {
-    if (Object.prototype.hasOwnProperty.call(fields, k)) h[k] = fields[k];
-  }
-  h.updatedAt = new Date().toISOString();
-  // Auto-journal si validation/rejet
-  if (fields.status === 'validated' || fields.status === 'rejected') {
-    var hypoLabel = (BUYBOX_HYPOTHESES.find(function(x) { return x.id === hypoId; }) || {}).label || hypoId;
-    cs.journal.push({
-      ts: new Date().toISOString(),
-      type: 'auto',
-      content: 'Hypothèse "' + hypoLabel + '" ' + (fields.status === 'validated' ? 'validée' : 'écartée'),
-      author: 'system'
-    });
+function bbCloseCase(c, asin, success) {
+  const cas = bbGetCase(c, asin);
+  if (!cas) return;
+  cas.status = 'closed';
+  cas.resolvedAt = new Date().toISOString();
+  cas.success = success;
+  // Ajouter à la base de connaissance
+  if (cas.action && cas.cause) {
+    const weeks = cas.weeks.length;
+    bbGetKnowledge(c).push({ cause: cas.cause, action: cas.action, weeks, success, ts: new Date().toISOString() });
+    // Limiter à 50 cas
+    if (c.bbKnowledge.length > 50) c.bbKnowledge = c.bbKnowledge.slice(-50);
   }
   save();
 }
-
-function buyboxAddJournalEntry(c, caseId, content, type) {
-  var cs = buyboxGetCases(c).find(function(x) { return x.id === caseId; });
-  if (!cs) return;
-  cs.journal.push({
-    ts: new Date().toISOString(),
-    type: type || 'manual',
-    content: content,
-    author: 'user'
-  });
-  save();
-}
-
-// Vérifie les 3 conditions de déverrouillage de la Conclusion
-function buyboxCheckConclusionReady(c, caseId) {
-  var cs = buyboxGetCases(c).find(function(x) { return x.id === caseId; });
-  if (!cs) return { ready: false, conditions: [] };
-
-  var conditions = [];
-  var allMet = true;
-  for (var i = 0; i < BUYBOX_CONCLUSION_CONDITIONS.length; i++) {
-    var cd = BUYBOX_CONCLUSION_CONDITIONS[i];
-    var met = cd.check(cs, c);
-    if (!met) allMet = false;
-    conditions.push({ id: cd.id, label: cd.label, met: met });
+function bbKnowledgeSuggestion(c, cause) {
+  const kb = bbGetKnowledge(c).filter(k => k.cause === cause);
+  if (kb.length < 2) return null;
+  // Compter succès par action
+  const byAction = {};
+  for (const k of kb) {
+    if (!byAction[k.action]) byAction[k.action] = { ok: 0, total: 0, weeks: [] };
+    byAction[k.action].total++;
+    if (k.success) byAction[k.action].ok++;
+    byAction[k.action].weeks.push(k.weeks);
   }
-  return { ready: allMet, conditions: conditions };
+  // Trouver la meilleure action
+  let best = null, bestScore = -1;
+  for (const [action, stats] of Object.entries(byAction)) {
+    const score = stats.ok / stats.total;
+    if (score > bestScore) { bestScore = score; best = { action, ...stats }; }
+  }
+  if (!best) return null;
+  const avgWeeks = Math.round(best.weeks.reduce((a,b)=>a+b,0) / best.weeks.length);
+  return { action: best.action, successRate: Math.round(bestScore * 100), avgWeeks, total: kb.length };
 }
-
-function buyboxCloseCase(c, caseId, outcome, proposedAction) {
-  var cs = buyboxGetCases(c).find(function(x) { return x.id === caseId; });
-  if (!cs) return;
-  var nowISO = new Date().toISOString();
-  cs.status = 'closed';
-  cs.closedAt = nowISO;
-  cs.conclusion.state = 'closed';
-  cs.conclusion.outcome = outcome;
-  cs.conclusion.proposedAction = proposedAction || '';
-  cs.conclusion.closedAt = nowISO;
-  cs.journal.push({
-    ts: nowISO,
-    type: 'system',
-    content: 'Dossier clôturé — ' + (outcome === 'success' ? 'succès' : outcome === 'failure' ? 'échec' : 'inconclusif'),
-    author: 'system'
-  });
-  save();
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// BUY BOX v3.6.1 — Calcul auto bloc Faits (Phase 2)
-// ═══════════════════════════════════════════════════════════════════
-
-function computeBuyboxFacts(c, asin) {
-  var a = (c.asins || []).find(function(x) { return x.asin === asin; });
-  if (!a) return null;
-
-  var alerts = calcBuyBoxAlerts(c);
-  var allEntries = alerts.suppressed.concat(alerts.critical, alerts.warning);
-  var e = allEntries.find(function(x) { return x.asin === asin; });
-
-  // Retail% actuel + comparaison S-9
-  var rPctNow = e ? e.rPct : (parseNum(String(a.retailPct || '').replace(',', '.').replace(/[^0-9.]/g, '')) || 0);
-  var hist = a.history || [];
-  var rPct9w = hist.length >= 9 ? parseNum(String((hist[hist.length - 9].retailPct || '').toString()).replace(',', '.').replace(/[^0-9.]/g, '')) : null;
-
-  // Stock Amazon + couverture
-  var stockAmz = a.sellableUnits || 0;
-  var couv = (e && e.couvertureSem !== null && e.couvertureSem !== undefined) ? e.couvertureSem : null;
-
-  // PO ouvert
-  var openPO = parseNum(a.openPOQty) || 0;
-  var lastPOEvent = openPO > 0 ? 'PO ouvert (' + openPO + ' u.)' : 'aucun PO ouvert';
-
-  // Défauts livraison (globaux en v3.6.1 — croisement ASIN en v3.6.2)
-  var defectsRecent = (c.deliveryDefects || []).length;
-  var defectsLabel  = defectsRecent > 0
-    ? defectsRecent + ' défauts importés (toute la flotte)'
-    : 'aucun défaut importé';
-
-  // Prix actuel
-  var priceNow = a.price || a.retailPrice || null;
-
-  // Concurrent 3P : pas d'info en v3.6.1
-  var competitor3P = 'non détecté (intégration v3.6.4)';
-
-  // Dernière modif fiche
-  var lastFicheUpdate = (a.ficheOptimisee && a.ficheOptimisee[c.mainMarket])
-    ? 'fiche optimisée présente'
-    : 'aucune optimisation enregistrée';
-
-  // Code vie : v3.6.2
-  var codeVie = '— (intégration v3.6.2)';
-
-  // Saisonnalité : v3.6.4
-  var seasonality = 'historique N-1 non analysé (v3.6.4)';
-
-  return {
-    retailPct:       { current: rPctNow, nineWeeksAgo: rPct9w },
-    stockAmazon:     { units: stockAmz, couverture: couv },
-    po:              { open: openPO, event: lastPOEvent },
-    defects:         { count: defectsRecent, label: defectsLabel },
-    price:           priceNow,
-    competitor3P:    competitor3P,
-    lastFicheUpdate: lastFicheUpdate,
-    codeVie:         codeVie,
-    seasonality:     seasonality,
-    computedAt:      new Date().toISOString()
-  };
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// BUY BOX v3.6.1 — renderBuyBox() Phase 1 : Identifier
-// ═══════════════════════════════════════════════════════════════════
 
 function renderBuyBox() {
-  var c = cl();
+  const c = cl();
   if (!c) return renderWelcome();
-  if (!c.asins || !c.asins.length) return '<div class="alr alr-a">Importez d\'abord des données CSV.</div>';
+  if (!c.asins?.length) return `<div class="alr alr-a">Importez d'abord des données CSV.</div>`;
 
-  // Réinitialiser la vue si on arrive sur Phase 1
-  if (!window._buyboxView || window._buyboxView === 'list') {
-    window._buyboxView = 'list';
-  } else if (window._buyboxView === 'case' && window._buyboxAsin) {
-    return renderBuyBoxCase(c, window._buyboxAsin);
-  }
+  const { critical: critRaw, warning: warnRaw, suppressed: suppRaw } = calcBuyBoxAlerts(c);
+  const mktFilt = e => filters.market === 'all' || e.market === filters.market;
+  const critical = critRaw.filter(mktFilt);
+  const warning = warnRaw.filter(mktFilt);
+  const suppressed = suppRaw.filter(mktFilt);
+  const allProblems = [...suppressed, ...critical, ...warning];
+  const phase = window._bbPhase || 'list';
+  const selectedAsin = window._bbSelectedAsin || null;
 
-  var alerts = calcBuyBoxAlerts(c);
-  var lost        = alerts.critical;
-  var compromised = alerts.warning;
-  var fragile     = [];   // v3.6.1 : toujours vide (dérivation v3.6.2)
-  var recovered   = [];   // v3.6.1 : toujours vide (cas fermés success — dérivation v3.6.2)
+  let h = `<div style="max-width:960px">`;
+  h += renderMarketTabs(c, filters.market);
 
-  // Filtrage marché
-  var marketFilter = window._buyboxMarket || 'all';
-  var byMarket = function(e) { return marketFilter === 'all' || e.market === marketFilter; };
-  var lostF       = lost.filter(byMarket);
-  var compromisedF= compromised.filter(byMarket);
+  if (phase === 'list') {
+    // ── PHASE 1 : Vue d'ensemble ─────────────────────────────────
 
-  // Tab actif
-  var activeTab = window._buyboxTab || 'lost';
-  var displayList = activeTab === 'lost'        ? lostF
-                  : activeTab === 'compromised' ? compromisedF
-                  : activeTab === 'fragile'     ? fragile
-                  : recovered;
+    // Cartes urgence
+    const openCases = bbGetCases(c).filter(x => x.status !== 'closed');
+    h += `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <div>
+        <h2 style="font-size:18px;font-weight:700;margin:0">🏆 Surveillance Buy Box</h2>
+        <p style="color:var(--tx2);font-size:12px;margin:4px 0 0">Mise à jour à chaque import CSV · ${allProblems.length} ASIN${allProblems.length>1?'s':''} avec Featured Offer dégradée</p>
+      </div>
+      ${openCases.length ? `<span style="font-size:12px;padding:5px 12px;background:var(--b-l,#e6f1fb);color:var(--b,#185fa5);border-radius:20px;font-weight:500">${openCases.length} dossier${openCases.length>1?'s':''} en cours</span>` : ''}
+    </div>`;
 
-  // KPIs
-  var asinsInTrouble = lostF.length + compromisedF.length;
-  var totalActiveAsins = (c.asins || []).filter(function(a) { return getRevenue(a, c) > 0; }).length;
-  var caAtRisk = lostF.reduce(function(s, e) { return s + (e.revenue || 0); }, 0)
-               + compromisedF.reduce(function(s, e) { return s + (e.revenue || 0); }, 0);
-  var openCasesCount = buyboxGetCases(c).filter(function(x) { return x.status !== 'closed'; }).length;
-  var ninetyDaysAgo  = Date.now() - 90 * 24 * 3600 * 1000;
-  var resolved90d    = buyboxGetCases(c).filter(function(x) {
-    return x.status === 'closed' && x.closedAt && new Date(x.closedAt).getTime() >= ninetyDaysAgo && x.conclusion.outcome === 'success';
-  }).length;
+    // 3 cartes urgence
+    h += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">`;
+    h += `<div style="padding:14px 16px;border-radius:var(--rd);border:0.5px solid #f09595;background:#fcebeb;cursor:pointer" onclick="window._bbFilter='critical';render()">
+      <div style="font-size:26px;font-weight:700;color:#a32d2d">${critical.length}</div>
+      <div style="font-size:12px;font-weight:500;color:#a32d2d;margin-top:2px">ASINs à traiter<br>cette semaine</div>
+      <div style="font-size:11px;color:#993c1d;margin-top:6px">Featured Offer &lt; 80%<br>CA combiné : ${fmtEur(critical.reduce((s,e)=>s+(e.revenue||0),0))}</div>
+    </div>`;
+    h += `<div style="padding:14px 16px;border-radius:var(--rd);border:0.5px solid #fac775;background:#faeeda;cursor:pointer" onclick="window._bbFilter='warning';render()">
+      <div style="font-size:26px;font-weight:700;color:#854f0b">${warning.length}</div>
+      <div style="font-size:12px;font-weight:500;color:#854f0b;margin-top:2px">ASINs en recul<br>à surveiller</div>
+      <div style="font-size:11px;color:#854f0b;opacity:.8;margin-top:6px">Featured Offer en baisse<br>vs semaine précédente</div>
+    </div>`;
+    h += `<div style="padding:14px 16px;border-radius:var(--rd);border:0.5px solid var(--bd);background:var(--s2)">
+      <div style="font-size:26px;font-weight:700;color:var(--tx2)">${suppressed.length}</div>
+      <div style="font-size:12px;font-weight:500;color:var(--tx2);margin-top:2px">Fiches à vérifier<br>en urgence</div>
+      <div style="font-size:11px;color:var(--tx3);margin-top:6px">Featured Offer à 0%<br>depuis ≥2 semaines</div>
+    </div>`;
+    h += `</div>`;
 
-  // Formatage CA
-  var fmtCA = function(v) {
-    if (!v) return '—';
-    if (v >= 1000) return Math.round(v / 1000) + ' k€';
-    return Math.round(v) + ' €';
-  };
+    // Tableau simplifié
+    const bbFilter = window._bbFilter || 'all';
+    const toShow = bbFilter === 'critical' ? critical : bbFilter === 'warning' ? warning : bbFilter === 'suppressed' ? suppressed : [...suppressed, ...critical, ...warning];
+    const mkt = c.mainMarket || '.fr';
 
-  var h = '';
+    h += `<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+      ${[['all','Tous',allProblems.length,'var(--tx2)'],['critical','À traiter',critical.length,'#a32d2d'],['warning','À surveiller',warning.length,'#854f0b'],['suppressed','Fiches à vérifier',suppressed.length,'var(--tx2)']].map(([v,l,n,col]) =>
+        `<button class="btn btn-sm${bbFilter===v?' btn-p':''}" onclick="window._bbFilter='${v}';render()" style="${bbFilter===v?'':'color:'+col}">${l} (${n})</button>`
+      ).join('')}
+    </div>`;
 
-  // ── En-tête ──
-  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap;">';
-  h += '<div>';
-  h += '<div class="eyebrow" style="font-size:11px;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">Phase 1 · Identifier</div>';
-  h += '<div style="font-size:18px;font-weight:600;">Buy Box</div>';
-  h += '</div>';
-  h += '<div style="display:flex;gap:8px;align-items:center;">';
-  h += '<select style="font-size:12px;padding:5px 8px;background:var(--s2);border:0.5px solid var(--bd2);border-radius:6px;color:var(--tx);cursor:pointer;" onchange="window._buyboxMarket=this.value;render()">';
-  h += '<option value="all"' + (marketFilter === 'all' ? ' selected' : '') + '>Tous les marchés</option>';
-  var mkts = Array.from(new Set((c.asins || []).map(function(a) { return a.market; }).filter(Boolean)));
-  mkts.forEach(function(m) {
-    h += '<option value="' + m + '"' + (marketFilter === m ? ' selected' : '') + '>amazon' + m + '</option>';
-  });
-  h += '</select>';
-  h += '<button class="btn btn-sm" onclick="render()">Recalculer</button>';
-  h += '</div>';
-  h += '</div>';
+    h += `<div class="cd" style="padding:0;overflow:hidden">`;
+    for (const e of toShow) {
+      const existingCase = bbGetCase(c, e.asin);
+      const statusLabel = existingCase ? `<span style="font-size:10px;padding:2px 7px;background:var(--b-l,#e6f1fb);color:var(--b,#185fa5);border-radius:10px">Dossier ouvert</span>` : '';
+      const isSuppressed = suppressed.includes(e);
+      const isCritical = critical.includes(e);
+      const dotColor = isSuppressed ? '#888' : isCritical ? '#e24b4a' : '#ef9f27';
 
-  // ── Bandeau contexte sectoriel ──
-  h += '<div class="context-banner" style="margin-bottom:14px;">';
-  h += '<div class="context-title">' + BUYBOX_CONTEXT_BANNER.title + '</div>';
-  h += BUYBOX_CONTEXT_BANNER.body + ' <cite style="color:var(--tx3);font-style:normal;">' + BUYBOX_CONTEXT_BANNER.cite + '</cite>';
-  h += '</div>';
+      // Bouton d'action contextuel selon cause
+      let actionBtn = '';
+      if (e.cause === 'stock' || e.stockUrgent)
+        actionBtn = `<button class="btn btn-sm" style="background:#ef9f27;color:#fff;border-color:#ef9f27" onclick="event.stopPropagation();window._approsAsin='${e.asin}';go('appros')">Voir Appros →</button>`;
+      else if (e.cause === 'suppression')
+        actionBtn = `<button class="btn btn-sm" style="background:#888;color:#fff;border-color:#888" onclick="event.stopPropagation();window._bbPhase='action';window._bbSelectedAsin='${esc(e.asin)}';render()">Ouvrir le dossier</button>`;
+      else
+        actionBtn = `<button class="btn btn-sm" style="background:#e24b4a;color:#fff;border-color:#e24b4a" onclick="event.stopPropagation();window._bbPhase='action';window._bbSelectedAsin='${esc(e.asin)}';bbOpenCase(cl(),'${esc(e.asin)}','${e.cause}');render()">Traiter →</button>`;
 
-  // ── KPIs ──
-  h += '<div class="kpis" style="margin-bottom:16px;">';
-  h += '<div class="kpi"><div class="kpi-lb">ASINs en difficulté</div><div class="kpi-v' + (asinsInTrouble > 0 ? ' kpi-danger' : '') + '">' + asinsInTrouble + '</div><div class="kpi-d">sur ' + totalActiveAsins + ' actifs</div></div>';
-  h += '<div class="kpi"><div class="kpi-lb">CA à risque / mois</div><div class="kpi-v' + (caAtRisk > 0 ? ' kpi-danger' : '') + '">' + fmtCA(caAtRisk) + '</div><div class="kpi-d">Perdue + Compromise</div></div>';
-  h += '<div class="kpi"><div class="kpi-lb">Dossiers ouverts</div><div class="kpi-v">' + openCasesCount + '</div><div class="kpi-d">en cours d\'enquête</div></div>';
-  h += '<div class="kpi"><div class="kpi-lb">Résolus (90 j)</div><div class="kpi-v good">' + resolved90d + '</div><div class="kpi-d">avec succès</div></div>';
-  h += '</div>';
+      const shortTitle = esc((e.title || e.asin).slice(0, 42)) + ((e.title||'').length > 42 ? '…' : '');
+      const deltaStr = e.delta !== null ? (e.delta > 0 ? '+' : '') + e.delta.toFixed(0) + 'pts' : '—';
+      const stockStr = e.couvertureSem !== null && e.couvertureSem !== '—'
+        ? `<span style="font-size:10px;padding:2px 6px;border-radius:8px;background:${e.stockUrgent?'#fcebeb':'#eaf3de'};color:${e.stockUrgent?'#a32d2d':'#3b6d11'}">${Number(e.couvertureSem).toFixed(1)}sem</span>`
+        : '';
 
-  // ── Filtres cycle de vie ──
-  h += '<div class="lc-filters" style="margin-bottom:12px;">';
-  h += '<span style="font-size:11px;color:var(--tx2);margin-right:4px;">Cycle de vie :</span>';
-  var lcFilters = [
-    { id: 'all',  label: 'Tous' },
-    { id: 'best', label: 'Best' },
-    { id: 'perm', label: 'Permanent' },
-    { id: 'fin',  label: 'Fin de vie' }
-  ];
-  var curLc = window._buyboxLifecycle || 'all';
-  lcFilters.forEach(function(f) {
-    var active = curLc === f.id;
-    h += '<button class="btn btn-sm' + (active ? ' btn-active' : '') + '" style="' + (active ? 'border-color:var(--b);color:var(--b);' : '') + '" onclick="window._buyboxLifecycle=\'' + f.id + '\';render()">' + f.label + '</button>';
-  });
-  h += '<span style="font-size:10px;color:var(--tx3);margin-left:6px;">(filtrage cycle de vie en v3.6.2)</span>';
-  h += '</div>';
-
-  // ── Tabs ──
-  h += '<div class="tabs" style="margin-bottom:0;">';
-  var tabs = [
-    { id: 'lost',        label: 'Perdue',       count: lostF.length },
-    { id: 'compromised', label: 'Compromise',   count: compromisedF.length },
-    { id: 'fragile',     label: 'Fragile',      count: 0 },
-    { id: 'recovered',   label: 'Récupérées',   count: 0 }
-  ];
-  tabs.forEach(function(t) {
-    var isActive = activeTab === t.id;
-    h += '<div class="tab' + (isActive ? ' active' : '') + '" style="padding:8px 14px;cursor:pointer;font-size:12px;border-bottom:2px solid ' + (isActive ? 'var(--r)' : 'transparent') + ';color:' + (isActive ? 'var(--r)' : 'var(--tx2)') + ';font-weight:' + (isActive ? '500' : '400') + ';display:flex;align-items:center;gap:6px;" onclick="window._buyboxTab=\'' + t.id + '\';render()">';
-    h += t.label;
-    h += '<span class="tab-badge">' + t.count + '</span>';
-    h += '</div>';
-  });
-  h += '</div>';
-
-  // ── Tableau ──
-  h += '<div class="bb-table" style="border:0.5px solid var(--bd);border-radius:var(--rdl);overflow:hidden;margin-top:0;">';
-
-  // En-tête tableau
-  h += '<div class="bb-thead" style="display:grid;grid-template-columns:60px 1fr 70px 70px 1fr 80px 110px;padding:8px 14px;background:var(--s2);font-size:11px;color:var(--tx3);font-weight:500;border-bottom:0.5px solid var(--bd);">';
-  h += '<div>Type</div><div>ASIN · Produit</div><div style="text-align:right;">Retail%</div><div style="text-align:right;">Δ S-1</div><div>Cause suspectée</div><div style="text-align:right;">CA/mois</div><div></div>';
-  h += '</div>';
-
-  if (displayList.length === 0) {
-    h += '<div style="padding:24px;text-align:center;color:var(--tx3);font-size:12px;">Aucun ASIN dans cette catégorie.</div>';
-  } else {
-    var shown = displayList.slice(0, 50);
-    shown.forEach(function(entry) {
-      var asin = entry.asin;
-      var title = (entry.title || asin).slice(0, 55);
-      var rPct = entry.rPct !== null && entry.rPct !== undefined ? entry.rPct : null;
-      var delta = entry.delta !== null && entry.delta !== undefined ? entry.delta : null;
-      var rPctStr = rPct !== null ? rPct + ' %' : '—';
-      var rPctDanger = rPct !== null && rPct < 80;
-      var deltaStr = delta !== null ? (delta >= 0 ? '+' : '') + delta + ' pt' : '—';
-      var deltaColor = delta !== null && delta < 0 ? 'var(--r)' : delta > 0 ? 'var(--g)' : 'var(--tx3)';
-      var rev = getRevenue(entry, c) || entry.revenue || 0;
-      var hasCase = buyboxGetCase(c, asin) !== null;
-
-      h += '<div class="bb-trow" style="display:grid;grid-template-columns:60px 1fr 70px 70px 1fr 80px 110px;padding:12px 14px;border-bottom:0.5px solid var(--bd);align-items:center;font-size:12px;">';
-
-      // Colonne badge (cycle de vie — v3.6.2)
-      h += '<div><span style="font-size:10px;color:var(--tx3);">—</span></div>';
-
-      // ASIN + produit
-      h += '<div><div class="bb-product-name" style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + (entry.title || asin) + '">' + title + '</div>';
-      h += '<div style="font-size:10px;color:var(--tx3);font-family:var(--fm);">' + asin + '</div></div>';
-
-      // Retail%
-      h += '<div style="text-align:right;font-weight:500;color:' + (rPctDanger ? 'var(--r)' : 'var(--tx)') + ';">' + rPctStr + '</div>';
-
-      // Δ S-1
-      h += '<div style="text-align:right;color:' + deltaColor + ';">' + deltaStr + '</div>';
-
-      // Cause suspectée (v3.6.1 : statique)
-      h += '<div><span style="color:var(--tx3);font-size:11px;">—</span></div>';
-
-      // CA/mois
-      h += '<div style="text-align:right;color:var(--tx2);">' + fmtCA(rev) + '</div>';
-
-      // Action
-      h += '<div style="text-align:right;">';
-      h += '<button class="btn btn-sm" style="' + (hasCase ? 'border-color:var(--a);color:var(--a);' : '') + '" onclick="window._buyboxView=\'case\';window._buyboxAsin=\'' + asin + '\';buyboxOpenCase(cl(),\'' + asin + '\');render();">' + (hasCase ? '📂 Dossier' : 'Enquêter →') + '</button>';
-      h += '</div>';
-
-      h += '</div>';
-    });
-
-    if (displayList.length > 50) {
-      h += '<div style="padding:10px 14px;font-size:11px;color:var(--tx3);text-align:center;">Affichage limité à 50 ASINs — ' + (displayList.length - 50) + ' supplémentaires non affichés.</div>';
+      h += `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:0.5px solid var(--bd);cursor:pointer" onclick="window._bbPhase='action';window._bbSelectedAsin='${esc(e.asin)}';bbOpenCase(cl(),'${esc(e.asin)}','${e.cause}');render()">
+        <div style="width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0"></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${shortTitle}</div>
+          <div style="font-size:11px;color:var(--tx2);margin-top:1px">${e.asin} · ${e.cause==='prix_3p'?'Vendeur 3P concurrent':e.cause==='stock'?'Stock faible':e.cause==='suppression'?'Éligibilité perdue':e.cause==='po_unconfirmed'?'PO non confirmé':'En surveillance'} ${stockStr}</div>
+        </div>
+        ${statusLabel}
+        <div style="text-align:center;flex-shrink:0;width:52px">
+          <div style="font-size:13px;font-weight:700;color:${isCritical||isSuppressed?'#a32d2d':'#854f0b'}">${e.rPct.toFixed(0)}%</div>
+          <div style="font-size:10px;color:${e.delta!==null&&e.delta<0?'#a32d2d':e.delta>0?'#3b6d11':'var(--tx3)'}">${deltaStr}</div>
+        </div>
+        <div style="font-size:12px;font-weight:500;flex-shrink:0;width:70px;text-align:right">${fmtEur(e.revenue||0)}</div>
+        ${actionBtn}
+      </div>`;
     }
+    h += `</div>`;
+
+  } else if (phase === 'action' && selectedAsin) {
+    // ── PHASES 2-4 : Dossier ASIN ────────────────────────────────
+    h += renderBuyBoxCase(c, selectedAsin);
   }
 
-  h += '</div>';
-
+  h += `</div>`;
   return h;
 }
-
-// ═══════════════════════════════════════════════════════════════════
-// BUY BOX v3.6.1 — renderBuyBoxCase() Phase 2 : Carnet d'enquête
-// ═══════════════════════════════════════════════════════════════════
 
 function renderBuyBoxCase(c, asin) {
-  if (!c || !asin) { window._buyboxView = 'list'; return renderBuyBox(); }
+  const a = c.asins.find(x => x.asin === asin);
+  const { critical, warning, suppressed } = calcBuyBoxAlerts(c);
+  const allE = [...suppressed, ...critical, ...warning];
+  const e = allE.find(x => x.asin === asin);
+  if (!a || !e) return `<div class="alr alr-a">ASIN introuvable.</div>`;
 
-  // Récupérer ou créer le cas
-  var cs = buyboxGetCase(c, asin);
-  if (!cs) {
-    cs = buyboxOpenCase(c, asin);
-    // Après save(), recharger depuis l'objet courant
-    cs = buyboxGetCase(c, asin);
-    if (!cs) { window._buyboxView = 'list'; return renderBuyBox(); }
+  let cas = bbGetCase(c, asin);
+  if (!cas) { cas = bbOpenCase(c, asin, e.cause); }
+
+  const subPhase = window._bbSubPhase || 'plan';
+  const mkt = c.mainMarket || '.fr';
+
+  // Navigation retour + onglets phases
+  let h = `<button class="btn btn-sm" onclick="window._bbPhase='list';window._bbSubPhase='plan';render()" style="margin-bottom:14px">← Retour</button>`;
+
+  // En-tête ASIN
+  h += `<div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:16px;padding:14px;background:var(--s2);border-radius:var(--rd)">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700;margin-bottom:3px">${esc((a.title||asin).slice(0,60))}${(a.title||'').length>60?'…':''}</div>
+      <div style="font-size:11px;color:var(--tx2)">${asin} · Featured Offer actuelle : <strong style="color:${e.rPct<80?'#a32d2d':'#854f0b'}">${e.rPct.toFixed(0)}%</strong>${e.delta!==null?` (${(e.delta>0?'+':'')+e.delta.toFixed(0)}pts vs S-1)`:''}</div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0">
+      <button class="btn btn-sm" onclick="openAmazonProduct('${asin}','${mkt}')">Voir sur Amazon</button>
+      <button class="btn btn-sm" onclick="copyBuyBoxChromePrompt('${asin}','${mkt}')">Prompt IA</button>
+    </div>
+  </div>`;
+
+  // Onglets 2-3-4
+  const tabs = [['plan','2 — Plan d\u2019action'],['suivi','3 — Suivi'],['bilan','4 — Bilan']];
+  h += `<div style="display:flex;gap:0;border-bottom:0.5px solid var(--bd);margin-bottom:16px">`;
+  for (const [id, label] of tabs) {
+    const on = subPhase === id;
+    h += `<button onclick="window._bbSubPhase='${id}';render()" style="padding:8px 16px;font-size:12px;font-weight:${on?'600':'400'};border:none;background:none;cursor:pointer;color:${on?'var(--tx)':'var(--tx2)'};border-bottom:2px solid ${on?'var(--b,#378add)':'transparent'}">${label}</button>`;
   }
+  h += `</div>`;
 
-  var caseId = cs.id;
-  var asinData = (c.asins || []).find(function(a) { return a.asin === asin; });
-  var title = asinData ? (asinData.title || asin) : asin;
-
-  // Bloc Faits
-  var facts = computeBuyboxFacts(c, asin);
-
-  // Statut Buy Box pour badge header
-  var alerts = calcBuyBoxAlerts(c);
-  var allAlerts = alerts.suppressed.concat(alerts.critical, alerts.warning);
-  var alertEntry = allAlerts.find(function(e) { return e.asin === asin; });
-  var bbStatus = alertEntry
-    ? (alerts.suppressed.find(function(e) { return e.asin === asin; }) ? '⊘ Buy Box supprimée'
-    : alerts.critical.find(function(e) { return e.asin === asin; })    ? '⊘ Buy Box perdue'
-    : '⚠ Buy Box compromise')
-    : '✓ Buy Box normale';
-  var bbStatusColor = alertEntry
-    ? (alerts.critical.find(function(e) { return e.asin === asin; }) || alerts.suppressed.find(function(e) { return e.asin === asin; }) ? 'var(--r)' : 'var(--a)')
-    : 'var(--g)';
-
-  // Date d'ouverture
-  var openedDate = cs.openedAt ? new Date(cs.openedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) : '—';
-
-  // Conditions conclusion
-  var conclusionCheck = buyboxCheckConclusionReady(c, caseId);
-
-  var h = '';
-
-  // ── En-tête ──
-  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap;">';
-  h += '<div style="display:flex;align-items:center;gap:10px;min-width:0;">';
-  h += '<button class="btn btn-sm" onclick="window._buyboxView=\'list\';window._buyboxAsin=null;render();">← Retour liste</button>';
-  h += '<div style="min-width:0;">';
-  h += '<div class="eyebrow" style="font-size:11px;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;">Phase 2 · Comprendre — Carnet d\'enquête</div>';
-  h += '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">';
-  h += '<span style="font-size:11px;color:var(--tx2);font-family:var(--fm);">' + asin + '</span>';
-  h += '<span style="font-size:14px;font-weight:500;">' + title.slice(0, 60) + '</span>';
-  h += '</div>';
-  h += '</div>';
-  h += '</div>';
-  h += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">';
-  h += '<span style="background:var(--r-bg);color:' + bbStatusColor + ';font-size:11px;padding:4px 10px;border-radius:4px;font-weight:500;">' + bbStatus + '</span>';
-  h += '<span style="font-size:11px;padding:4px 10px;color:var(--tx2);background:var(--s2);border-radius:4px;">Dossier ouvert le ' + openedDate + '</span>';
-  h += '</div>';
-  h += '</div>';
-
-  // ── Bandeau contexte sectoriel ──
-  h += '<div class="context-banner" style="margin-bottom:14px;">';
-  h += '<div class="context-title">' + BUYBOX_CONTEXT_BANNER.title + '</div>';
-  h += BUYBOX_CONTEXT_BANNER.body + ' <cite style="color:var(--tx3);font-style:normal;">' + BUYBOX_CONTEXT_BANNER.cite + '</cite>';
-  h += '</div>';
-
-  // ── Grille 2 colonnes ──
-  h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">';
-
-  // ══ COLONNE GAUCHE ══
-  h += '<div>';
-
-  // ── Carte Faits ──
-  h += '<div class="bb-card" style="background:var(--s1);border:0.5px solid var(--bd);border-radius:var(--rdl);padding:14px 16px;margin-bottom:14px;">';
-  h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding-bottom:8px;border-bottom:0.5px solid var(--bd);">';
-  h += '<span style="font-size:14px;">⚙</span>';
-  h += '<span style="font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Faits</span>';
-  h += '<span style="font-size:10px;color:var(--tx3);margin-left:auto;">Auto · calculé maintenant</span>';
-  h += '</div>';
-  if (facts) {
-    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;font-size:11px;">';
-    var rPctNow = facts.retailPct.current;
-    var rPct9w  = facts.retailPct.nineWeeksAgo;
-    var rPctStr = rPctNow !== null && rPctNow !== undefined ? rPctNow + ' %' : '—';
-    var rPct9Str = rPct9w !== null && rPct9w !== undefined ? '(était ' + rPct9w + '% S-9)' : '';
-    h += '<div style="color:var(--tx2);">Retail% actuel</div>';
-    h += '<div style="text-align:right;font-weight:500;color:' + (rPctNow < 80 ? 'var(--r)' : 'var(--tx)') + ';">' + rPctStr + ' <span style="color:var(--tx3);font-weight:400;font-size:10px;">' + rPct9Str + '</span></div>';
-    h += '<div style="color:var(--tx2);">Stock Amazon</div>';
-    var couvStr = facts.stockAmazon.couverture !== null ? ' · couv. ' + facts.stockAmazon.couverture + ' sem.' : '';
-    h += '<div style="text-align:right;">' + facts.stockAmazon.units + ' u.' + couvStr + '</div>';
-    h += '<div style="color:var(--tx2);">PO ouvert</div>';
-    h += '<div style="text-align:right;">' + facts.po.event + '</div>';
-    h += '<div style="color:var(--tx2);">Défauts livraison</div>';
-    h += '<div style="text-align:right;color:' + (facts.defects.count > 0 ? 'var(--a)' : 'var(--tx)') + ';font-weight:' + (facts.defects.count > 0 ? '500' : '400') + ';">' + facts.defects.label + '</div>';
-    h += '<div style="color:var(--tx2);">Prix actuel</div>';
-    h += '<div style="text-align:right;">' + (facts.price ? facts.price + ' €' : '—') + '</div>';
-    h += '<div style="color:var(--tx2);">Concurrent 3P</div>';
-    h += '<div style="text-align:right;color:var(--tx3);">' + facts.competitor3P + '</div>';
-    h += '<div style="color:var(--tx2);">Dernière modif fiche</div>';
-    h += '<div style="text-align:right;color:var(--tx3);">' + facts.lastFicheUpdate + '</div>';
-    h += '<div style="color:var(--tx2);">Cycle de vie ERP</div>';
-    h += '<div style="text-align:right;color:var(--tx3);">' + facts.codeVie + '</div>';
-    h += '<div style="color:var(--tx2);">Saisonnalité N-1</div>';
-    h += '<div style="text-align:right;color:var(--tx3);">' + facts.seasonality + '</div>';
-    h += '</div>';
-    h += '<div style="display:flex;gap:6px;margin-top:10px;padding-top:8px;border-top:0.5px solid var(--bd);">';
-    h += '<button class="btn btn-sm" onclick="openAmazonProduct(\'' + asin + '\',\'' + (c.mainMarket || '.fr') + '\')">↗ Voir dans Vendor Central</button>';
-    h += '</div>';
-  } else {
-    h += '<div style="color:var(--tx3);font-size:11px;">ASIN introuvable dans les données importées.</div>';
+  if (subPhase === 'plan') {
+    h += renderBBPlan(c, cas, e, asin, mkt);
+  } else if (subPhase === 'suivi') {
+    h += renderBBSuivi(c, cas, e, asin);
+  } else if (subPhase === 'bilan') {
+    h += renderBBBilan(c, cas, e, asin);
   }
-  h += '</div>';
-
-  // ── Carte Hypothèses ──
-  h += '<div class="bb-card" style="background:var(--s1);border:0.5px solid var(--bd);border-radius:var(--rdl);padding:14px 16px;margin-bottom:14px;">';
-  h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding-bottom:8px;border-bottom:0.5px solid var(--bd);">';
-  h += '<span style="font-size:14px;">⌕</span>';
-  h += '<span style="font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Hypothèses</span>';
-  var validatedCount  = (cs.hypotheses || []).filter(function(h2) { return h2.status === 'validated'; }).length;
-  var investigateCount= (cs.hypotheses || []).filter(function(h2) { return h2.status === 'investigate'; }).length;
-  var rejectedCount   = (cs.hypotheses || []).filter(function(h2) { return h2.status === 'rejected'; }).length;
-  var testedCount = validatedCount + rejectedCount + investigateCount;
-  h += '<span style="font-size:10px;color:var(--tx3);margin-left:auto;">' + testedCount + ' traitées · ' + (11 - testedCount) + ' ouvertes</span>';
-  h += '</div>';
-
-  // Statut options
-  var statusOpts = [
-    { val: 'todo',        label: 'À vérifier' },
-    { val: 'investigate', label: 'À investiguer' },
-    { val: 'validated',   label: 'Validée' },
-    { val: 'rejected',    label: 'Écartée' }
-  ];
-
-  var hypoData = cs.hypotheses || [];
-  hypoData.forEach(function(hypo) {
-    var def = BUYBOX_HYPOTHESES.find(function(x) { return x.id === hypo.id; });
-    if (!def) return;
-    var isRejected  = hypo.status === 'rejected';
-    var isValidated = hypo.status === 'validated';
-    var iconHtml = isRejected  ? '<span style="color:var(--g);font-size:13px;">✓</span>'
-                 : isValidated ? '<span style="color:var(--a);font-size:13px;">⚠</span>'
-                 :               '<span style="color:var(--tx3);font-size:13px;">○</span>';
-    var statusColor = hypo.status === 'todo'        ? 'background:var(--s2);color:var(--tx2);'
-                    : hypo.status === 'investigate' ? 'background:var(--a-bg);color:var(--a);'
-                    : hypo.status === 'validated'   ? 'background:var(--a-bg);color:var(--a);'
-                    : 'background:var(--g-bg);color:var(--g);';
-    var statusLabel = statusOpts.find(function(s) { return s.val === hypo.status; });
-    var statusLabelStr = statusLabel ? statusLabel.label : hypo.status;
-    var rowOpacity = isRejected ? 'opacity:0.6;' : '';
-
-    h += '<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:0.5px solid var(--bd);font-size:11px;' + rowOpacity + '">';
-    h += '<div style="width:16px;flex-shrink:0;text-align:center;margin-top:1px;">' + iconHtml + '</div>';
-    h += '<div style="flex:1;min-width:0;">';
-    h += '<div style="font-weight:500;margin-bottom:1px;' + (isRejected ? 'text-decoration:line-through;text-decoration-color:var(--tx3);' : '') + '">' + def.label + '</div>';
-    h += '<div style="color:var(--tx3);font-size:10px;">' + def.hint + '</div>';
-    // Select statut
-    h += '<div style="margin-top:4px;display:flex;gap:4px;align-items:center;">';
-    h += '<select style="font-size:10px;padding:2px 4px;background:var(--s2);border:0.5px solid var(--bd2);border-radius:4px;color:var(--tx);" onchange="buyboxUpdateHypothesis(cl(),\'' + caseId + '\',\'' + hypo.id + '\',{status:this.value});render();">';
-    statusOpts.forEach(function(opt) {
-      h += '<option value="' + opt.val + '"' + (hypo.status === opt.val ? ' selected' : '') + '>' + opt.label + '</option>';
-    });
-    h += '</select>';
-    if (hypo.evidence) {
-      h += '<span style="font-size:10px;color:var(--tx3);font-style:italic;">' + hypo.evidence.slice(0, 40) + (hypo.evidence.length > 40 ? '…' : '') + '</span>';
-    }
-    h += '</div>';
-    h += '</div>';
-    h += '<span style="font-size:9px;padding:2px 5px;border-radius:3px;font-weight:500;white-space:nowrap;' + statusColor + '">' + statusLabelStr + '</span>';
-    h += '</div>';
-  });
-
-  // .ai-suggestion — présente mais masquée en v3.6.1 (réactivation v3.6.3)
-  h += '<div style="display:none;" class="bb-ai-suggestion"><!-- AI suggestion v3.6.3 --></div>';
-  h += '</div>';
-
-  h += '</div>'; // fin col gauche
-
-  // ══ COLONNE DROITE ══
-  h += '<div>';
-
-  // ── Carte Journal ──
-  h += '<div class="bb-card" style="background:var(--s1);border:0.5px solid var(--bd);border-radius:var(--rdl);padding:14px 16px;margin-bottom:14px;">';
-  h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding-bottom:8px;border-bottom:0.5px solid var(--bd);">';
-  h += '<span style="font-size:14px;">📓</span>';
-  h += '<span style="font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Journal</span>';
-  h += '<button class="btn btn-sm" style="margin-left:auto;" onclick="var txt=prompt(\'Ajouter une entrée journal :\');if(txt&&txt.trim()){buyboxAddJournalEntry(cl(),\'' + caseId + '\',txt.trim(),\'manual\');render();}">+ Ajouter</button>';
-  h += '</div>';
-
-  var journal = cs.journal || [];
-  if (journal.length === 0) {
-    h += '<div style="color:var(--tx3);font-size:11px;">Aucune entrée. Cliquez "+ Ajouter" pour commencer.</div>';
-  } else {
-    journal.slice().reverse().forEach(function(entry) {
-      var ts = entry.ts ? new Date(entry.ts) : null;
-      var tsStr = ts ? ts.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) + ' · ' + ts.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '—';
-      var isSystem = entry.type === 'system' || entry.type === 'auto';
-      var iconColor = isSystem ? 'color:var(--g);' : 'color:var(--a);';
-      var iconChar  = isSystem ? '✓' : '◷';
-      h += '<div style="display:flex;gap:8px;padding:7px 0;border-bottom:0.5px solid var(--bd);font-size:11px;">';
-      h += '<div style="flex-shrink:0;width:75px;color:var(--tx3);font-size:10px;font-family:var(--fm);">' + tsStr + '</div>';
-      h += '<div style="font-size:13px;flex-shrink:0;margin-top:1px;' + iconColor + '">' + iconChar + '</div>';
-      h += '<div style="flex:1;min-width:0;">';
-      h += entry.content;
-      if (isSystem) {
-        h += '<div style="color:var(--tx3);font-size:10px;margin-top:1px;">système</div>';
-      }
-      h += '</div>';
-      h += '</div>';
-    });
-  }
-  h += '</div>';
-
-  // ── Carte Conclusion ──
-  h += '<div style="background:var(--s2);border:0.5px dashed var(--bd2);border-radius:var(--rdl);padding:14px;">';
-  h += '<div style="display:flex;align-items:center;gap:6px;padding-bottom:0;margin-bottom:10px;">';
-  h += '<span style="font-size:14px;">🏁</span>';
-  h += '<span style="font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Conclusion</span>';
-  var conclusionState = cs.conclusion && cs.conclusion.state === 'closed' ? 'Finalisée' : 'Non finalisée';
-  var conclusionStateColor = cs.conclusion && cs.conclusion.state === 'closed' ? 'background:var(--g-bg);color:var(--g);' : 'background:var(--s2);color:var(--tx3);';
-  h += '<span style="font-size:9px;padding:2px 6px;border-radius:3px;font-weight:500;margin-left:auto;' + conclusionStateColor + '">' + conclusionState + '</span>';
-  h += '</div>';
-
-  if (cs.conclusion && cs.conclusion.state !== 'closed') {
-    h += '<div style="font-size:11px;color:var(--tx2);margin-bottom:12px;line-height:1.5;">';
-    h += '<span style="color:var(--tx3);">🔒</span> Cette section s\'activera quand le faisceau d\'éléments sera suffisant. Conditions actuelles :';
-    h += '</div>';
-
-    h += '<div style="font-size:11px;margin-bottom:12px;">';
-    conclusionCheck.conditions.forEach(function(cond) {
-      var iconCheck = cond.met ? '<span style="color:var(--g);font-size:13px;">✓</span>' : '<span style="color:var(--tx3);font-size:13px;">○</span>';
-      // Calcul du statut
-      var condStatusStr = '';
-      if (cond.id === 'min-journal')       condStatusStr = journal.length + ' / 3';
-      else if (cond.id === 'hypotheses-tested') condStatusStr = validatedCount + ' val. · ' + rejectedCount + ' écart.';
-      else if (cond.id === 'bol-source-known')  condStatusStr = c.bolSource ? c.bolSource : 'en attente';
-      h += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;">';
-      h += iconCheck;
-      h += '<span>' + cond.label + '</span>';
-      h += '<span style="color:var(--tx3);margin-left:auto;font-family:var(--fm);font-size:10px;">' + condStatusStr + '</span>';
-      h += '</div>';
-    });
-    h += '</div>';
-
-    var btnDisabled = !conclusionCheck.ready;
-    h += '<button class="btn" ' + (btnDisabled ? 'disabled' : '') + ' style="width:100%;padding:7px 14px;" onclick="showToast(\'Phase 3 disponible en v3.6.2\', \'alr-a\', 4000);">Passer en phase 3 — Proposer →</button>';
-  } else if (cs.conclusion && cs.conclusion.state === 'closed') {
-    h += '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px;">Dossier clôturé — <strong>' + (cs.conclusion.outcome === 'success' ? 'succès' : cs.conclusion.outcome === 'failure' ? 'échec' : 'inconclusif') + '</strong></div>';
-    if (cs.conclusion.proposedAction) {
-      h += '<div style="font-size:11px;color:var(--tx3);">' + cs.conclusion.proposedAction + '</div>';
-    }
-  }
-
-  h += '<div style="margin-top:10px;padding:9px 11px;background:var(--s1);border-radius:var(--rd);font-size:10px;color:var(--tx3);line-height:1.5;">';
-  h += '🛡 L\'outil ne propose pas de conclusion automatique — c\'est à l\'utilisateur de trancher quand il juge le faisceau suffisant. L\'IA n\'a pas le droit de précipiter.';
-  h += '</div>';
-  h += '</div>'; // fin conclusion-card
-
-  h += '</div>'; // fin col droite
-  h += '</div>'; // fin grid
 
   return h;
 }
 
+function renderBBPlan(c, cas, e, asin, mkt) {
+  const a = c.asins.find(x => x.asin === asin) || {};
+
+  // ── Sparkline ─────────────────────────────────────────────────
+  const hist = (a.history || []).slice(-10).filter(h => parseNum(h.retailPct) > 0 || (h.revenue||0) > 0);
+  const svgW = 300, svgH = 50, pad = 4;
+  const pts = hist.map((d,i) => {
+    const x = hist.length > 1 ? pad + i*(svgW-2*pad)/(hist.length-1) : svgW/2;
+    const y = svgH - pad - (Math.min(parseNum(d.retailPct)||0,100)/100)*(svgH-2*pad);
+    return `${x},${y}`;
+  }).join(' ');
+  const sparkline = hist.length >= 2
+    ? `<svg viewBox="0 0 ${svgW} ${svgH}" style="width:100%;height:44px;display:block">
+        <line x1="0" y1="${svgH-pad-(95/100)*(svgH-2*pad)}" x2="${svgW}" y2="${svgH-pad-(95/100)*(svgH-2*pad)}" stroke="#3b6d11" stroke-width="1" stroke-dasharray="3,3" opacity=".4"/>
+        <polyline points="${pts}" fill="none" stroke="#378add" stroke-width="1.5" stroke-linejoin="round"/>
+        ${hist.map((d,i)=>{const x=hist.length>1?pad+i*(svgW-2*pad)/(hist.length-1):svgW/2;const rp=parseNum(d.retailPct)||0;const y=svgH-pad-(Math.min(rp,100)/100)*(svgH-2*pad);return `<circle cx="${x}" cy="${y}" r="3" fill="${rp<80?'#e24b4a':rp<95?'#ef9f27':'#639922'}"/>`;}).join('')}
+      </svg>`
+    : `<p style="font-size:11px;color:var(--tx3);margin:0">Pas encore d\u2019historique — visible après plusieurs imports hebdomadaires</p>`;
+
+  // ── Corrélation CA/retailPct ───────────────────────────────────
+  const histFull = hist.filter(h => parseNum(h.retailPct) > 0 && (h.revenue||0) > 0);
+  let corrBlock = '';
+  if (histFull.length >= 4) {
+    const n = histFull.length, sumX = histFull.reduce((s,h)=>s+parseNum(h.retailPct),0),
+      sumY = histFull.reduce((s,h)=>s+(h.revenue||0),0),
+      sumXY = histFull.reduce((s,h)=>s+parseNum(h.retailPct)*(h.revenue||0),0),
+      sumX2 = histFull.reduce((s,h)=>s+Math.pow(parseNum(h.retailPct),2),0),
+      denom = n*sumX2 - sumX*sumX;
+    if (denom !== 0) {
+      const slope = Math.round((n*sumXY - sumX*sumY)/denom);
+      if (slope > 0) corrBlock = `<div style="font-size:11px;color:var(--tx2);margin-top:6px;padding:6px 8px;background:var(--b-l,#e6f1fb);border-radius:var(--rd)">Chaque point de Featured Offer perdu ≈ <strong>${fmtEur(Math.abs(slope))}</strong>/semaine (${n} sem.)</div>`;
+    }
+  }
+
+  // ── Suggestion bbKnowledge ─────────────────────────────────────
+  const suggestion = bbKnowledgeSuggestion(c, e.cause);
+  const suggBlock = suggestion
+    ? `<div style="padding:8px 12px;background:#eaf3de;border-left:3px solid #639922;border-radius:0 var(--rd) var(--rd) 0;font-size:12px;margin-bottom:12px">
+        Sur ${suggestion.total} cas similaires, "<em>${suggestion.action}</em>" a réussi ${suggestion.successRate}% du temps (~${suggestion.avgWeeks} sem.)
+      </div>` : '';
+
+  // ── Alerte double urgence stock ────────────────────────────────
+  const stockAlert = (e.cause === 'stock' || e.stockUrgent)
+    ? `<div class="alr alr-r" style="margin-bottom:10px;font-size:12px">
+        🔗 <strong>Double urgence</strong> — Buy Box + stock critique : ${e.couvertureSem !== null ? `<strong>${Number(e.couvertureSem).toFixed(1)} semaines</strong>` : 'couverture inconnue'}
+        <button class="btn btn-sm" style="background:#e24b4a;color:#fff;border-color:#e24b4a;margin-left:8px" onclick="window._approsAsin='${asin}';go('appros')">Voir Appros →</button>
+      </div>` : '';
+
+  // ── Résultat IA éventuel déjà stocké ──────────────────────────
+  const iaResult = cas.iaResult || null;
+  const currentNote = (cas.note || '').replace(/"/g, '&quot;');
+  const currentAction = cas.action || '';
+  const actions = ['Coupon temporaire (recommandé — sans baisser le catalogue)','Baisse de prix catalogue','Signalement Brand Registry','Email Vendor Central','Commande réappro urgente','Autre'];
+
+  // ── Liens Vendor Central directs ──────────────────────────────
+  const vcBase = 'https://vendor.amazon.fr';
+  const vcLinks = {
+    pricing:  vcBase + '/pricing/health',
+    catalog:  vcBase + '/catalog',
+    coupons:  vcBase + '/promotions/coupons',
+    registry: 'https://brandregistry.amazon.fr',
+    support:  vcBase + '/support',
+    orders:   vcBase + '/orders/purchaseOrders',
+  };
+  const amazonUrl = `https://www.amazon${mkt||'.fr'}/dp/${asin}`;
+
+  // ── Définition des steps ACTIONNABLES ─────────────────────────
+  // Structure : {id, t, d, ctas:[{label,url?,onclick?,primary?}], iaField?}
+  const stepsMap = {
+    prix_3p: [
+      { id:0,
+        t: 'Qui a pris ma Featured Offer ?',
+        d: 'L\u2019IA analyse la fiche Amazon en direct et vous dit immédiatement qui détient la Buy Box et à quel prix.',
+        ctas: [
+          { label: cas.iaLoading ? 'Analyse...' : (cas.iaResult ? 'Relancer' : 'Analyser avec l’IA'), onclick: "analyseBuyBoxLive('" + asin + "','" + (mkt||'.fr') + "',cl())", primary: true },
+          { label: 'Voir la fiche Amazon', url: amazonUrl },
+        ],
+        iaField: 'concurrent',
+      },
+      { id:1,
+        t: 'Quel est l\u2019écart de prix ?',
+        d: iaResult?.prixConcurrent
+          ? `Concurrent : <strong>${esc(iaResult.prixConcurrent)}</strong> · Votre prix : <strong>${fmtEur(parseNum(a.price||0)||0)}</strong>`
+          : 'Rempli automatiquement après l\u2019analyse IA — ou saisissez manuellement.',
+        ctas: [],
+        iaField: 'prixConcurrent',
+        input: true,
+        inputPlaceholder: 'Ex: concurrent à 11,90 €, votre prix 14,50 €…',
+        inputKey: 'prixConcurrent',
+      },
+      { id:2,
+        t: 'Vérifier Pricing Health dans Vendor Central',
+        d: 'Amazon signale ici les ASINs avec un prix jugé non compétitif (Competitive External Price).',
+        ctas: [
+          { label: 'Ouvrir Pricing Health VC', url: vcLinks.pricing, primary: true },
+        ],
+      },
+      { id:3,
+        t: 'Ajuster le prix ou lancer un coupon',
+        d: 'Commencez par un coupon temporaire — vous testez l\u2019impact sans baisser définitivement votre prix catalogue.',
+        ctas: [
+          { label: 'Créer un coupon dans VC', url: vcLinks.coupons, primary: true },
+          { label: 'Gérer les prix VC', url: vcLinks.pricing },
+        ],
+      },
+      { id:4,
+        t: 'Le 3P est-il un distributeur non autorisé ?',
+        d: 'Si le vendeur tiers n\u2019est pas agréé pour distribuer votre marque, vous pouvez le signaler via Brand Registry.',
+        ctas: [
+          { label: 'Ouvrir Brand Registry', url: vcLinks.registry },
+        ],
+      },
+    ],
+    stock: [
+      { id:0,
+        t: 'Passer une commande de réappro en urgence',
+        d: 'Le stock est insuffisant — Amazon retire la Featured Offer des produits à risque de rupture.',
+        ctas: [
+          { label: 'Voir mes Appros pour cet ASIN', onclick: `window._approsAsin='${asin}';go('appros')`, primary: true },
+          { label: 'POs en cours dans VC', url: vcLinks.orders },
+        ],
+      },
+      { id:1, t: 'Vérifier les POs en attente de confirmation', d: 'Un PO non confirmé bloque le réappro sans alerte visible.',
+        ctas: [{ label: 'POs en attente VC', url: vcLinks.orders, primary: true }] },
+      { id:2, t: 'Activer le stock de sécurité si disponible', d: 'Éviter le stock à zéro en FBA pendant l\u2019attente du réappro.',
+        ctas: [] },
+      { id:3, t: 'Surveiller la Buy Box après réappro', d: 'La Featured Offer revient généralement sous 48-72h après reconstitution du stock.',
+        ctas: [] },
+    ],
+    suppression: [
+      { id:0, t: 'Vérifier que la fiche est encore visible sur Amazon', d: 'Si le produit n\u2019apparaît plus, c\u2019est une suppression active.',
+        ctas: [{ label: 'Ouvrir la fiche Amazon', url: amazonUrl, primary: true }] },
+      { id:1, t: 'Contrôler le catalogue dans VC', d: 'Statut de la fiche, variations, suppressions partielles.',
+        ctas: [{ label: 'Catalogue VC', url: vcLinks.catalog, primary: true }] },
+      { id:2, t: 'Vérifier Pricing Health et Account Health', d: 'Prix trop haut ou trop bas peut suspendre l\u2019éligibilité.',
+        ctas: [{ label: 'Pricing Health VC', url: vcLinks.pricing, primary: true }] },
+      { id:3, t: 'Ouvrir un cas Vendor Support en urgence', d: 'Si tout est conforme et la fiche reste invisible.',
+        ctas: [{ label: 'Ouvrir un cas Support VC', url: vcLinks.support, primary: true }] },
+    ],
+    po_unconfirmed: [
+      { id:0,
+        t: 'Confirmer le PO en urgence dans Vendor Central',
+        d: 'Amazon a émis une commande — taux de confirmation = 0%. Sans confirmation, Amazon réduit ses futures commandes.',
+        ctas: [{ label: 'Ouvrir les POs dans VC', url: 'https://vendor.amazon.fr/orders/purchaseOrders', primary: true }]
+      },
+      { id:1,
+        t: 'Identifier pourquoi la confirmation est à 0%',
+        d: 'Problème EDI ? Délai trop court ? Rupture chez le fournisseur ? Identifier la cause avant de confirmer.',
+        ctas: []
+      },
+      { id:2,
+        t: 'Contacter votre Account Manager Amazon',
+        d: 'Si le PO est bloqué administrativement, votre AM peut débloquer rapidement.',
+        ctas: [{ label: 'Support Vendor Central', url: 'https://vendor.amazon.fr/support' }]
+      },
+      { id:3,
+        t: 'Surveiller la Buy Box après confirmation',
+        d: 'Dès le stock Amazon reconstitué, la Featured Offer revient sous 48-72h.',
+        ctas: []
+      },
+    ],
+    surveillance: [
+      { id:0, t: 'Ouvrir la fiche Amazon et observer', d: 'Y a-t-il un nouveau vendeur tiers ? Le prix est-il toujours compétitif ?',
+        ctas: [{ label: 'Voir la fiche Amazon', url: amazonUrl, primary: true }] },
+      { id:1, t: 'Contrôler le stock disponible', d: 'Un stock bas peut déclencher une perte progressive de Featured Offer.',
+        ctas: [{ label: 'Voir mes Appros', onclick: `window._approsAsin='${asin}';go('appros')` }] },
+      { id:2, t: 'Attendre l\u2019import de la semaine prochaine', d: 'Si c\u2019est une baisse ponctuelle, elle peut se corriger seule.',
+        ctas: [] },
+    ],
+  };
+
+  const steps = stepsMap[e.cause] || stepsMap['surveillance'];
+
+  // ── RENDU ─────────────────────────────────────────────────────
+  let h = `<div style="display:grid;grid-template-columns:1fr 1.3fr;gap:16px;align-items:start">`;
+
+  // ── Colonne gauche : sparkline + note ─────────────────────────
+  h += `<div>
+    <div class="cd" style="margin-bottom:12px">
+      <div class="cd-t">Évolution Featured Offer</div>
+      <div style="padding:8px 0">${sparkline}${corrBlock}</div>
+    </div>`;
+
+  // Données PO réelles (CSV PO importé)
+  const poD = getPOData(c, asin);
+  const guideAsnBtn = '<div style="margin-bottom:10px;padding:8px 12px;background:var(--b-l,#e6f1fb);border-radius:var(--rd);display:flex;align-items:center;gap:8px;font-size:11px">' + '<span>&#128203;</span>' + '<span style="flex:1;color:var(--tx2)">Probl\u00e8me d\'\u00e9cart ASN/r\u00e9ception ?</span>' + '<button class="btn btn-sm" onclick="downloadGuideASN()" style="font-size:10px;padding:4px 8px">Guide ASN/BOL &#8595;</button>' + '</div>';
+  // Alerte PO non confirme
+  const openPOdisp = parseNum((a && a.openPOQty) || 0);
+  const cpctDisp = parseNum(String((a && a.confirmPct) || '0').replace(',','.').replace(/[^0-9.]/g,''));
+  const poAlert = poD && (poD.fillRate < 80 || poD.isPermanentOOS || poD.isDiscontinued)
+    ? '<div class="alr ' + (poD.isPermanentOOS || poD.isDiscontinued ? 'alr-r' : 'alr-a') + '" style="margin-bottom:10px;font-size:12px">'
+      + (poD.isDiscontinued ? '<strong>Fin de série (CP)</strong> — ' : poD.isPermanentOOS ? '<strong>Rupture permanente (CK)</strong> — ' : '<strong>Fill rate faible</strong> — ')
+      + 'Fill rate : <strong>' + poD.fillRate + '%</strong>'
+      + ' · ' + poD.totalAccepted + '/' + poD.totalAsked + ' unités acceptées'
+      + (poD.refusCount > 0 ? ' · ' + poD.refusCount + ' refus | Dernier : ' + poD.lastCancelReason.slice(0,40) : '')
+      + '<br><a href="https://vendor.amazon.fr/orders/purchaseOrders" target="_blank" style="display:inline-block;margin-top:6px;font-size:11px;font-weight:500;padding:4px 10px;border-radius:var(--rd);background:#e24b4a;color:#fff;text-decoration:none">Voir POs dans VC →</a>'
+      + '</div>'
+    : (e.cause === 'po_unconfirmed' || (openPOdisp > 0 && cpctDisp < 50))
+    ? '<div class="alr alr-r" style="margin-bottom:10px;font-size:12px">'
+      + '<strong>PO non confirmé</strong> — Amazon a commandé <strong>' + openPOdisp + ' unités</strong>'
+      + ' · Confirmation : <strong>' + cpctDisp.toFixed(0) + '%</strong><br>'
+      + 'Confirmer dans Vendor Central.'
+      + '<a href="https://vendor.amazon.fr/orders/purchaseOrders" target="_blank" style="display:inline-block;margin-top:6px;font-size:11px;font-weight:500;padding:4px 10px;border-radius:var(--rd);background:#e24b4a;color:#fff;text-decoration:none">POs VC →</a>'
+      + '</div>'
+    : '';
+
+  if (suggBlock) h += suggBlock;
+  if (poAlert) { h += poAlert; h += guideAsnBtn; }
+  if (stockAlert) h += stockAlert;
+
+  // Resultat IA
+  if (cas.iaLoading) {
+    h += '<div class="alr alr-b" style="font-size:12px;margin-bottom:10px">Analyse IA en cours…</div>';
+  } else if (cas.iaResult) {
+    const r = cas.iaResult;
+    h += '<div class="cd" style="margin-bottom:12px;border-left:3px solid #e24b4a;border-radius:0 var(--rd) var(--rd) 0">'
+      + '<div class="cd-t">Résultat analyse IA</div>'
+      + '<div style="font-size:12px;padding:6px 0;line-height:1.7">'
+      + (r.vendeurBB ? '<div><strong>Featured Offer :</strong> ' + esc(r.vendeurBB) + (r.isPrime ? ' · Prime' : '') + '</div>' : '')
+      + (r.prixBB ? '<div><strong>Prix Buy Box :</strong> ' + esc(r.prixBB) + '</div>' : '')
+      + (r.ecartPrix ? '<div><strong>Écart vs fournisseur :</strong> ' + esc(r.ecartPrix) + '</div>' : '')
+      + (r.autresOffres ? '<div style="color:var(--tx2);margin-top:2px">' + esc(r.autresOffres) + '</div>' : '')
+      + (r.causeProb ? '<div style="margin-top:6px;padding:6px 8px;background:var(--or-bg,#fff8ee);border-radius:var(--rd);"><strong>Cause :</strong> ' + esc(r.causeProb) + '</div>' : '')
+      + (r.actionReco ? '<div style="margin-top:4px;padding:6px 8px;background:#eaf3de;border-radius:var(--rd);color:#3b6d11"><strong>Action :</strong> ' + esc(r.actionReco) + '</div>' : '')
+      + '</div></div>';
+  }
+
+  // Résultat IA si disponible
+  if (iaResult) {
+    h += `<div class="cd" style="margin-bottom:12px;border-left:3px solid #e24b4a;border-radius:0 var(--rd) var(--rd) 0">
+      <div class="cd-t">Résultat analyse IA</div>
+      <div style="font-size:12px;line-height:1.6;padding:6px 0">
+        ${iaResult.concurrent ? `<div><strong>Featured Offer :</strong> ${esc(iaResult.concurrent)}</div>` : ''}
+        ${iaResult.prixConcurrent ? `<div><strong>Prix concurrent :</strong> ${esc(iaResult.prixConcurrent)}</div>` : ''}
+        ${iaResult.diagnostic ? `<div style="margin-top:4px;color:var(--tx2)">${esc(iaResult.diagnostic)}</div>` : ''}
+      </div>
+    </div>`;
+  }
+
+  // Action choisie + note
+  h += `<div class="cd">
+    <div class="cd-t">Votre décision</div>
+    <div style="margin-bottom:10px">
+      <div style="font-size:11px;color:var(--tx2);margin-bottom:5px">Action choisie</div>
+      <select onchange="bbGetCase(cl(),'${asin}').action=this.value;save()" style="width:100%;font-size:12px;padding:7px 8px;border-radius:var(--rd);border:0.5px solid var(--bd);background:var(--bg);color:var(--tx)">
+        <option value="">— Sélectionner une action —</option>
+        ${actions.map(act=>`<option value="${esc(act)}"${currentAction===act?' selected':''}>${esc(act)}</option>`).join('')}
+      </select>
+    </div>
+    <div>
+      <div style="font-size:11px;color:var(--tx2);margin-bottom:5px">Note (concurrent identifié, prix cible…)</div>
+      <textarea onchange="bbGetCase(cl(),'${asin}').note=this.value;save()" placeholder="Ex: Pièces Auto Discount à 11,90 €, prix cible 12,50 €" style="width:100%;font-size:12px;padding:7px 8px;border-radius:var(--rd);border:0.5px solid var(--bd);background:var(--bg);color:var(--tx);resize:vertical;min-height:56px">${currentNote}</textarea>
+    </div>
+    <button class="btn btn-p" style="width:100%;margin-top:10px;font-size:12px" onclick="window._bbSubPhase='suivi';render()">Valider → passer au suivi</button>
+  </div>`;
+
+  h += `</div>`;
+
+  // ── Colonne droite : steps actionnables ───────────────────────
+  h += `<div class="cd">
+    <div class="cd-t">Que faire maintenant — étape par étape</div>`;
+
+  for (const s of steps) {
+    const done = cas.steps && cas.steps[s.id];
+    const hasCtas = s.ctas && s.ctas.length > 0;
+    h += `<div style="padding:12px 0;border-bottom:0.5px solid var(--bd)">
+      <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:${hasCtas?'8':'0'}px">
+        <input type="checkbox" ${done?'checked':''} style="margin-top:2px;flex-shrink:0;width:15px;height:15px;cursor:pointer"
+          onchange="if(!bbGetCase(cl(),'${asin}').steps)bbGetCase(cl(),'${asin}').steps={};bbGetCase(cl(),'${asin}').steps[${s.id}]=this.checked;save()">
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:600;${done?'text-decoration:line-through;color:var(--tx3)':''}">${esc(s.t)}</div>
+          <div style="font-size:11px;color:var(--tx2);margin-top:2px;line-height:1.4">${s.d}</div>
+          ${s.input ? `<input type="text" placeholder="${esc(s.inputPlaceholder||'')}"
+            value="${esc((cas[s.inputKey]||'').replace(/"/g,'&quot;'))}"
+            onchange="bbGetCase(cl(),'${asin}')['${s.inputKey||'note'}']=this.value;save()"
+            style="width:100%;margin-top:6px;font-size:11px;padding:5px 8px;border-radius:var(--rd);border:0.5px solid var(--bd);background:var(--bg);color:var(--tx)">` : ''}
+        </div>
+      </div>`;
+
+    if (hasCtas) {
+      h += `<div style="display:flex;gap:6px;flex-wrap:wrap;padding-left:25px">`;
+      for (const cta of s.ctas) {
+        if (cta.url) {
+          h += `<a href="${cta.url}" target="_blank"
+            onclick="if(!bbGetCase(cl(),'${asin}').steps)bbGetCase(cl(),'${asin}').steps={};bbGetCase(cl(),'${asin}').steps[${s.id}]=true;save();render()"
+            style="display:inline-block;font-size:11px;font-weight:500;padding:5px 12px;border-radius:var(--rd);text-decoration:none;
+            ${cta.primary?'background:#e24b4a;color:#fff;border:0.5px solid #e24b4a':'background:var(--s2);color:var(--tx);border:0.5px solid var(--bd)'}">${esc(cta.label)} →</a>`;
+        } else if (cta.onclick) {
+          h += `<button onclick="${cta.onclick};if(!bbGetCase(cl(),'${asin}').steps)bbGetCase(cl(),'${asin}').steps={};bbGetCase(cl(),'${asin}').steps[${s.id}]=true;save();render()"
+            style="font-size:11px;font-weight:500;padding:5px 12px;border-radius:var(--rd);cursor:pointer;
+            ${cta.primary?'background:#e24b4a;color:#fff;border:0.5px solid #e24b4a':'background:var(--s2);color:var(--tx);border:0.5px solid var(--bd)'}">${esc(cta.label)} →</button>`;
+        }
+      }
+      h += `</div>`;
+    }
+
+    h += `</div>`;
+  }
+
+  h += `</div></div>`;
+  return h;
+}
+
+function renderBBSuivi(c, cas, e, asin) {
+  const weeks = cas.weeks || [];
+  // Mettre à jour la semaine courante avec le retailPct actuel
+  const currentWeek = getISOWeek(new Date());
+
+  let h = `<div class="cd" style="margin-bottom:14px">
+    <div class="cd-t space">
+      <span>Timeline du dossier</span>
+      <button class="btn btn-sm" onclick="
+        const cas=bbGetCase(cl(),'${asin}');
+        const w=getISOWeek(new Date());
+        const rp=${e.rPct.toFixed(1)};
+        if(!cas.weeks.find(x=>x.week===w)){cas.weeks.push({week:w,rPct:rp,event:'Import S'+w,ts:new Date().toISOString()});}
+        save();render()">+ Enregistrer la semaine courante (S${currentWeek} · ${e.rPct.toFixed(0)}%)</button>
+    </div>`;
+
+  if (weeks.length === 0) {
+    h += `<div style="padding:16px;text-align:center;color:var(--tx3);font-size:12px">Aucune entrée — cliquez sur le bouton pour enregistrer la semaine courante</div>`;
+  } else {
+    h += `<div style="padding:8px 0">`;
+    for (let i = 0; i < weeks.length; i++) {
+      const w = weeks[i];
+      const isLast = i === weeks.length - 1;
+      const rp = w.rPct !== null ? parseFloat(w.rPct) : null;
+      const dotColor = rp === null ? 'var(--tx3)' : rp >= 95 ? '#639922' : rp >= 80 ? '#ef9f27' : '#e24b4a';
+      const prev = i > 0 && weeks[i-1].rPct !== null ? parseFloat(weeks[i-1].rPct) : null;
+      const delta = rp !== null && prev !== null ? (rp - prev).toFixed(0) : null;
+      h += `<div style="display:flex;gap:12px;padding:10px 0;${!isLast?'border-bottom:0.5px solid var(--bd)':''}">
+        <div style="display:flex;flex-direction:column;align-items:center;width:40px;flex-shrink:0">
+          <div style="width:10px;height:10px;border-radius:50%;background:${dotColor};flex-shrink:0"></div>
+          ${!isLast?`<div style="width:1px;flex:1;background:var(--bd);margin-top:3px"></div>`:''}
+        </div>
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:500">S${w.week} — ${w.event}</div>
+          <div style="font-size:11px;color:var(--tx2);margin-top:2px">
+            ${rp!==null?`Featured Offer : <strong>${rp.toFixed(0)}%</strong>`:'Pas de données Retail%'}
+            ${delta!==null?`<span style="color:${delta>0?'#3b6d11':delta<0?'#a32d2d':'var(--tx3)'};margin-left:6px">${delta>0?'+':''}${delta}pts</span>`:''}
+          </div>
+          ${w.note?`<div style="font-size:11px;color:var(--tx3);margin-top:2px">${esc(w.note)}</div>`:''}
+        </div>
+      </div>`;
+    }
+    h += `</div>`;
+  }
+  h += `</div>`;
+
+  h += `<div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn btn-sm" style="background:#639922;color:#fff;border-color:#639922" onclick="window._bbSubPhase='bilan';render()">Featured Offer récupérée → Clôturer</button>
+    <button class="btn btn-sm" onclick="window._bbPhase='list';window._bbSubPhase='plan';render()">Retour au tableau</button>
+  </div>`;
+
+  return h;
+}
+
+function renderBBBilan(c, cas, e, asin) {
+  const isClosed = cas.status === 'closed';
+  const durée = cas.weeks.length;
+
+  let h = '';
+
+  if (!isClosed) {
+    h += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <button class="btn" style="padding:14px;font-size:12px;text-align:center;background:#eaf3de;border-color:#c0dd97;color:#3b6d11" onclick="bbCloseCase(cl(),'${asin}',true);render()">
+        <div style="font-size:20px;margin-bottom:4px">✅</div>
+        <div style="font-weight:500">Résolu — ça a fonctionné</div>
+        <div style="font-size:11px;opacity:.8;margin-top:2px">Featured Offer récupérée</div>
+      </button>
+      <button class="btn" style="padding:14px;font-size:12px;text-align:center;background:#fcebeb;border-color:#f09595;color:#a32d2d" onclick="bbCloseCase(cl(),'${asin}',false);render()">
+        <div style="font-size:20px;margin-bottom:4px">❌</div>
+        <div style="font-weight:500">Résolu — ça n\u2019a pas fonctionné</div>
+        <div style="font-size:11px;opacity:.8;margin-top:2px">Action inefficace — à documenter</div>
+      </button>
+    </div>`;
+  }
+
+  if (isClosed) {
+    const success = cas.success;
+    h += `<div style="padding:12px 14px;border-radius:var(--rd);border:0.5px solid ${success?'#c0dd97':'#f09595'};background:${success?'#eaf3de':'#fcebeb'};margin-bottom:14px;font-size:12px">
+      <strong>${success ? '✅ Dossier clôturé — résolution confirmée' : '❌ Dossier clôturé — action inefficace'}</strong><br>
+      Action utilisée : <em>${esc(cas.action || '—')}</em> · Durée : ${durée} semaine${durée>1?'s':''}
+      ${cas.note?`<br>Note : ${esc(cas.note)}`:''}
+    </div>`;
+
+    // Règle apprise
+    const suggestion = bbKnowledgeSuggestion(c, e.cause);
+    if (suggestion) {
+      h += `<div style="padding:10px 12px;background:var(--g-bg,#eaf3de);border-left:3px solid #639922;border-radius:0 var(--rd) var(--rd) 0;font-size:12px;margin-bottom:14px">
+        <strong>Règle apprise (${suggestion.total} cas) :</strong><br>
+        Sur ce profil (${e.cause==='prix_3p'?'3P concurrent':e.cause==='stock'?'stock faible':'autre'}), l'action "<em>${suggestion.action}</em>" fonctionne dans ${suggestion.successRate}% des cas en ~${suggestion.avgWeeks} semaines.
+        Cette règle sera suggérée automatiquement pour les cas similaires.
+      </div>`;
+    }
+  }
+
+  // KPIs globaux
+  const allClosed = bbGetCases(c).filter(x => x.status === 'closed');
+  const resolved = allClosed.filter(x => x.success);
+  const avgWeeks = allClosed.length ? Math.round(allClosed.reduce((s,x)=>s+x.weeks.length,0)/allClosed.length) : 0;
+
+  h += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+    <div style="background:var(--s2);border-radius:var(--rd);padding:12px;text-align:center">
+      <div style="font-size:22px;font-weight:500;color:${resolved.length>0?'#3b6d11':'var(--tx2)'}">${allClosed.length ? Math.round(resolved.length/allClosed.length*100) : '—'}${allClosed.length?'%':''}</div>
+      <div style="font-size:10px;color:var(--tx2);margin-top:3px">Taux de résolution</div>
+    </div>
+    <div style="background:var(--s2);border-radius:var(--rd);padding:12px;text-align:center">
+      <div style="font-size:22px;font-weight:500;color:var(--b,#185fa5)">${avgWeeks || '—'}${avgWeeks?'sem':''}</div>
+      <div style="font-size:10px;color:var(--tx2);margin-top:3px">Durée moy. résolution</div>
+    </div>
+    <div style="background:var(--s2);border-radius:var(--rd);padding:12px;text-align:center">
+      <div style="font-size:22px;font-weight:500;color:#3b6d11">${allClosed.length}</div>
+      <div style="font-size:10px;color:var(--tx2);margin-top:3px">Cas clôturés</div>
+    </div>
+  </div>`;
+
+  if (isClosed) {
+    h += `<button class="btn btn-sm" style="margin-top:14px" onclick="window._bbPhase='list';window._bbSubPhase='plan';render()">← Retour au tableau</button>`;
+  }
+
+  return h;
+}
+
+function analyseBuyBoxLive(asin, market, c) {
+  const asinData = c && c.asins ? c.asins.find(a => a.asin === asin) : null;
+  const units = (asinData && (asinData.units || asinData.shippedUnits)) || 0;
+  const revenue = (asinData && (asinData.revenue || asinData.shippedRevenue)) || 0;
+  const prixHTCogex = units > 0 ? Math.round((revenue / units / 1.2) * 100) / 100 : null;
+  const openPOQ = parseNum((asinData && asinData.openPOQty) || 0);
+  const cpct = parseNum(String((asinData && asinData.confirmPct) || '0').replace(',', '.').replace(/[^0-9.]/g, ''));
+  const cas = bbGetCase(c, asin);
+  if (cas) { cas.iaLoading = true; save(); render(); }
+  const amazonUrl = 'https://www.amazon' + (market || '.fr') + '/dp/' + asin;
+  const prixCtx = prixHTCogex
+    ? ' Prix de vente moyen HT fournisseur = ' + prixHTCogex.toFixed(2) + ' EUR (' + units + ' unites a ' + (revenue/units).toFixed(2) + ' EUR TTC).'
+    : '';
+  const poCtx = openPOQ > 0 && cpct < 50
+    ? ' PO ouvert de ' + openPOQ + ' unites avec confirmation = ' + cpct + '% : cela explique probablement la perte de Buy Box.'
+    : '';
+  const _bbModelKey = aiUsage.getModel('buybox');
+  fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      model: AI_MODELS[_bbModelKey].id,
+      max_tokens: 1000,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      messages: [{ role: 'user', content:
+        'Analyse cette fiche Amazon et réponds en JSON uniquement sans markdown : ' + amazonUrl +
+        prixCtx + poCtx +
+        ' Contexte important : ce produit appartient à un fournisseur Amazon Vendor (1P). Normalement Amazon détient la Buy Box. Si un vendeur tiers la détient, c\'est anormal et prioritaire.'
+        + ' Analyse : 1) qui détient la Featured Offer, 2) est-ce Amazon ou un 3P, 3) si 3P : son prix vs prix fournisseur, 4) cause probable REELLE (stock vide ? 3P moins cher ? éligibilité ?)'
+        + ' JSON avec ces champs : {"vendeurBB":"nom vendeur Featured Offer (Amazon ou nom 3P)","prixBB":"prix TTC affiché","isPrime":true/false,"estAmazon":true/false,"autresOffres":"autres vendeurs et prix","stockStatus":"En stock / Stock limité / Rupture","ecartPrix":"si fournisseur connu : écart % entre prix BB et prix fournisseur","causeProb":"cause réelle perte Buy Box en 1 phrase précise","actionReco":"action concrète recommandée en 1 phrase","urgence":"critique/moderee/faible"}'
+      }]
+    })
+  })
+  .then(r => r.json())
+  .then(data => {
+    const _bbTokIn = data.usage?.input_tokens || 0;
+    const _bbTokOut = data.usage?.output_tokens || 0;
+    if (typeof aiUsage !== 'undefined') aiUsage.record('buybox', _bbModelKey, _bbTokIn, _bbTokOut);
+    const c2 = cl(); const cas2 = bbGetCase(c2, asin);
+    if (!cas2) return;
+    cas2.iaLoading = false;
+    const tb = data.content && data.content.find(b => b.type === 'text');
+    if (tb && tb.text) {
+      try {
+        const clean = tb.text.replace(/```json|```/g, '').trim();
+        cas2.iaResult = JSON.parse(clean);
+      } catch(e) {
+        cas2.iaResult = { causeProb: tb.text.slice(0, 300), actionReco: 'Voir note' };
+      }
+    } else {
+      cas2.iaResult = { causeProb: 'Analyse indisponible', actionReco: 'Verifier la connexion' };
+    }
+    save(); render();
+    showToast('Analyse terminée', 'alr-g');
+  })
+  .catch(err => {
+    const c2 = cl(); const cas2 = bbGetCase(c2, asin);
+    if (cas2) { cas2.iaLoading = false; save(); render(); }
+    showToast('Erreur IA : ' + err.message, 'alr-r');
+  });
+}
+
+function downloadGuideASN() {
+  if (typeof GUIDE_ASN_BOL_B64 === 'undefined' || !GUIDE_ASN_BOL_B64) {
+    showToast('Guide non disponible', 'alr-r'); return;
+  }
+  const byteChars = atob(GUIDE_ASN_BOL_B64);
+  const byteArr = new Uint8Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+  const blob = new Blob([byteArr], {type: 'application/pdf'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'Guide_ASN_BOL_Amazon.pdf';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast('Guide téléchargé', 'alr-g');
+}
+
+function copyBuyBoxChromePrompt(asin, market) {
+  const prompt = `Tu es un expert Amazon Vendor Central. Analyse la fiche produit ASIN ${asin} sur amazon${market||'.fr'} (https://www.amazon${market||'.fr'}/dp/${asin}).
+
+Réponds précisément :
+1. Qui détient la Featured Offer (Buy Box) ? Amazon ou un vendeur tiers ?
+2. Si vendeur tiers : nom, prix total livré (produit + port), badge Prime ?
+3. Autres offres visibles ("Voir toutes les offres") : combien, fourchette de prix ?
+4. Le produit est-il "Expédié et vendu par Amazon" ?
+5. Signes de rupture de stock (délai anormal, "En stock le...") ?
+6. Y a-t-il des promotions ou coupons actifs sur la fiche ?
+
+Synthèse : cause principale probable de la perte de Featured Offer, et action recommandée en 1 phrase.`;
+
+  navigator.clipboard.writeText(prompt).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = prompt; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+  });
+  showToast('Prompt copié — ouvrez Amazon puis collez dans Claude in Chrome', 'alr-g');
+}
 
 
 function renderWeeklyReview() {

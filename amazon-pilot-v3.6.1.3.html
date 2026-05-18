@@ -514,6 +514,10 @@ a:hover { text-decoration: underline; }
 /* Eyebrow (réutilisé dans Buy Box) */
 .eyebrow { font-size:11px; color:var(--tx3); text-transform:uppercase; letter-spacing:.04em; }
 
+/* Boutons tri Buy Box v3.6.1.2 */
+.sort-btn        { background:var(--s2); color:var(--tx2); border:0.5px solid var(--bd2); }
+.sort-btn-active { background:var(--b-bg,rgba(0,122,255,.08)); color:var(--b); border-color:var(--b); font-weight:500; }
+
 /* Responsive — tableau Buy Box en mobile */
 @media (max-width:900px) {
   .bb-grid { grid-template-columns:1fr; }
@@ -564,7 +568,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.6.1';
+const APP_VERSION = '3.6.1.3';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -4758,7 +4762,7 @@ function calcBuyBoxAlerts(c) {
 
     // Vérifier historique pour détecter baisse vs S-1 et 0% chronique
     const hist = a.history || [];
-    const prevRetail = hist.length >= 1 ? parseNum(hist[hist.length - 1].retailPct) : null;
+    const prevRetail = hist.length >= 2 ? parseNum(hist[hist.length - 2].retailPct) : null;
     const zeroWeeks = hist.filter(h => parseNum(h.retailPct) === 0).length + (rPct === 0 ? 1 : 0);
 
     const delta = prevRetail !== null ? rPct - prevRetail : null;
@@ -4787,7 +4791,21 @@ function calcBuyBoxAlerts(c) {
     const joursAvantLimite = _apro?.joursAvantLimite ?? null;
     const stockUrgent = couvertureSem !== null && couvertureSem < 3;
 
-    const entry = { asin: a.asin, title: a.title, brand: a.brand, market: a.market, rPct, prevRetail, delta, cause, zeroWeeks, revenue: getRevenue(a,c), segment: calcSegment(a, c.asins.reduce((s,x)=>s+(getRevenue(x,c)||0),0), c), sellableUnits: a.sellableUnits, couvertureSem, joursAvantLimite, stockUrgent };
+    // CA mensuel estimé = moyenne mobile 4 semaines × 4 (respecte kpiPrimaireCA)
+    const pref    = (c && c.kpiPrimaireCA) || 'ordered';
+    const revs    = (a.history || []).slice(-4).map(h =>
+      pref === 'shipped'
+        ? (parseNum(h.shippedRevenue) || parseNum(h.revenue) || 0)
+        : (parseNum(h.orderedRevenue) || parseNum(h.revenue) || 0)
+    ).filter(v => v > 0);
+    const avgWeek    = revs.length > 0 ? revs.reduce((s, v) => s + v, 0) / revs.length : (getRevenue(a, c) || 0);
+    const caMonthEst = Math.round(avgWeek * 4);
+    // Criticité = CA à risque mensuel × boost delta négatif
+    const deltaForCrit = delta !== null ? delta : 0;
+    const caEstAtRisk  = caMonthEst * (1 - rPct / 100);
+    const deltaBoost   = 1 + Math.max(0, -deltaForCrit) / 10;
+    const criticite    = caEstAtRisk * deltaBoost;
+    const entry = { asin: a.asin, title: a.title, brand: a.brand, market: a.market, rPct, prevRetail, delta, cause, zeroWeeks, revenue: getRevenue(a,c), caMonthEst, criticite, segment: calcSegment(a, c.asins.reduce((s,x)=>s+(getRevenue(x,c)||0),0), c), sellableUnits: a.sellableUnits, couvertureSem, joursAvantLimite, stockUrgent };
 
     if (isSuppressed)                          suppressed.push(entry);
     else if (isCritical)                       critical.push(entry);
@@ -4839,6 +4857,26 @@ function buyboxOpenCase(c, asin) {
     ],
     conclusion: { state: 'locked', proposedAction: '', outcome: null, closedAt: null }
   };
+  // Pré-évaluation automatique de 3 hypothèses
+  var autoEvals = buyboxAutoEvaluateHypotheses(c, asin);
+  for (var ke = 0; ke < autoEvals.length; ke++) {
+    var ev = autoEvals[ke];
+    var h = newCase.hypotheses.find(function(x) { return x.id === ev.id; });
+    if (!h) continue;
+    h.status    = ev.status;
+    h.evidence  = ev.evidence;
+    h.auto      = true;
+    h.updatedAt = nowISO;
+    var hypoLabel = (BUYBOX_HYPOTHESES.find(function(x) { return x.id === ev.id; }) || {}).label || ev.id;
+    var verb = ev.status === 'investigate' ? 'orientée vers À investiguer (auto)'
+             : ev.status === 'rejected'    ? 'écartée automatiquement (auto)'
+             :                              'pré-évaluée (auto)';
+    newCase.journal.push({
+      ts: nowISO, type: 'auto',
+      content: 'Hypothèse "' + hypoLabel + '" ' + verb + ' — ' + ev.evidence,
+      author: 'system'
+    });
+  }
   buyboxGetCases(c).push(newCase);
   save();
   return newCase;
@@ -4849,6 +4887,10 @@ function buyboxUpdateHypothesis(c, caseId, hypoId, fields) {
   if (!cs) return;
   var h = cs.hypotheses.find(function(x) { return x.id === hypoId; });
   if (!h) return;
+  // Si l'utilisateur surcharge un marquage auto, la décision devient humaine
+  if (h.auto && fields.status && fields.status !== h.status) {
+    h.auto = false;
+  }
   for (var k in fields) {
     if (Object.prototype.hasOwnProperty.call(fields, k)) h[k] = fields[k];
   }
@@ -4911,6 +4953,58 @@ function buyboxCloseCase(c, caseId, outcome, proposedAction) {
     author: 'system'
   });
   save();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BUY BOX v3.6.1.3 — Pré-évaluation automatique de 3 hypothèses
+// ═══════════════════════════════════════════════════════════════════
+
+function buyboxAutoEvaluateHypotheses(c, asin) {
+  var a = (c.asins || []).find(function(x) { return x.asin === asin; });
+  if (!a) return [];
+
+  var evaluations = [];
+  var hist = a.history || [];
+
+  // ── Stock insuffisant ─────────────────────────────────────────────
+  var stock     = parseNum(a.sellableUnits) || 0;
+  var unitRevs  = hist.slice(-4).map(function(h) { return parseNum(h.units) || 0; });
+  var velocity  = unitRevs.length > 0
+    ? unitRevs.reduce(function(s, v) { return s + v; }, 0) / unitRevs.length
+    : 0;
+  var couvSem = velocity > 0 ? stock / velocity : (stock > 0 ? 99 : 0);
+
+  if (stock < 10 || couvSem < 1) {
+    evaluations.push({ id: 'stock-insufficient', status: 'investigate',
+      evidence: 'Stock ' + stock + ' u. · couverture ' + couvSem.toFixed(1) + ' sem.' });
+  } else if (stock > 50 && couvSem > 4) {
+    evaluations.push({ id: 'stock-insufficient', status: 'rejected',
+      evidence: 'Stock ' + stock + ' u. · couverture ' + couvSem.toFixed(1) + ' sem.' });
+  }
+
+  // ── PO non confirmé ───────────────────────────────────────────────
+  var poQty = parseNum(a.openPOQty) || 0;
+  if (poQty > 0) {
+    evaluations.push({ id: 'po-not-confirmed', status: 'rejected',
+      evidence: 'PO ouvert ' + poQty + ' u. — hypothèse non pertinente.' });
+  } else if (poQty === 0 && stock < 30) {
+    evaluations.push({ id: 'po-not-confirmed', status: 'investigate',
+      evidence: 'Aucun PO ouvert · stock ' + stock + ' u. — risque rupture.' });
+  }
+
+  // ── Listing inactif ───────────────────────────────────────────────
+  var gvS0 = parseNum(a.glanceViews) || 0;
+  var gvS1 = hist.length >= 2 ? (parseNum(hist[hist.length - 2].glanceViews) || 0) : 0;
+
+  if (gvS0 === 0 && gvS1 === 0) {
+    evaluations.push({ id: 'listing-inactive', status: 'investigate',
+      evidence: 'GV S-0 et S-1 à 0 — listing potentiellement inactif.' });
+  } else if (gvS0 > 100) {
+    evaluations.push({ id: 'listing-inactive', status: 'rejected',
+      evidence: 'GV ' + gvS0 + ' cette semaine — listing actif.' });
+  }
+
+  return evaluations;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -5005,16 +5099,21 @@ function renderBuyBox() {
 
   // Tab actif
   var activeTab = window._buyboxTab || 'lost';
-  var displayList = activeTab === 'lost'        ? lostF
-                  : activeTab === 'compromised' ? compromisedF
-                  : activeTab === 'fragile'     ? fragile
-                  : recovered;
+  var sortBy = window._buyboxSort || 'criticite';
+  var displayList = (activeTab === 'lost'        ? lostF
+                   : activeTab === 'compromised' ? compromisedF
+                   : activeTab === 'fragile'     ? fragile
+                   : recovered).slice();
+  displayList.sort(function(a, b) {
+    if (sortBy === 'criticite') return (b.criticite || 0) - (a.criticite || 0);
+    return (b.caMonthEst || 0) - (a.caMonthEst || 0);
+  });
 
   // KPIs
   var asinsInTrouble = lostF.length + compromisedF.length;
   var totalActiveAsins = (c.asins || []).filter(function(a) { return getRevenue(a, c) > 0; }).length;
-  var caAtRisk = lostF.reduce(function(s, e) { return s + (e.revenue || 0); }, 0)
-               + compromisedF.reduce(function(s, e) { return s + (e.revenue || 0); }, 0);
+  var caAtRisk = lostF.reduce(function(s, e) { return s + (e.caMonthEst || 0); }, 0)
+               + compromisedF.reduce(function(s, e) { return s + (e.caMonthEst || 0); }, 0);
   var openCasesCount = buyboxGetCases(c).filter(function(x) { return x.status !== 'closed'; }).length;
   var ninetyDaysAgo  = Date.now() - 90 * 24 * 3600 * 1000;
   var resolved90d    = buyboxGetCases(c).filter(function(x) {
@@ -5079,6 +5178,13 @@ function renderBuyBox() {
   h += '<span style="font-size:10px;color:var(--tx3);margin-left:6px;">(filtrage cycle de vie en v3.6.2)</span>';
   h += '</div>';
 
+  // ── Tri ──
+  h += '<div style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--tx2);margin-bottom:10px;">';
+  h += '<span>Trier par :</span>';
+  h += '<button class="btn btn-sm sort-btn' + (sortBy === 'criticite' ? ' sort-btn-active' : '') + '" onclick="window._buyboxSort=\'criticite\';render()">⚠ Criticité</button>';
+  h += '<button class="btn btn-sm sort-btn' + (sortBy === 'ca' ? ' sort-btn-active' : '') + '" onclick="window._buyboxSort=\'ca\';render()">CA</button>';
+  h += '</div>';
+
   // ── Tabs ──
   h += '<div class="tabs" style="margin-bottom:0;">';
   var tabs = [
@@ -5101,7 +5207,7 @@ function renderBuyBox() {
 
   // En-tête tableau
   h += '<div class="bb-thead" style="display:grid;grid-template-columns:60px 1fr 70px 70px 1fr 80px 110px;padding:8px 14px;background:var(--s2);font-size:11px;color:var(--tx3);font-weight:500;border-bottom:0.5px solid var(--bd);">';
-  h += '<div>Type</div><div>ASIN · Produit</div><div style="text-align:right;">Retail%</div><div style="text-align:right;">Δ S-1</div><div>Cause suspectée</div><div style="text-align:right;">CA/mois</div><div></div>';
+  h += '<div>Type</div><div>ASIN · Produit</div><div style="text-align:right;">Retail%</div><div style="text-align:right;">Δ S-1</div><div>Cause suspectée</div><div style="text-align:right;">CA / mois (est.)</div><div></div>';
   h += '</div>';
 
   if (displayList.length === 0) {
@@ -5115,9 +5221,11 @@ function renderBuyBox() {
       var delta = entry.delta !== null && entry.delta !== undefined ? entry.delta : null;
       var rPctStr = rPct !== null ? rPct + ' %' : '—';
       var rPctDanger = rPct !== null && rPct < 80;
-      var deltaStr = delta !== null ? (delta >= 0 ? '+' : '') + delta + ' pt' : '—';
+      var deltaStr = delta !== null
+        ? (delta >= 0 ? '+' : '') + delta.toFixed(2).replace('.', ',') + ' pt'
+        : '—';
       var deltaColor = delta !== null && delta < 0 ? 'var(--r)' : delta > 0 ? 'var(--g)' : 'var(--tx3)';
-      var rev = getRevenue(entry, c) || entry.revenue || 0;
+      var rev = entry.caMonthEst || entry.revenue || 0;
       var hasCase = buyboxGetCase(c, asin) !== null;
 
       h += '<div class="bb-trow" style="display:grid;grid-template-columns:60px 1fr 70px 70px 1fr 80px 110px;padding:12px 14px;border-bottom:0.5px solid var(--bd);align-items:center;font-size:12px;">';
@@ -5317,7 +5425,10 @@ function renderBuyBoxCase(c, asin) {
     h += '<div style="font-weight:500;margin-bottom:1px;' + (isRejected ? 'text-decoration:line-through;text-decoration-color:var(--tx3);' : '') + '">' + def.label + '</div>';
     h += '<div style="color:var(--tx3);font-size:10px;">' + def.hint + '</div>';
     // Select statut
-    h += '<div style="margin-top:4px;display:flex;gap:4px;align-items:center;">';
+    h += '<div style="margin-top:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap;">';
+    if (hypo.auto) {
+      h += '<span style="display:inline-block;padding:2px 6px;font-size:10px;background:var(--b-bg,rgba(0,122,255,.08));color:var(--b);border-radius:4px;flex-shrink:0;" title="Évaluée automatiquement à l\'ouverture du dossier">⚙ auto</span>';
+    }
     h += '<select style="font-size:10px;padding:2px 4px;background:var(--s2);border:0.5px solid var(--bd2);border-radius:4px;color:var(--tx);" onchange="buyboxUpdateHypothesis(cl(),\'' + caseId + '\',\'' + hypo.id + '\',{status:this.value});render();">';
     statusOpts.forEach(function(opt) {
       h += '<option value="' + opt.val + '"' + (hypo.status === opt.val ? ' selected' : '') + '>' + opt.label + '</option>';

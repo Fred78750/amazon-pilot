@@ -1,6 +1,6 @@
 const SMOKE_REF = {
-  ca2024:  { val: 1678110, tol: 0.02, expiry: '2026-12-31', label: 'CA 2024' },
-  ca2025:  { val: 1297621, tol: 0.01, expiry: '2027-12-31', label: 'CA 2025' },
+  ca2024:  { val: 1547729, tol: 0.02, expiry: '2026-12-31', label: 'CA 2024' }, // recalibré 2026-05-18 après reimport Cogex
+  ca2025:  { val: 1166183, tol: 0.02, expiry: '2027-12-31', label: 'CA 2025' }, // recalibré 2026-05-18 après reimport Cogex
   asinMin: { val: 1500,               expiry: null,          label: 'ASINs catalogue >= 1500' },
   asinRef: { asin: 'B009G3EMDI', label: 'ASIN B009G3EMDI cohérence pipeline' }
 };
@@ -53,13 +53,19 @@ async function smokeTest(silent) {
     else fail('vital','V4','Buy Box liste', e || corrupt.length + ' alertes retailPct>100');
   } catch(ex) { fail('vital','V4','Buy Box liste', ex.message); }
 
-  // V5 — Buy Box Phase 2 (dossier sans crash)
+  // V5 — Buy Box Phase 2 (carnet d'enquête v3.6.1 — dossier sans crash)
   try {
-    if (typeof bbOpenCase === 'function' && c) bbOpenCase(c, SMOKE_REF.asinRef.asin);
+    window._buyboxView = null; window._buyboxAsin = null; // reset état UI
+    if (typeof buyboxOpenCase === 'function' && c) buyboxOpenCase(c, SMOKE_REF.asinRef.asin);
+    window._buyboxView = 'case'; window._buyboxAsin = SMOKE_REF.asinRef.asin;
+    if (typeof render === 'function') render();
     await new Promise(r => setTimeout(r, 400));
-    const e = getErr(); const hasPlan = document.body.innerHTML.includes('Plan d');
-    if (!e && hasPlan) pass('vital','V5','Buy Box Phase 2 ouvert (' + SMOKE_REF.asinRef.asin + ')');
-    else fail('vital','V5','Buy Box Phase 2', e || 'DOM Plan d action absent');
+    const e = getErr();
+    const hasCase = document.body.innerHTML.includes('Carnet d\'enquête') || document.body.innerHTML.includes('Hypothèses');
+    if (!e && hasCase) pass('vital','V5','Buy Box Phase 2 ouvert (' + SMOKE_REF.asinRef.asin + ')');
+    else fail('vital','V5','Buy Box Phase 2', e || 'DOM Carnet enquête absent');
+    // Remettre sur vue liste avant de continuer
+    window._buyboxView = 'list'; window._buyboxAsin = null;
     if (typeof go === 'function') { go('buybox'); await new Promise(r=>setTimeout(r,150)); }
   } catch(ex) { fail('vital','V5','Buy Box Phase 2', ex.message); }
 

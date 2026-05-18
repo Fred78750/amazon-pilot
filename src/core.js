@@ -147,14 +147,494 @@ const BOUTIQUE_CODES = {
   'ATVPDKIKX0DER':  '.com',   // USA
   'A1VC38T7YXB528': '.jp',    // Japon
 };
-const WIZ_STEPS = ['Identité', 'Config Amazon', 'Contraintes', 'Historique', 'Récapitulatif'];
+const WIZ_STEPS = ['Identité', 'Config Amazon', 'Comptes VC & Catalogue', 'Contraintes', 'Historique', 'Récapitulatif'];
+
+const MARKETPLACES_FULL = [
+  // Europe
+  { market: '.fr',     flag: '🇫🇷', name: 'France',               region: 'Europe' },
+  { market: '.de',     flag: '🇩🇪', name: 'Allemagne',             region: 'Europe' },
+  { market: '.it',     flag: '🇮🇹', name: 'Italie',                region: 'Europe' },
+  { market: '.es',     flag: '🇪🇸', name: 'Espagne',               region: 'Europe' },
+  { market: '.nl',     flag: '🇳🇱', name: 'Pays-Bas',              region: 'Europe' },
+  { market: '.be',     flag: '🇧🇪', name: 'Belgique',              region: 'Europe' },
+  { market: '.co.uk',  flag: '🇬🇧', name: 'Royaume-Uni',           region: 'Europe' },
+  { market: '.se',     flag: '🇸🇪', name: 'Suède',                 region: 'Europe' },
+  { market: '.pl',     flag: '🇵🇱', name: 'Pologne',               region: 'Europe' },
+  { market: '.com.tr', flag: '🇹🇷', name: 'Turquie',               region: 'Europe' },
+  // Amérique du Nord
+  { market: '.com',    flag: '🇺🇸', name: 'États-Unis',            region: 'Amérique du Nord' },
+  { market: '.ca',     flag: '🇨🇦', name: 'Canada',                region: 'Amérique du Nord' },
+  { market: '.com.mx', flag: '🇲🇽', name: 'Mexique',               region: 'Amérique du Nord' },
+  // Amérique du Sud
+  { market: '.com.br', flag: '🇧🇷', name: 'Brésil',                region: 'Amérique du Sud' },
+  // Asie-Pacifique
+  { market: '.co.jp',  flag: '🇯🇵', name: 'Japon',                 region: 'Asie-Pacifique' },
+  { market: '.in',     flag: '🇮🇳', name: 'Inde',                  region: 'Asie-Pacifique' },
+  { market: '.com.au', flag: '🇦🇺', name: 'Australie',             region: 'Asie-Pacifique' },
+  { market: '.sg',     flag: '🇸🇬', name: 'Singapour',             region: 'Asie-Pacifique' },
+  // Moyen-Orient & Afrique
+  { market: '.ae',     flag: '🇦🇪', name: 'Émirats Arabes Unis',   region: 'Moyen-Orient & Afrique' },
+  { market: '.sa',     flag: '🇸🇦', name: 'Arabie Saoudite',       region: 'Moyen-Orient & Afrique' },
+  { market: '.eg',     flag: '🇪🇬', name: 'Égypte',                region: 'Moyen-Orient & Afrique' },
+  { market: '.co.za',  flag: '🇿🇦', name: 'Afrique du Sud',        region: 'Moyen-Orient & Afrique' },
+];
+
+// ═══════════════════════════════════════════════════════════════════
+// BUY BOX v3.6.1 — Constantes
+// ═══════════════════════════════════════════════════════════════════
+
+// 11 hypothèses de cause perte Buy Box (7 maquette + 4 ajouts orchestrateur)
+var BUYBOX_HYPOTHESES = [
+  { id: 'bol-not-transmitted',  label: 'BOL non transmis aux opérationnels',   hint: 'Le numéro de connaissement n\'arrive pas dans les ASN — défauts BOL Mismatch en cascade.' },
+  { id: 'competitor-3p',        label: 'Concurrent 3P prix',                   hint: 'Un vendeur tiers propose un prix inférieur ou détient l\'offre Featured.' },
+  { id: 'stock-insufficient',   label: 'Stock insuffisant',                    hint: 'Stock Amazon < seuil — disponibilité dégradée.' },
+  { id: 'po-not-confirmed',     label: 'PO non confirmé',                      hint: 'PO ouvert mais taux de confirmation < 50 %.' },
+  { id: 'compliance-removed',   label: 'Suppression éligibilité (compliance)', hint: 'Listing retiré pour non-conformité (sécurité, doc, marque).' },
+  { id: 'vendor-auto-pricing',  label: 'Pricing automatique Vendor',           hint: 'Amazon ajuste le retail price en dehors de notre fourchette.' },
+  { id: 'listing-inactive',     label: 'Listing inactif',                      hint: 'Fiche désactivée côté Amazon (statut, image manquante, etc.).' },
+  // Ajouts orchestrateur
+  { id: 'crap-designation',     label: 'CRaP désigné',                         hint: 'Can\'t Realize a Profit — Amazon bloque la Buy Box si la marge devient négative pour eux.' },
+  { id: 'parent-child-shift',   label: 'Variation parent/enfant perdue',       hint: 'L\'enfant a basculé sur un parent qui prend la Featured Offer.' },
+  { id: 'spec-mismatch',        label: 'Spécifications incohérentes',          hint: 'Poids ou dimensions du listing diffèrent du PO — blocage automatique.' },
+  { id: 'market-restriction',   label: 'Restriction marché',                   hint: 'Produit conforme FR mais bloqué sur un autre marché actif.' }
+];
+
+// Statuts des hypothèses
+// 'todo'        — non vérifiée
+// 'investigate' — à investiguer (compatible avec les faits, à creuser)
+// 'validated'   — confirmée comme cause
+// 'rejected'    — écartée (faits contradictoires)
+var BUYBOX_HYPO_STATUS = ['todo', 'investigate', 'validated', 'rejected'];
+
+// Conditions de déverrouillage de la Conclusion (Phase 2)
+var BUYBOX_CONCLUSION_CONDITIONS = [
+  { id: 'min-journal',       label: 'Au moins 3 entrées dans le journal',                    check: function(cs) { return (cs.journal || []).length >= 3; } },
+  { id: 'hypotheses-tested', label: 'Au moins 1 hypothèse validée OU 3 écartées avec faits', check: function(cs) {
+      var hypos = cs.hypotheses || [];
+      var validated = hypos.filter(function(h) { return h.status === 'validated'; }).length;
+      var rejected  = hypos.filter(function(h) { return h.status === 'rejected' && (h.evidence || '').length > 0; }).length;
+      return validated >= 1 || rejected >= 3;
+    }
+  },
+  { id: 'bol-source-known',  label: 'Source du BOL renseignée (fiche client)',               check: function(cs, client) { return !!(client && client.bolSource); } }
+];
+
+// Bandeau contexte sectoriel — statique v3.6.1 (TODO v3.7 : zone admin éditable)
+var BUYBOX_CONTEXT_BANNER = {
+  title: 'Contexte sectoriel — Vendor on-time policy mise à jour Amazon',
+  body:  'Depuis janvier 2026, Amazon mesure la conformité on-time via les ASN Vendor (et non plus via les signaux internes de réception) et a fusionné les catégories de défauts « PO not on time » et « PRO/BOL mismatch ». Seuil de conformité relevé de 90 % à 95 %. Phase d\'observation du 19 janvier au 24 février 2026, facturation effective depuis le 25 février à 3 % du purchase cost.',
+  cite:  'Source : ChannelX, 19 janvier 2026.'
+};
+
+function marketOptionsHTML(selected) {
+  var html = '';
+  var lastRegion = '';
+  for (var i = 0; i < MARKETPLACES_FULL.length; i++) {
+    var m = MARKETPLACES_FULL[i];
+    if (m.region !== lastRegion) {
+      if (lastRegion) html += '</optgroup>';
+      html += '<optgroup label="' + m.region + '">';
+      lastRegion = m.region;
+    }
+    html += '<option value="' + m.market + '"' + (m.market === selected ? ' selected' : '') + '>' + m.flag + ' ' + m.name + '</option>';
+  }
+  if (lastRegion) html += '</optgroup>';
+  return html;
+}
+
+function parseMatriceTarifXML(xmlText) {
+  var parser = new DOMParser();
+  var doc = parser.parseFromString(xmlText, 'text/xml');
+  var ns = 'urn:schemas-microsoft-com:office:spreadsheet';
+
+  var worksheets = doc.getElementsByTagNameNS(ns, 'Worksheet');
+  var costSheet = null;
+  for (var i = 0; i < worksheets.length; i++) {
+    if (worksheets[i].getAttribute('ss:Name') === 'Cost') {
+      costSheet = worksheets[i]; break;
+    }
+  }
+  if (!costSheet) return { error: 'Onglet "Cost" non trouvé dans le XML' };
+
+  var table = costSheet.getElementsByTagNameNS(ns, 'Table')[0];
+  var rows = table.getElementsByTagNameNS(ns, 'Row');
+
+  var results = [];
+  var vcCounts = {};
+  var statusCounts = {};
+
+  // Les 6 premières lignes sont header/meta — données à partir de l'index 6
+  for (var r = 6; r < rows.length; r++) {
+    var cells = rows[r].getElementsByTagNameNS(ns, 'Cell');
+    var vals = {};
+    var colIdx = 0;
+    for (var c = 0; c < cells.length; c++) {
+      var idxAttr = cells[c].getAttribute('ss:Index');
+      if (idxAttr) colIdx = parseInt(idxAttr) - 1;
+      var dataEl = cells[c].getElementsByTagNameNS(ns, 'Data')[0];
+      vals[colIdx] = dataEl ? dataEl.textContent : '';
+      colIdx++;
+    }
+
+    var asin = (vals[2] || '').trim();
+    if (!asin.startsWith('B')) continue;
+
+    var vc = (vals[1] || '').trim();
+    var status = (vals[6] || '').trim();
+
+    if (vc && vc !== 'None') vcCounts[vc] = (vcCounts[vc] || 0) + 1;
+    if (status && status !== 'None') statusCounts[status] = (statusCounts[status] || 0) + 1;
+
+    results.push({
+      asin: asin,
+      ean: (vals[3] || '').trim(),
+      model: (vals[4] || '').trim(),
+      description: (vals[5] || '').trim(),
+      vendorCode: vc,
+      status: status,
+      cost: parseFloat((vals[8] || '0').replace(',', '.')) || 0
+    });
+  }
+
+  return {
+    items: results,
+    summary: {
+      totalASINs: new Set(results.map(function(r) { return r.asin; })).size,
+      totalLines: results.length,
+      vendorCodes: vcCounts,
+      statuses: statusCounts
+    }
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PARSERS BUY BOX v3.6.0 — défauts livraison & rendez-vous Amazon
+// ═══════════════════════════════════════════════════════════════════
+
+// Parser CSV générique — gère BOM UTF-8, guillemets, virgules dans les champs
+function parseCSVBuyBox(text) {
+  // Strip BOM
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
+  if (typeof Papa === 'undefined') {
+    return { error: 'PapaParse non disponible' };
+  }
+
+  var result = Papa.parse(text, {
+    header: true,
+    skipEmptyLines: true,
+    transformHeader: function(h) { return h.trim(); }
+  });
+
+  if (result.errors && result.errors.length > 0) {
+    console.warn('Papa parse warnings:', result.errors.slice(0, 3));
+  }
+
+  return { data: result.data || [], fields: result.meta.fields || [] };
+}
+
+// Parser défauts livraison — colonnes Amazon Vendor Central (export EN)
+function parseDeliveryDefectsCSV(text) {
+  var parsed = parseCSVBuyBox(text);
+  if (parsed.error) return { error: parsed.error };
+
+  var required = ['Week_end', 'Vendor Code', 'PO', 'Sub-Defect'];
+  for (var i = 0; i < required.length; i++) {
+    if (parsed.fields.indexOf(required[i]) === -1) {
+      return { error: 'Colonne attendue manquante : ' + required[i] };
+    }
+  }
+
+  var defects = [];
+  for (var r = 0; r < parsed.data.length; r++) {
+    var row = parsed.data[r];
+    defects.push({
+      weekEnd:                           (row['Week_end'] || '').trim(),
+      vendorCode:                        (row['Vendor Code'] || '').trim().toUpperCase(),
+      vendorCodeCountry:                 (row['Vendor Code Country'] || '').trim(),
+      supplyChainProgram:                (row['Supply Chain Program'] || '').trim(),
+      fc:                                (row['FC'] || '').trim(),
+      fcCountry:                         (row['FC Country'] || '').trim(),
+      po:                                (row['PO'] || '').trim(),
+      isa:                               (row['ISA'] || '').trim(),
+      carrier:                           (row['Carrier Name'] || '').trim(),
+      deliveryWindowStart:               (row['Delivery Window Start'] || '').trim(),
+      deliveryWindowEnd:                 (row['Delivery Window End'] || '').trim(),
+      carrierFirstRequestedDeliveryDate: (row['Carrier First Requested Delivery Date'] || '').trim(),
+      delayLength:                       (row['Delay Length'] || '').trim(),
+      delayCategory:                     (row['Delay Category'] || '').trim(),
+      subDefect:                         (row['Sub-Defect'] || '').trim(),
+      subDefectExplanation:              (row['Sub-Defect-Explanation'] || '').trim(),
+      defectDate:                        (row['Defect Date'] || '').trim(),
+      receiveDate:                       (row['Receive Date'] || '').trim(),
+      units:                             parseInt(row['Units'], 10) || 0
+    });
+  }
+
+  var vcCounts = {};
+  var subDefectCounts = {};
+  var totalUnits = 0;
+  for (var d = 0; d < defects.length; d++) {
+    var def = defects[d];
+    if (def.vendorCode) vcCounts[def.vendorCode] = (vcCounts[def.vendorCode] || 0) + 1;
+    if (def.subDefect) subDefectCounts[def.subDefect] = (subDefectCounts[def.subDefect] || 0) + 1;
+    totalUnits += def.units;
+  }
+
+  return {
+    items: defects,
+    summary: {
+      totalDefects: defects.length,
+      vendorCodes: vcCounts,
+      subDefects: subDefectCounts,
+      totalUnits: totalUnits
+    }
+  };
+}
+
+// Parser rendez-vous — bilingue FR/EN
+// Détection langue : colonne "BdC" = FR, colonne "PO"+"Issue" = EN
+function parseAppointmentsCSV(text) {
+  var parsed = parseCSVBuyBox(text);
+  if (parsed.error) return { error: parsed.error };
+
+  var fields = parsed.fields;
+  var isFR = fields.indexOf('BdC') !== -1;
+  var isEN = fields.indexOf('PO') !== -1 && fields.indexOf('Issue') !== -1;
+
+  if (!isFR && !isEN) {
+    return { error: 'Langue du fichier non reconnue (ni BdC ni PO+Issue détectés)' };
+  }
+
+  var map = isFR ? {
+    isa: 'ISA', arn: 'ARN', asn: 'ASN', vBol: 'V-BOL', cBol: 'C-BOL',
+    vPro: 'V-PRO', cPro: 'C-PRO', isd: 'ISD', po: 'BdC',
+    asnQty: 'Quantité d’ASN',
+    initialReceivedQty: 'Quantité initiale reçue',
+    issue: 'Problème',
+    appointmentCreationDate: 'Date de création du rendez-vous',
+    fcStatus: 'État du rendez-vous au centre de distribution',
+    scheduledArrival: 'Date d’arrivée prévue',
+    actualArrival: 'Date d’arrivée effective',
+    firstCarrierRequestedDeliveryDate: 'Première date de livraison souhaitée par le transporteur',
+    carrierRequestedDeliveryDate: 'Date de livraison souhaitée par le transporteur',
+    windowStart: 'Début de la fenêtre', windowEnd: 'Fin de la fenêtre',
+    carrier: 'Transporteur', mode: 'Mode', shipTo: 'Adresse de livraison',
+    lastUpdated: 'Date de la dernière mise à jour'
+  } : {
+    isa: 'ISA', arn: 'ARN', asn: 'ASN', vBol: 'V-BOL', cBol: 'C-BOL',
+    vPro: 'V-PRO', cPro: 'C-PRO', isd: 'ISD', po: 'PO',
+    asnQty: 'ASN quantity',
+    initialReceivedQty: 'Initial received quantity',
+    issue: 'Issue',
+    appointmentCreationDate: 'Appointment creation date',
+    fcStatus: 'FC appointment status',
+    scheduledArrival: 'Scheduled arrival date',
+    actualArrival: 'Actual arrival date',
+    firstCarrierRequestedDeliveryDate: 'First carrier requested delivery date',
+    carrierRequestedDeliveryDate: 'Carrier requested delivery date',
+    windowStart: 'Window start', windowEnd: 'Window end',
+    carrier: 'Carrier', mode: 'Mode', shipTo: 'Ship to',
+    lastUpdated: 'Last updated'
+  };
+
+  var sourceLanguage = isFR ? 'fr' : 'en';
+
+  var appts = [];
+  for (var r2 = 0; r2 < parsed.data.length; r2++) {
+    var row2 = parsed.data[r2];
+    var rawIssue = (row2[map.issue] || '').trim();
+    var issues = rawIssue ? rawIssue.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
+
+    appts.push({
+      isa:                               (row2[map.isa] || '').trim(),
+      arn:                               (row2[map.arn] || '').trim(),
+      asn:                               (row2[map.asn] || '').trim(),
+      vBol:                              (row2[map.vBol] || '').trim(),
+      cBol:                              (row2[map.cBol] || '').trim(),
+      vPro:                              (row2[map.vPro] || '').trim(),
+      cPro:                              (row2[map.cPro] || '').trim(),
+      isd:                               (row2[map.isd] || '').trim(),
+      po:                                (row2[map.po] || '').trim(),
+      asnQty:                            (row2[map.asnQty] || '').toString().trim(),
+      initialReceivedQty:                (row2[map.initialReceivedQty] || '').toString().trim(),
+      issues:                            issues,
+      appointmentCreationDate:           (row2[map.appointmentCreationDate] || '').trim(),
+      fcStatus:                          (row2[map.fcStatus] || '').trim(),
+      scheduledArrival:                  (row2[map.scheduledArrival] || '').trim(),
+      actualArrival:                     (row2[map.actualArrival] || '').trim(),
+      firstCarrierRequestedDeliveryDate: (row2[map.firstCarrierRequestedDeliveryDate] || '').trim(),
+      carrierRequestedDeliveryDate:      (row2[map.carrierRequestedDeliveryDate] || '').trim(),
+      windowStart:                       (row2[map.windowStart] || '').trim(),
+      windowEnd:                         (row2[map.windowEnd] || '').trim(),
+      carrier:                           (row2[map.carrier] || '').trim(),
+      mode:                              (row2[map.mode] || '').trim(),
+      shipTo:                            (row2[map.shipTo] || '').trim(),
+      lastUpdated:                       (row2[map.lastUpdated] || '').trim(),
+      sourceLanguage:                    sourceLanguage
+    });
+  }
+
+  var issueCounts = {};
+  var shipToCounts = {};
+  var vBolPrefixes = {};
+  for (var a = 0; a < appts.length; a++) {
+    var ap = appts[a];
+    for (var ii = 0; ii < ap.issues.length; ii++) {
+      issueCounts[ap.issues[ii]] = (issueCounts[ap.issues[ii]] || 0) + 1;
+    }
+    if (ap.shipTo) shipToCounts[ap.shipTo] = (shipToCounts[ap.shipTo] || 0) + 1;
+    if (ap.vBol) {
+      var pref = ap.vBol.substring(0, 3);
+      vBolPrefixes[pref] = (vBolPrefixes[pref] || 0) + 1;
+    }
+  }
+
+  return {
+    items: appts,
+    summary: {
+      totalAppointments: appts.length,
+      sourceLanguage: sourceLanguage,
+      issues: issueCounts,
+      shipTo: shipToCounts,
+      vBolPrefixes: vBolPrefixes
+    }
+  };
+}
+
+// Garde-fou vendor code défauts — adapté de checkImportCoherence v3.5.6
+function checkDefectsVendorCoherence(client, defects) {
+  var clientVCs = [];
+  if (client.accounts && client.accounts.length > 0) {
+    for (var i = 0; i < client.accounts.length; i++) {
+      var vc = (client.accounts[i].vendorCode || '').trim().toUpperCase();
+      if (vc && clientVCs.indexOf(vc) === -1) clientVCs.push(vc);
+    }
+  }
+  if (clientVCs.length === 0 && client.vendorCode) {
+    clientVCs.push(client.vendorCode.trim().toUpperCase());
+  }
+
+  if (clientVCs.length === 0) {
+    return { level: 'info', msg: 'Aucun vendor code déclaré dans la fiche client — vérification impossible.' };
+  }
+
+  var csvVCs = {};
+  var total = 0;
+  var unknown = 0;
+  for (var d = 0; d < defects.length; d++) {
+    var v = (defects[d].vendorCode || '').trim().toUpperCase();
+    if (!v) continue;
+    total++;
+    csvVCs[v] = (csvVCs[v] || 0) + 1;
+    if (clientVCs.indexOf(v) === -1) unknown++;
+  }
+
+  if (total === 0) {
+    return { level: 'info', msg: 'Aucun vendor code dans le CSV.' };
+  }
+
+  var pct = Math.round(unknown / total * 100);
+  if (pct > 50) {
+    var unknownVCs = [];
+    for (var k in csvVCs) {
+      if (csvVCs.hasOwnProperty(k) && clientVCs.indexOf(k) === -1) {
+        unknownVCs.push(k + ' (' + csvVCs[k] + ')');
+      }
+    }
+    return {
+      level: 'critical',
+      msg: pct + '% des défauts ont un vendor code inconnu : ' + unknownVCs.join(', ')
+        + '. VC du client : ' + clientVCs.join(', ')
+        + '. Êtes-vous sûr d\'importer dans le bon client ?'
+    };
+  }
+  if (pct > 10) {
+    return { level: 'warning', msg: pct + '% des défauts ont un vendor code inconnu (toléré sous 50%).' };
+  }
+  return null;
+}
+
+// ── Import défauts livraison ──
+function importBuyBoxDefects(file) {
+  if (!file) return;
+  var c = cl();
+  if (!c) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var text = e.target.result;
+    var parsed = parseDeliveryDefectsCSV(text);
+    if (parsed.error) {
+      alert('Erreur import défauts livraison : ' + parsed.error);
+      log('✗ Import défauts livraison : ' + parsed.error, 'err');
+      return;
+    }
+
+    var coherence = checkDefectsVendorCoherence(c, parsed.items);
+    if (coherence && coherence.level === 'critical') {
+      var proceed = confirm('⛔ ' + coherence.msg + '\n\nVoulez-vous VRAIMENT importer dans "' + c.name + '" ?');
+      if (!proceed) {
+        log('⛔ Import défauts annulé par utilisateur (incohérence VC)', 'err');
+        return;
+      }
+      log('⚠️ Import défauts forcé malgré incohérence VC', 'warn');
+    } else if (coherence && coherence.level === 'warning') {
+      log('⚠️ ' + coherence.msg, 'warn');
+    }
+
+    // Écrasement complet (pas de fusion incrémentale en v3.6.0)
+    c.deliveryDefects = parsed.items;
+    c.deliveryDefectsDate = new Date().toISOString().slice(0, 10);
+    save();
+
+    var s = parsed.summary;
+    var vcList = Object.keys(s.vendorCodes).map(function(k) { return k + ' (' + s.vendorCodes[k] + ')'; }).join(', ');
+    var sdList = Object.keys(s.subDefects).map(function(k) { return k + ' : ' + s.subDefects[k]; }).join(' · ');
+    // v3.6.1 — toast import défauts
+    showToast('✓ ' + s.totalDefects + ' défauts livraison importés — ' + vcList, 'alr-g', 4000);
+    log('✓ ' + s.totalDefects + ' défauts importés — VC : ' + vcList + ' · Sub-Defects : ' + sdList + ' · ' + s.totalUnits + ' unités impactées', 'ok');
+    render();
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+// ── Import rendez-vous ──
+function importBuyBoxAppointments(file) {
+  if (!file) return;
+  var c = cl();
+  if (!c) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var text = e.target.result;
+    var parsed = parseAppointmentsCSV(text);
+    if (parsed.error) {
+      alert('Erreur import rendez-vous : ' + parsed.error);
+      log('✗ Import rendez-vous : ' + parsed.error, 'err');
+      return;
+    }
+
+    c.deliveryAppointments = parsed.items;
+    c.deliveryAppointmentsDate = new Date().toISOString().slice(0, 10);
+    save();
+
+    var s = parsed.summary;
+    var prefList = Object.keys(s.vBolPrefixes).map(function(k) { return k + 'xxx (' + s.vBolPrefixes[k] + ')'; }).join(', ');
+    var shipList = Object.keys(s.shipTo).map(function(k) { return k + ' (' + s.shipTo[k] + ')'; }).join(', ');
+    // v3.6.1 — toast import rendez-vous
+    showToast('✓ ' + s.totalAppointments + ' rendez-vous importés (' + s.sourceLanguage.toUpperCase() + ') — V-BOL : ' + (prefList || 'aucun'), 'alr-g', 4000);
+    log('✓ ' + s.totalAppointments + ' rendez-vous importés (' + s.sourceLanguage.toUpperCase() + ') — V-BOL : ' + (prefList || 'aucun') + ' · FC : ' + (shipList || 'aucun'), 'ok');
+    render();
+  };
+  reader.readAsText(file, 'utf-8');
+}
 
 function freshClient() {
   return {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2,5),
     name: '', brand: '', sector: '', contactOp: '', reason: '',
     brands: [],  // [{ name: 'COGEX', role: 'fabricant' }] role: 'fabricant'|'revendeur'
-    model: '1P (Vendor Central)', vendorCode: '', markets: ['.fr'], mainMarket: '.fr',
+    model: '1P (Vendor Central)', vendorCode: '', accounts: [],  // [{ id, market, vendorCode, role: 'BO'|'catalogue', label }]
+    markets: ['.fr'], mainMarket: '.fr',
     fulfillment: 'Amazon (Vendor Direct)',
     stockDeporte: false, btr: 'Autorisé', btrNote: '', threeP: true,
     budget: '', pricingPolicy: 'Prix libre',
@@ -173,11 +653,21 @@ function freshClient() {
     moq: 0,              // quantité minimale de commande (0 = pas de contrainte)
     // ── Catalogue ASIN ↔ SKU fournisseur ──
     catalogue: [],       // [{ asin, sku, ean, description, prixAchat, vendorCode }]
+    catalogueXML: [],    // [{ asin, ean, model, description, vendorCode, status, cost }] — source: matrice tarifaire XML
     pos: [],             // [{ poId, asin, sku, title, vendorCode, qty, qtyAccepted,
     ficheOptimisee: {},  // asin => marche => {titre,bullets,description,nomType,backendKW,generatedAt} + actions[]
     // ── Données enrichies ──
     ppmData: {},         // { asin: { ppm: float, ppmDeltaBps: int, importedAt: ISO } }
-    forecastData: {}     // { asin: { weeks: [float x48], importedAt: ISO, weekLabels: [str x48] } }
+    forecastData: {},    // { asin: { weeks: [float x48], importedAt: ISO, weekLabels: [str x48] } }
+    // ── Buy Box v3.6.0 — Données défauts livraison + rendez-vous ──
+    deliveryDefects: [],         // [{ weekEnd, vendorCode, vendorCodeCountry, fc, fcCountry, po, isa, carrier, deliveryWindowStart, deliveryWindowEnd, carrierFirstRequestedDeliveryDate, delayLength, delayCategory, subDefect, subDefectExplanation, defectDate, receiveDate, units }]
+    deliveryDefectsDate: '',     // ISO date du dernier import
+    deliveryAppointments: [],    // [{ isa, arn, asn, vBol, cBol, vPro, cPro, isd, po, asnQty, initialReceivedQty, issues: [], appointmentCreationDate, fcStatus, scheduledArrival, actualArrival, firstCarrierRequestedDeliveryDate, carrierRequestedDeliveryDate, windowStart, windowEnd, carrier, mode, shipTo, lastUpdated, sourceLanguage }]
+    deliveryAppointmentsDate: '', // ISO date du dernier import
+    bolSource: '',               // 'ERP' | 'CMS' | 'OMS' | 'TRANSPORTEUR' | 'INCONNU' | ''
+    bolSourceDetail: '',         // texte libre : 'Navision', 'SAP', 'Shopify Plus', etc.
+    // ── Buy Box v3.6.1 — Cas d'enquête ──
+    buyboxCases: []  // [{ id, asin, status, openedAt, closedAt, facts: {snapshot, computedAt}, hypotheses: [{id, status, evidence, updatedAt}], journal: [{ts, type, content, author}], conclusion: {state, proposedAction, outcome, closedAt} }]
   };
 }
 
@@ -306,12 +796,27 @@ async function load() {
         stockTarget:    c.stockTarget    ?? 8,
         moq:            c.moq            ?? 0,
         catalogue:      c.catalogue      || [],
+        catalogueXML:   c.catalogueXML   || [],
+        accounts:       c.accounts       || [],
         pos:            c.pos            || [],
         ficheOptimisee: c.ficheOptimisee || {},
         ppmData:        c.ppmData        || {},
         forecastData:   c.forecastData   || {},
+        // v3.6.0 — migration défensive : champs Buy Box défauts & rendez-vous
+        deliveryDefects:          c.deliveryDefects          || [],
+        deliveryDefectsDate:      c.deliveryDefectsDate      || '',
+        deliveryAppointments:     c.deliveryAppointments     || [],
+        deliveryAppointmentsDate: c.deliveryAppointmentsDate || '',
+        bolSource:                c.bolSource                || '',
+        bolSourceDetail:          c.bolSourceDetail          || '',
         // v3.1.71 — migration silencieuse : default KPI primaire = ordered
         kpiPrimaireCA:  c.kpiPrimaireCA  || 'ordered',
+        // v3.6.1 — nouveau champ cas d'enquête
+        buyboxCases: c.buyboxCases || [],
+        // v3.6.1 — suppression silencieuse de l'ancien système (Fred confirme : pas de cas actifs)
+        // L'écrasement DOIT venir après ...c pour ne pas être réintroduit par le spread
+        bbCases:     undefined,
+        bbKnowledge: undefined,
       }));
       activeId = clients[0].id;
       screen = 'dashboard';
@@ -2704,7 +3209,108 @@ function renderOnboarding() {
       h += `<label class="mk-cb"><input type="checkbox" ${nc.markets.includes(m) ? 'checked' : ''} onchange="toggleMarket('${m}',this.checked)"/>${m}</label>`;
     });
     h += `</div></div></div>`;
+    // ── Section Marques (dans étape 1 Config Amazon) ──
+    h += `<div style="margin-top:16px;border-top:1px solid var(--bd);padding-top:14px">`;
+    h += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">`;
+    h += `<div style="font-weight:600;font-size:13px">🏷️ Marques du client</div>`;
+    h += `<button class="btn btn-sm" onclick="wizAddBrand()">+ Ajouter</button>`;
+    h += `</div>`;
+    var wizBrands = nc.brands || [];
+    if (!wizBrands.length) {
+      h += `<div style="font-size:12px;color:var(--tx3);padding:6px 0">Aucune marque — nécessaire pour la fusion Fab/Appro des imports CSV.</div>`;
+    } else {
+      for (var bi = 0; bi < wizBrands.length; bi++) {
+        var wb = wizBrands[bi];
+        var wbFab = wb.role === 'fabricant';
+        h += `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--s2);border-radius:var(--rd);margin-bottom:4px">`;
+        h += `<span style="flex:1;font-weight:500;font-size:13px">${esc(wb.name)}</span>`;
+        h += `<button class="tog-b btn-sm ${wbFab ? 'sel-ok' : ''}" onclick="wizSetBrandRole(${bi},'fabricant')">🏭 Fabricant</button>`;
+        h += `<button class="tog-b btn-sm ${!wbFab ? 'sel-no' : ''}" onclick="wizSetBrandRole(${bi},'revendeur')">🏪 Revendeur</button>`;
+        h += `<button class="btn btn-sm btn-r" onclick="wizRemoveBrand(${bi})">✕</button>`;
+        h += `</div>`;
+      }
+    }
+    h += `</div>`;
   } else if (wizStep === 2) {
+    // ── Étape 3 : Comptes VC & Catalogue ──
+    h += `<h3 style="font-size:15px;font-weight:700;margin-bottom:14px">Comptes Vendor Central & Catalogue</h3>`;
+
+    // ── Section A : CRUD Comptes VC ──
+    h += `<div class="cd" style="margin-bottom:16px">`;
+    h += `<div class="cd-t space"><span>Comptes Vendor Central</span>`;
+    var totalAccts = nc.accounts ? nc.accounts.length : 0;
+    var totalMkts  = nc.accounts ? new Set(nc.accounts.map(function(a){return a.market;})).size : 0;
+    var totalBO    = nc.accounts ? nc.accounts.filter(function(a){return a.role==='BO';}).length : 0;
+    var totalCat   = nc.accounts ? nc.accounts.filter(function(a){return a.role==='catalogue';}).length : 0;
+    if (totalAccts > 0) h += `<span style="font-size:11px;color:var(--tx2)">${totalAccts} comptes · ${totalMkts} marchés · ${totalBO} BO · ${totalCat} catalogue</span>`;
+    h += `</div>`;
+    h += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:12px">`;
+    h += `<div><label class="fg-lb">Marché</label><select id="newAcctMarket" class="fg-in">${marketOptionsHTML('.fr')}</select></div>`;
+    h += `<div><label class="fg-lb">Vendor Code</label><input id="newAcctVC" class="fg-in" placeholder="Ex: GERA3" style="text-transform:uppercase"/></div>`;
+    h += `<div><label class="fg-lb">Rôle</label><select id="newAcctRole" class="fg-in"><option value="BO">Bon de Commande</option><option value="catalogue">Fournisseur catalogue</option></select></div>`;
+    h += `<div><label class="fg-lb">Label (optionnel)</label><input id="newAcctLabel" class="fg-in" placeholder="Ex: Principal FR"/></div>`;
+    h += `<div><button class="btn btn-p" style="padding:6px 12px" onclick="wizAddAccount()">+ Ajouter</button></div>`;
+    h += `</div>`;
+    if (nc.accounts && nc.accounts.length > 0) {
+      h += `<table style="width:100%;border-collapse:collapse;font-size:12px">`;
+      h += `<thead><tr style="background:var(--s2)">`;
+      h += `<th style="padding:6px 8px;text-align:left">Marché</th><th style="padding:6px 8px;text-align:left">Vendor Code</th>`;
+      h += `<th style="padding:6px 8px;text-align:left">Rôle</th><th style="padding:6px 8px;text-align:left">Label</th><th></th>`;
+      h += `</tr></thead><tbody>`;
+      for (var ai = 0; ai < nc.accounts.length; ai++) {
+        var acc = nc.accounts[ai];
+        var mobj = MARKETPLACES_FULL.find(function(m){return m.market===acc.market;});
+        var mLabel = mobj ? mobj.flag + ' ' + mobj.name : acc.market;
+        h += `<tr style="border-bottom:1px solid var(--bd2)">`;
+        h += `<td style="padding:6px 8px">${mLabel}</td>`;
+        h += `<td style="padding:6px 8px;font-weight:600">${esc(acc.vendorCode)}</td>`;
+        h += `<td style="padding:6px 8px"><span style="padding:2px 8px;border-radius:20px;font-size:11px;background:${acc.role==='BO'?'var(--b-bg)':'var(--s2)'};color:${acc.role==='BO'?'var(--b)':'var(--tx2)'}">${acc.role==='BO'?'Bon de Commande':'Catalogue'}</span></td>`;
+        h += `<td style="padding:6px 8px;color:var(--tx2)">${esc(acc.label||'')}</td>`;
+        h += `<td style="padding:6px 8px"><button class="btn" style="padding:3px 8px;font-size:11px" onclick="wizRemoveAccount('${esc(acc.id)}')">✕</button></td>`;
+        h += `</tr>`;
+      }
+      h += `</tbody></table>`;
+    }
+    h += `</div>`;
+
+    // ── Section B : Import Matrice Tarifaire XML ──
+    h += `<div class="cd">`;
+    h += `<div class="cd-t space"><span>Matrice Tarifaire XML <span style="font-size:11px;color:var(--r,#b42)">obligatoire</span></span>`;
+    if (nc.catalogueXML && nc.catalogueXML.length > 0 && nc.xmlSummary) {
+      h += `<span style="font-size:11px;color:var(--g,#3b6d11)">✓ ${nc.xmlSummary.totalASINs} ASINs importés</span>`;
+    }
+    h += `</div>`;
+    if (!nc.catalogueXML || nc.catalogueXML.length === 0) {
+      h += `<div class="import-zone" style="padding:20px;margin-bottom:10px" onclick="document.getElementById('wiz-xml-input').click()">`;
+      h += `<div style="font-size:24px;margin-bottom:6px">📄</div>`;
+      h += `<p style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:2px">Déposez la Matrice Tarifaire XML</p>`;
+      h += `<p style="font-size:11px;color:var(--tx3)">Format XML Spreadsheet 2003 — onglet "Cost" requis</p>`;
+      h += `<input type="file" id="wiz-xml-input" accept=".xml" style="display:none" onchange="wizHandleXML(this)"/>`;
+      h += `</div>`;
+    } else {
+      var xs = nc.xmlSummary;
+      h += `<div style="padding:10px 14px;background:var(--g-bg,#eaf6e0);border:1px solid var(--g-bd,#b7dfa0);border-radius:var(--rd);margin-bottom:10px">`;
+      h += `<strong>${xs.totalASINs} ASINs</strong> · ${xs.totalLines} lignes`;
+      if (xs.vendorCodes) {
+        var vcKeys = Object.keys(xs.vendorCodes);
+        if (vcKeys.length) h += ` · VC : ` + vcKeys.map(function(k){return k + ' (' + xs.vendorCodes[k] + ')';}).join(', ');
+      }
+      h += `</div>`;
+      h += `<button class="btn" style="font-size:12px" onclick="document.getElementById('wiz-xml-reinput').click()">🔄 Réimporter</button>`;
+      h += `<input type="file" id="wiz-xml-reinput" accept=".xml" style="display:none" onchange="wizHandleXML(this)"/>`;
+    }
+    h += `</div>`;
+
+    // Message de validation
+    var canNext2 = nc.accounts && nc.accounts.length > 0 && nc.catalogueXML && nc.catalogueXML.length > 0;
+    if (!canNext2) {
+      h += `<div id="wiz-step2-err" class="alr alr-a" style="margin-top:10px">`;
+      if (!nc.accounts || nc.accounts.length === 0) h += `⚠️ Ajoutez au moins un compte Vendor Central.<br>`;
+      if (!nc.catalogueXML || nc.catalogueXML.length === 0) h += `⚠️ Importez la matrice tarifaire XML.`;
+      h += `</div>`;
+    }
+
+  } else if (wizStep === 3) {
     h += `<h3 style="font-size:15px;font-weight:700;margin-bottom:14px">Contraintes internes</h3>`;
     h += `<div class="alr alr-a" style="margin-bottom:16px">Ces contraintes filtrent les recommandations IA — un levier interdit ne sera jamais proposé.</div>`;
     h += `<div class="fg2">`;
@@ -2719,7 +3325,7 @@ function renderOnboarding() {
     h += fgSel('Born to Run', nc.btr, ['Autorisé', 'Conditionnel', 'Interdit'], "newClient.btr=this.value");
     h += fgEl('Budget Ads mensuel', nc.budget, "newClient.budget=this.value", '5 000 € ou 8% du CA');
     h += `</div>`;
-  } else if (wizStep === 3) {
+  } else if (wizStep === 4) {
     // ── Étape Historique avec zone de dépôt intégrée ──
     const currentY = new Date().getFullYear();
     const prevY = currentY - 1;
@@ -2810,7 +3416,7 @@ function renderOnboarding() {
       💡 <span>Dans Vendor Central : <strong>Analytiques → Tableau de bord</strong> → sélectionnez la période → Exporter CSV</span>
     </div>`;
 
-  } else if (wizStep === 4) {
+  } else if (wizStep === 5) {
     // ── Récapitulatif ──
     h += `<h3 style="font-size:15px;font-weight:700;margin-bottom:14px">Récapitulatif — ${esc(nc.name)}</h3>`;
     h += `<div class="rec-grid">`;
@@ -2826,8 +3432,10 @@ function renderOnboarding() {
 
   h += `<div style="display:flex;justify-content:space-between;margin-top:20px">`;
   h += `<button class="btn" onclick="${wizStep > 0 ? 'wizGo('+(wizStep-1)+')' : 'go(clients.length?\'dashboard\':\'welcome\')'}"> ${wizStep > 0 ? '← Précédent' : 'Annuler'}</button>`;
-  if (wizStep < 4) h += `<button class="btn btn-p" onclick="wizNext()">Suivant →</button>`;
-  else h += `<button class="btn btn-g" onclick="finishOnboarding()">Créer & importer →</button>`;
+  if (wizStep < 5) {
+    var canProceed = !(wizStep === 2 && (!(nc.accounts && nc.accounts.length > 0) || !(nc.catalogueXML && nc.catalogueXML.length > 0)));
+    h += `<button class="btn btn-p" onclick="wizNext()" ${canProceed ? '' : 'disabled style="opacity:0.45;cursor:not-allowed"'}>Suivant →</button>`;
+  } else h += `<button class="btn btn-g" onclick="finishOnboarding()">Créer & importer →</button>`;
   h += `</div></div></div>`;
   return h;
 }
@@ -3147,6 +3755,23 @@ function renderImport() {
   h += '<div class="cd-t space"><span>3 — Bons de commande <span style="font-size:10px;font-weight:400;color:var(--tx3)">(confirmés — mise à jour libre)</span></span>' + (posLoaded ? '<span class="pill pill-g">✓ Chargés</span>' : '<span class="pill pill-gr">Non chargé</span>') + '</div>';
   h += '<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Export XLS/CSV depuis Vendor Central → Gérer les bons de commande → Confirmés.</p>';
 
+  // ── Comptes BO attendus (si c.accounts renseigné) ──
+  var boAccts = (c.accounts || []).filter(function(a) { return a.role === 'BO'; });
+  if (boAccts.length > 0) {
+    h += '<div style="padding:10px 14px;background:var(--b-bg,#e8f0fb);border:1px solid var(--b-bd,#b0c8f0);border-radius:var(--rdl);margin-bottom:12px;font-size:12px">';
+    h += '<div style="font-weight:600;margin-bottom:4px">📦 Comptes Bon de Commande — ' + boAccts.length + ' PO attendus</div>';
+    h += '<div style="color:var(--tx2)">';
+    var boLabels = [];
+    for (var bai = 0; bai < boAccts.length; bai++) {
+      var ba = boAccts[bai];
+      var bamp = MARKETPLACES_FULL.find(function(m) { return m.market === ba.market; });
+      var baflag = bamp ? bamp.flag : '';
+      boLabels.push(baflag + ' ' + ba.vendorCode + ' (' + ba.market.replace('.', '').toUpperCase() + ')');
+    }
+    h += boLabels.join(' · ');
+    h += '</div></div>';
+  }
+
   if (posLoaded) {
     h += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">';
     [{label:'POs chargés',val:posCount,icon:'📋'},{label:'ASINs concernés',val:poAsins,icon:'📦'},{label:'Dernier import',val:lastPODate||'—',icon:'📅'}].forEach(function({label,val,icon}){
@@ -3157,6 +3782,26 @@ function renderImport() {
         + '</div>';
     });
     h += '</div>';
+    // ── Bilan VCs trouvés vs attendus ──
+    if (boAccts.length > 0) {
+      var vcInPos = {};
+      for (var pi = 0; pi < (c.pos||[]).length; pi++) {
+        var pvc = (c.pos[pi].vendorCode || '').trim();
+        if (pvc) vcInPos[pvc] = (vcInPos[pvc] || 0) + 1;
+      }
+      h += '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px">';
+      for (var bci = 0; bci < boAccts.length; bci++) {
+        var bca = boAccts[bci];
+        var bcFound = !!vcInPos[bca.vendorCode];
+        var bcLines = vcInPos[bca.vendorCode] || 0;
+        var bcFlag = (MARKETPLACES_FULL.find(function(m){return m.market===bca.market;})||{}).flag||'';
+        h += '<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:5px 10px;background:' + (bcFound?'var(--g-bg)':'var(--a-bg,#fff8e1)') + ';border-radius:var(--rd);border:1px solid ' + (bcFound?'var(--g-bd)':'var(--a-bd,#f0c040)') + '">';
+        h += (bcFound ? '✅' : '⚠️') + ' <strong>' + bcFlag + ' ' + bca.vendorCode + '</strong>';
+        h += bcFound ? ' — ' + bcLines + ' lignes' : ' — non importé (fichier manquant ?)';
+        h += '</div>';
+      }
+      h += '</div>';
+    }
   }
   h += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
   h += '<label class="btn btn-sm" style="cursor:pointer">📁 ' + (posLoaded?'Recharger les POs':'Charger les POs (XLS/CSV)') + '<input type="file" accept=".xls,.xlsx,.csv,.txt" multiple onchange="handlePOFile(this)" style="display:none"/></label>';
@@ -3230,6 +3875,49 @@ function renderImport() {
   if (c.csvImported && c.asins.length) {
     h += `<div class="alr alr-g" style="margin-top:4px">✓ <strong>${c.asins.length} ASINs</strong> en base · <button class="btn btn-p btn-sm" onclick="go('weekly')" style="margin-left:8px">🗓️ Revue Hebdo →</button></div>`;
   }
+
+  // ══════════════════════════════════════════════════════════════════
+  // SECTION BUY BOX — défauts livraison & rendez-vous (v3.6.0)
+  // ══════════════════════════════════════════════════════════════════
+  var ddCount = (c.deliveryDefects || []).length;
+  var ddDate  = c.deliveryDefectsDate || '';
+  var daCount = (c.deliveryAppointments || []).length;
+  var daDate  = c.deliveryAppointmentsDate || '';
+
+  h += '<div class="cd" style="margin-top:20px"><div class="cd-t">📦 Buy Box — défauts & rendez-vous</div>';
+  h += '<div style="font-size:11px;color:var(--tx3);margin-bottom:10px;line-height:1.5">Imports liés au module Buy Box. Données réservées à l\'analyse interne (non affichées en dashboard pour l\'instant).</div>';
+
+  // Sous-section A — Défauts livraison
+  h += '<div style="margin-top:8px;padding:10px;background:var(--s2);border-radius:var(--rd)">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">';
+  h += '<span style="font-size:13px;font-weight:600">⚠️ Défauts livraison</span>';
+  if (ddCount > 0) {
+    h += '<span style="font-size:11px;color:var(--tx2)">' + ddCount + ' défauts — MAJ ' + esc(ddDate) + '</span>';
+  } else {
+    h += '<span style="font-size:11px;color:var(--tx3)">Aucun import</span>';
+  }
+  h += '</div>';
+  h += '<input type="file" id="bbDefectsFile" accept=".csv" style="display:none" onchange="importBuyBoxDefects(this.files[0])"/>';
+  h += '<button class="btn btn-sm" onclick="document.getElementById(\'bbDefectsFile\').click()">📤 Importer un export "Delivery_*.csv"</button>';
+  h += '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Vendor Central → Performance → Delivery Defects → Export CSV (FR ou EN)</div>';
+  h += '</div>';
+
+  // Sous-section B — Rendez-vous
+  h += '<div style="margin-top:8px;padding:10px;background:var(--s2);border-radius:var(--rd)">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">';
+  h += '<span style="font-size:13px;font-weight:600">📅 Rendez-vous transporteur</span>';
+  if (daCount > 0) {
+    h += '<span style="font-size:11px;color:var(--tx2)">' + daCount + ' rendez-vous — MAJ ' + esc(daDate) + '</span>';
+  } else {
+    h += '<span style="font-size:11px;color:var(--tx3)">Aucun import</span>';
+  }
+  h += '</div>';
+  h += '<input type="file" id="bbAppointmentsFile" accept=".csv" style="display:none" onchange="importBuyBoxAppointments(this.files[0])"/>';
+  h += '<button class="btn btn-sm" onclick="document.getElementById(\'bbAppointmentsFile\').click()">📤 Importer un export "Rendez-vous_*.csv" ou "Appointment_*.csv"</button>';
+  h += '<div style="font-size:10px;color:var(--tx3);margin-top:4px">Vendor Central → Logistique → Rendez-vous → Export CSV (FR : Rendez-vous_*.csv · EN : Appointment_*.csv)</div>';
+  h += '</div>';
+
+  h += '</div>';  // fin .cd Buy Box
 
   h += `</div>`;
   return h;
@@ -7361,6 +8049,85 @@ function renderFiche() {
   });
   h += `</div></div></div>`;
 
+  // ── Section Source du BOL (Buy Box v3.6.0) ────────────────────────
+  h += `<div class="cd"><div class="cd-t">📋 Source du numéro de connaissement (BOL)</div>`;
+  h += `<div style="font-size:11px;color:var(--tx3);margin-bottom:10px;line-height:1.5">Information utilisée par le module Buy Box pour personnaliser les actions de diagnostic. Le BOL est le numéro de connaissement transmis dans les ASN Amazon.</div>`;
+  h += `<div class="fg2">`;
+  h += fgSel('Source principale du BOL', c.bolSource || '', ['', 'ERP', 'CMS', 'OMS', 'TRANSPORTEUR', 'INCONNU'], "updClient('bolSource',this.value)");
+  h += fgEl('Préciser (ex: Navision, SAP, Shopify, Sterling, transporteur principal...)', c.bolSourceDetail || '', "updClient('bolSourceDetail',this.value)");
+  h += `</div></div>`;
+
+  // ── Section Comptes Vendor Central ────────────────────────────────
+  var fAccts = c.accounts || [];
+  var fTotalMkts = new Set(fAccts.map(function(a){return a.market;})).size;
+  var fTotalBO   = fAccts.filter(function(a){return a.role==='BO';}).length;
+  var fTotalCat  = fAccts.filter(function(a){return a.role==='catalogue';}).length;
+  h += `<div class="cd"><div class="cd-t space">`;
+  h += `<span>🏢 Comptes Vendor Central</span>`;
+  if (fAccts.length > 0) h += `<span style="font-size:11px;color:var(--tx2)">${fAccts.length} comptes · ${fTotalMkts} marchés · ${fTotalBO} BO · ${fTotalCat} catalogue</span>`;
+  h += `</div>`;
+  h += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:12px">`;
+  h += `<div><label class="fg-lb">Marché</label><select id="newAcctMarket" class="fg-in">${marketOptionsHTML('.fr')}</select></div>`;
+  h += `<div><label class="fg-lb">Vendor Code</label><input id="newAcctVC" class="fg-in" placeholder="Ex: GERA3" style="text-transform:uppercase"/></div>`;
+  h += `<div><label class="fg-lb">Rôle</label><select id="newAcctRole" class="fg-in"><option value="BO">Bon de Commande</option><option value="catalogue">Fournisseur catalogue</option></select></div>`;
+  h += `<div><label class="fg-lb">Label (optionnel)</label><input id="newAcctLabel" class="fg-in" placeholder="Ex: Principal FR"/></div>`;
+  h += `<div><button class="btn btn-p" style="padding:6px 12px" onclick="addClientAccount()">+ Ajouter</button></div>`;
+  h += `</div>`;
+  if (fAccts.length > 0) {
+    h += `<table style="width:100%;border-collapse:collapse;font-size:12px">`;
+    h += `<thead><tr style="background:var(--s2)">`;
+    h += `<th style="padding:6px 8px;text-align:left">Marché</th><th style="padding:6px 8px;text-align:left">Vendor Code</th>`;
+    h += `<th style="padding:6px 8px;text-align:left">Rôle</th><th style="padding:6px 8px;text-align:left">Label</th><th></th>`;
+    h += `</tr></thead><tbody>`;
+    for (var fai = 0; fai < fAccts.length; fai++) {
+      var facc = fAccts[fai];
+      var fmobj = MARKETPLACES_FULL.find(function(m){return m.market===facc.market;});
+      var fmLabel = fmobj ? fmobj.flag + ' ' + fmobj.name : facc.market;
+      h += `<tr style="border-bottom:1px solid var(--bd2)">`;
+      h += `<td style="padding:6px 8px">${fmLabel}</td>`;
+      h += `<td style="padding:6px 8px"><input class="fg-in" style="font-size:12px;padding:3px 6px;font-weight:600" value="${esc(facc.vendorCode)}" onchange="updateClientAccount('${esc(facc.id)}','vendorCode',this.value)"/></td>`;
+      h += `<td style="padding:6px 8px"><select class="fg-in" style="font-size:12px;padding:3px 6px" onchange="updateClientAccount('${esc(facc.id)}','role',this.value)"><option value="BO"${facc.role==='BO'?' selected':''}>Bon de Commande</option><option value="catalogue"${facc.role==='catalogue'?' selected':''}>Catalogue</option></select></td>`;
+      h += `<td style="padding:6px 8px"><input class="fg-in" style="font-size:12px;padding:3px 6px" value="${esc(facc.label||'')}" onchange="updateClientAccount('${esc(facc.id)}','label',this.value)"/></td>`;
+      h += `<td style="padding:6px 8px"><button class="btn btn-sm btn-r" onclick="removeClientAccount('${esc(facc.id)}')">✕</button></td>`;
+      h += `</tr>`;
+    }
+    h += `</tbody></table>`;
+  } else {
+    h += `<div style="font-size:12px;color:var(--tx3);padding:8px 0">Aucun compte VC — ajoutez-en un via le formulaire ci-dessus.</div>`;
+  }
+  h += `</div>`;
+
+  // ── Section Catalogue (Matrice Tarifaire) ────────────────────────
+  var catXML = c.catalogueXML || [];
+  h += `<div class="cd"><div class="cd-t space">`;
+  h += `<span>📦 Catalogue (Matrice Tarifaire)</span>`;
+  if (catXML.length > 0) h += `<span style="font-size:11px;color:var(--g,#3b6d11)">✓ ${new Set(catXML.map(function(x){return x.asin;})).size} ASINs</span>`;
+  h += `</div>`;
+  if (catXML.length > 0) {
+    var cxVC = {};
+    var cxSt = {};
+    for (var cxi = 0; cxi < catXML.length; cxi++) {
+      var cxr = catXML[cxi];
+      if (cxr.vendorCode && cxr.vendorCode !== 'None') cxVC[cxr.vendorCode] = (cxVC[cxr.vendorCode]||0)+1;
+      if (cxr.status && cxr.status !== 'None') cxSt[cxr.status] = (cxSt[cxr.status]||0)+1;
+    }
+    h += `<div style="font-size:12px;margin-bottom:8px">`;
+    h += `<strong>${new Set(catXML.map(function(x){return x.asin;})).size} ASINs</strong> · ${catXML.length} lignes`;
+    var cxVCKeys = Object.keys(cxVC);
+    if (cxVCKeys.length) h += ` · VC : ` + cxVCKeys.map(function(k){return k + ' (' + cxVC[k] + ')';}).join(', ');
+    var cxStKeys = Object.keys(cxSt);
+    if (cxStKeys.length) h += `<br>Statuts : ` + cxStKeys.map(function(k){return k + ' (' + cxSt[k] + ')';}).join(', ');
+    if (c.xmlImportDate) h += `<br><span style="color:var(--tx3)">Importé le ${new Date(c.xmlImportDate).toLocaleDateString('fr-FR')}</span>`;
+    h += `</div>`;
+    h += `<button class="btn" style="font-size:12px" onclick="document.getElementById('fiche-xml-reimport').click()">🔄 Réimporter la matrice tarifaire</button>`;
+    h += `<input type="file" id="fiche-xml-reimport" accept=".xml" style="display:none" onchange="ficheHandleXML(this)"/>`;
+  } else {
+    h += `<div style="font-size:12px;color:var(--tx3);margin-bottom:8px">Aucune matrice tarifaire importée.</div>`;
+    h += `<button class="btn btn-p" style="font-size:12px" onclick="document.getElementById('fiche-xml-import').click()">📄 Importer la matrice tarifaire</button>`;
+    h += `<input type="file" id="fiche-xml-import" accept=".xml" style="display:none" onchange="ficheHandleXML(this)"/>`;
+  }
+  h += `</div>`;
+
   // ── Section Marques du client ────────────────────────────────────
   h += `<div class="cd"><div class="cd-t space"><span>🏷️ Marques du client</span>
     <button class="btn btn-sm" onclick="addClientBrand()">+ Ajouter</button>
@@ -8855,8 +9622,70 @@ function goFilteredAsins(preset) {
 function selClient(id) { activeId = id; screen = 'dashboard'; selectedAsin = null; aiResult = ''; render(); }
 function startOnboarding() { newClient = freshClient(); wizStep = 0; screen = 'onboarding'; render(); }
 function wizGo(step) { wizStep = step; render(); }
-function wizNext() { if (wizStep === 0 && !newClient.name.trim()) { alert('Nom du client requis'); return; } wizStep++; render(); }
+function wizNext() {
+  if (wizStep === 0 && !newClient.name.trim()) { alert('Nom du client requis'); return; }
+  if (wizStep === 2) {
+    if (!newClient.accounts || newClient.accounts.length === 0) { return; }
+    if (!newClient.catalogueXML || newClient.catalogueXML.length === 0) { return; }
+  }
+  wizStep++; render();
+}
 function finishOnboarding() { clients.push(newClient); activeId = newClient.id; save(); screen = 'import'; render(); }
+function wizAddBrand() {
+  var name = prompt('Nom de la marque :');
+  if (!name || !name.trim()) return;
+  if (!newClient.brands) newClient.brands = [];
+  if (newClient.brands.some(function(b) { return norm(b.name) === norm(name.trim()); })) {
+    showToast('Marque déjà présente', '', 'warn'); return;
+  }
+  newClient.brands.push({ name: name.trim(), role: 'fabricant' });
+  render();
+}
+function wizSetBrandRole(idx, role) {
+  if (!newClient.brands || !newClient.brands[idx]) return;
+  newClient.brands[idx].role = role;
+  render();
+}
+function wizRemoveBrand(idx) {
+  if (!newClient.brands) return;
+  newClient.brands.splice(idx, 1);
+  render();
+}
+function wizAddAccount() {
+  var market = document.getElementById('newAcctMarket') ? document.getElementById('newAcctMarket').value : '.fr';
+  var vc = document.getElementById('newAcctVC') ? document.getElementById('newAcctVC').value.trim().toUpperCase() : '';
+  var role = document.getElementById('newAcctRole') ? document.getElementById('newAcctRole').value : 'BO';
+  var label = document.getElementById('newAcctLabel') ? document.getElementById('newAcctLabel').value.trim() : '';
+  if (!vc) { alert('Vendor Code obligatoire'); return; }
+  if (!newClient.accounts) newClient.accounts = [];
+  if (newClient.accounts.some(function(a) { return a.vendorCode === vc && a.market === market; })) {
+    alert('Ce vendor code existe déjà sur ce marché'); return;
+  }
+  newClient.accounts.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    market: market, vendorCode: vc, role: role, label: label
+  });
+  render();
+}
+function wizRemoveAccount(accountId) {
+  if (!newClient.accounts) return;
+  newClient.accounts = newClient.accounts.filter(function(a) { return a.id !== accountId; });
+  render();
+}
+function wizHandleXML(input) {
+  var file = input.files && input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var result = parseMatriceTarifXML(e.target.result);
+    if (result.error) { alert('Erreur XML : ' + result.error); return; }
+    newClient.catalogueXML = result.items;
+    newClient.xmlSummary = result.summary;
+    newClient.xmlImportDate = new Date().toISOString();
+    render();
+  };
+  reader.readAsText(file);
+}
 function toggleMarket(m, checked) { if (checked && !newClient.markets.includes(m)) newClient.markets.push(m); if (!checked) newClient.markets = newClient.markets.filter(x => x !== m); render(); }
 function toggleClientMarket(m, checked) { const c = cl(); if (!c) return; if (checked && !c.markets.includes(m)) c.markets.push(m); if (!checked) c.markets = c.markets.filter(x => x !== m); save(); render(); }
 
@@ -9610,7 +10439,7 @@ function initDragDrop() {
     if (!files.length) return;
     const dt = new DataTransfer();
     files.forEach(f => dt.items.add(f));
-    if (screen === 'onboarding' && wizStep === 3) {
+    if (screen === 'onboarding' && wizStep === 4) {
       // Drop pendant l'étape Historique
       const input = document.getElementById('hist-files');
       if (input) { input.files = dt.files; handleHistCSV(input); }
