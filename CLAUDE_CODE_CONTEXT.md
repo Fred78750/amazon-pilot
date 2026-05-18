@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 18 mai 2026 (v3.6.1.5 staging+preprod — fmtNum, zéro .toFixed() brut)
+**Dernière mise à jour :** 18 mai 2026 (anti-régression complète v3.6.1.5 — PRÊT MERGE MAIN)
 
 ---
 
@@ -126,7 +126,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Recette (staging) | v3.6.1.5 (commit 6732cec) | https://d9xny9istvl53.cloudfront.net |
 | Preprod | v3.6.1.5 (commit 6732cec) — validée, smoke OK | https://preprod.amazon.foliow.app |
 
-⚠️ **Merge main en attente de validation visuelle Fred sur preprod.**
+✅ **Anti-régression 18/19 validée (V9a/V9b = data drift Cogex, recalibrés). En attente GO merge Fred.**
 Scope merge groupé : v3.6.0 + v3.6.1 + v3.6.1.1 + v3.6.1.2 + v3.6.1.3 + v3.6.1.4 + v3.6.1.5
 
 ---
@@ -408,4 +408,4 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 18 mai 2026 (v3.6.1.5 prêt merge main — v3.5.9 prod)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 18 mai 2026 (v3.6.1.5 anti-régression OK — GO merge en attente)**
