@@ -57,7 +57,7 @@ async function smokeTest(silent) {
 
   // V5 — Buy Box Phase 2 (dossier sans crash)
   try {
-    if (typeof bbOpenCase === 'function' && c) bbOpenCase(c, SMOKE_REF.asinRef.asin);
+    if (typeof buyboxOpenCase === 'function' && c) buyboxOpenCase(c, SMOKE_REF.asinRef.asin);
     await new Promise(r => setTimeout(r, 400));
     const e = getErr(); const hasPlan = document.body.innerHTML.includes('Plan d');
     if (!e && hasPlan) pass('vital','V5','Buy Box Phase 2 ouvert (' + SMOKE_REF.asinRef.asin + ')');

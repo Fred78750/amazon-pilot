@@ -179,6 +179,53 @@ const MARKETPLACES_FULL = [
   { market: '.co.za',  flag: '🇿🇦', name: 'Afrique du Sud',        region: 'Moyen-Orient & Afrique' },
 ];
 
+// ═══════════════════════════════════════════════════════════════════
+// BUY BOX v3.6.1 — Constantes
+// ═══════════════════════════════════════════════════════════════════
+
+// 11 hypothèses de cause perte Buy Box (7 maquette + 4 ajouts orchestrateur)
+var BUYBOX_HYPOTHESES = [
+  { id: 'bol-not-transmitted',  label: 'BOL non transmis aux opérationnels',   hint: 'Le numéro de connaissement n\'arrive pas dans les ASN — défauts BOL Mismatch en cascade.' },
+  { id: 'competitor-3p',        label: 'Concurrent 3P prix',                   hint: 'Un vendeur tiers propose un prix inférieur ou détient l\'offre Featured.' },
+  { id: 'stock-insufficient',   label: 'Stock insuffisant',                    hint: 'Stock Amazon < seuil — disponibilité dégradée.' },
+  { id: 'po-not-confirmed',     label: 'PO non confirmé',                      hint: 'PO ouvert mais taux de confirmation < 50 %.' },
+  { id: 'compliance-removed',   label: 'Suppression éligibilité (compliance)', hint: 'Listing retiré pour non-conformité (sécurité, doc, marque).' },
+  { id: 'vendor-auto-pricing',  label: 'Pricing automatique Vendor',           hint: 'Amazon ajuste le retail price en dehors de notre fourchette.' },
+  { id: 'listing-inactive',     label: 'Listing inactif',                      hint: 'Fiche désactivée côté Amazon (statut, image manquante, etc.).' },
+  // Ajouts orchestrateur
+  { id: 'crap-designation',     label: 'CRaP désigné',                         hint: 'Can\'t Realize a Profit — Amazon bloque la Buy Box si la marge devient négative pour eux.' },
+  { id: 'parent-child-shift',   label: 'Variation parent/enfant perdue',       hint: 'L\'enfant a basculé sur un parent qui prend la Featured Offer.' },
+  { id: 'spec-mismatch',        label: 'Spécifications incohérentes',          hint: 'Poids ou dimensions du listing diffèrent du PO — blocage automatique.' },
+  { id: 'market-restriction',   label: 'Restriction marché',                   hint: 'Produit conforme FR mais bloqué sur un autre marché actif.' }
+];
+
+// Statuts des hypothèses
+// 'todo'        — non vérifiée
+// 'investigate' — à investiguer (compatible avec les faits, à creuser)
+// 'validated'   — confirmée comme cause
+// 'rejected'    — écartée (faits contradictoires)
+var BUYBOX_HYPO_STATUS = ['todo', 'investigate', 'validated', 'rejected'];
+
+// Conditions de déverrouillage de la Conclusion (Phase 2)
+var BUYBOX_CONCLUSION_CONDITIONS = [
+  { id: 'min-journal',       label: 'Au moins 3 entrées dans le journal',                    check: function(cs) { return (cs.journal || []).length >= 3; } },
+  { id: 'hypotheses-tested', label: 'Au moins 1 hypothèse validée OU 3 écartées avec faits', check: function(cs) {
+      var hypos = cs.hypotheses || [];
+      var validated = hypos.filter(function(h) { return h.status === 'validated'; }).length;
+      var rejected  = hypos.filter(function(h) { return h.status === 'rejected' && (h.evidence || '').length > 0; }).length;
+      return validated >= 1 || rejected >= 3;
+    }
+  },
+  { id: 'bol-source-known',  label: 'Source du BOL renseignée (fiche client)',               check: function(cs, client) { return !!(client && client.bolSource); } }
+];
+
+// Bandeau contexte sectoriel — statique v3.6.1 (TODO v3.7 : zone admin éditable)
+var BUYBOX_CONTEXT_BANNER = {
+  title: 'Contexte sectoriel — Vendor on-time policy mise à jour Amazon',
+  body:  'Depuis janvier 2026, Amazon mesure la conformité on-time via les ASN Vendor (et non plus via les signaux internes de réception) et a fusionné les catégories de défauts « PO not on time » et « PRO/BOL mismatch ». Seuil de conformité relevé de 90 % à 95 %. Phase d\'observation du 19 janvier au 24 février 2026, facturation effective depuis le 25 février à 3 % du purchase cost.',
+  cite:  'Source : ChannelX, 19 janvier 2026.'
+};
+
 function marketOptionsHTML(selected) {
   var html = '';
   var lastRegion = '';
@@ -543,6 +590,8 @@ function importBuyBoxDefects(file) {
     var s = parsed.summary;
     var vcList = Object.keys(s.vendorCodes).map(function(k) { return k + ' (' + s.vendorCodes[k] + ')'; }).join(', ');
     var sdList = Object.keys(s.subDefects).map(function(k) { return k + ' : ' + s.subDefects[k]; }).join(' · ');
+    // v3.6.1 — toast import défauts
+    showToast('✓ ' + s.totalDefects + ' défauts livraison importés — ' + vcList, 'alr-g', 4000);
     log('✓ ' + s.totalDefects + ' défauts importés — VC : ' + vcList + ' · Sub-Defects : ' + sdList + ' · ' + s.totalUnits + ' unités impactées', 'ok');
     render();
   };
@@ -571,6 +620,8 @@ function importBuyBoxAppointments(file) {
     var s = parsed.summary;
     var prefList = Object.keys(s.vBolPrefixes).map(function(k) { return k + 'xxx (' + s.vBolPrefixes[k] + ')'; }).join(', ');
     var shipList = Object.keys(s.shipTo).map(function(k) { return k + ' (' + s.shipTo[k] + ')'; }).join(', ');
+    // v3.6.1 — toast import rendez-vous
+    showToast('✓ ' + s.totalAppointments + ' rendez-vous importés (' + s.sourceLanguage.toUpperCase() + ') — V-BOL : ' + (prefList || 'aucun'), 'alr-g', 4000);
     log('✓ ' + s.totalAppointments + ' rendez-vous importés (' + s.sourceLanguage.toUpperCase() + ') — V-BOL : ' + (prefList || 'aucun') + ' · FC : ' + (shipList || 'aucun'), 'ok');
     render();
   };
@@ -614,7 +665,9 @@ function freshClient() {
     deliveryAppointments: [],    // [{ isa, arn, asn, vBol, cBol, vPro, cPro, isd, po, asnQty, initialReceivedQty, issues: [], appointmentCreationDate, fcStatus, scheduledArrival, actualArrival, firstCarrierRequestedDeliveryDate, carrierRequestedDeliveryDate, windowStart, windowEnd, carrier, mode, shipTo, lastUpdated, sourceLanguage }]
     deliveryAppointmentsDate: '', // ISO date du dernier import
     bolSource: '',               // 'ERP' | 'CMS' | 'OMS' | 'TRANSPORTEUR' | 'INCONNU' | ''
-    bolSourceDetail: ''          // texte libre : 'Navision', 'SAP', 'Shopify Plus', etc.
+    bolSourceDetail: '',         // texte libre : 'Navision', 'SAP', 'Shopify Plus', etc.
+    // ── Buy Box v3.6.1 — Cas d'enquête ──
+    buyboxCases: []  // [{ id, asin, status, openedAt, closedAt, facts: {snapshot, computedAt}, hypotheses: [{id, status, evidence, updatedAt}], journal: [{ts, type, content, author}], conclusion: {state, proposedAction, outcome, closedAt} }]
   };
 }
 
@@ -758,6 +811,12 @@ async function load() {
         bolSourceDetail:          c.bolSourceDetail          || '',
         // v3.1.71 — migration silencieuse : default KPI primaire = ordered
         kpiPrimaireCA:  c.kpiPrimaireCA  || 'ordered',
+        // v3.6.1 — nouveau champ cas d'enquête
+        buyboxCases: c.buyboxCases || [],
+        // v3.6.1 — suppression silencieuse de l'ancien système (Fred confirme : pas de cas actifs)
+        // L'écrasement DOIT venir après ...c pour ne pas être réintroduit par le spread
+        bbCases:     undefined,
+        bbKnowledge: undefined,
       }));
       activeId = clients[0].id;
       screen = 'dashboard';

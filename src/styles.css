@@ -389,4 +389,117 @@ a:hover { text-decoration: underline; }
 #ap-tooltip::after { content:'';position:absolute;top:100%;left:16px;
   border:5px solid transparent;border-top-color:#1e293b; }
 
+/* ══════════════════════════════════════════════════════════════════
+   BUY BOX v3.6.1 — Phase 1 : Identifier
+   ══════════════════════════════════════════════════════════════════ */
 
+/* KPIs grid — réutilise .kpi existant, ajoute .kpis container et modificateurs BB */
+.kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; margin-bottom:14px; }
+.kpi-danger { color:var(--r); }
+.kpi-hint { font-size:11px; color:var(--tx3); margin-top:3px; }
+
+/* Filtres cycle de vie */
+.lc-filters { display:flex; gap:6px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+.btn-active { border-color:var(--b) !important; color:var(--b) !important; }
+
+/* Tabs Buy Box */
+.tabs { display:flex; border-bottom:1px solid var(--bd2); margin-bottom:0; overflow-x:auto; }
+.tab { padding:8px 14px; cursor:pointer; font-size:12px; border-bottom:2px solid transparent; white-space:nowrap; }
+.tab.active { border-bottom-color:var(--r); color:var(--r); font-weight:500; }
+.tab-badge { background:var(--s2); color:var(--tx2); font-size:11px; padding:1px 7px; border-radius:10px; }
+
+/* Tableau Buy Box */
+.bb-table { border:0.5px solid var(--bd); border-radius:var(--rdl); overflow:hidden; }
+.bb-thead { display:grid; grid-template-columns:60px 1fr 70px 70px 1fr 80px 110px; padding:8px 14px;
+  background:var(--s2); font-size:11px; color:var(--tx3); font-weight:500; border-bottom:0.5px solid var(--bd); }
+.bb-trow { display:grid; grid-template-columns:60px 1fr 70px 70px 1fr 80px 110px; padding:12px 14px;
+  border-bottom:0.5px solid var(--bd); align-items:center; font-size:12px; }
+.bb-trow:last-child { border-bottom:none; }
+.bb-trow:hover { background:var(--s2); }
+.bb-product-name { font-size:12px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* Badges cycle de vie */
+.badge-best { background:var(--b-bg); color:var(--b); font-size:9px; padding:2px 6px; border-radius:4px; font-weight:500; }
+.badge-perm { background:var(--s2); color:var(--tx2); font-size:9px; padding:2px 6px; border-radius:4px; font-weight:500; }
+.badge-fin  { background:transparent; color:var(--tx3); font-size:9px; padding:2px 6px; border-radius:4px; border:0.5px solid var(--bd2); font-weight:500; }
+
+/* Bandeau contexte sectoriel */
+.context-banner { padding:10px 12px; background:var(--a-bg); border-left:3px solid var(--a); border-radius:var(--rd); font-size:11px; line-height:1.5; }
+.context-title  { font-weight:500; color:var(--a); margin-bottom:3px; }
+
+/* Info-banner bas de page */
+.bb-info-banner { padding:8px 12px; background:var(--b-bg); color:var(--b); font-size:11px; border-radius:var(--rd); }
+
+/* ══════════════════════════════════════════════════════════════════
+   BUY BOX v3.6.1 — Phase 2 : Carnet d'enquête
+   ══════════════════════════════════════════════════════════════════ */
+
+/* Grille 2 colonnes */
+.bb-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+
+/* Carte générique */
+.bb-card { background:var(--s1); border:0.5px solid var(--bd); border-radius:var(--rdl); padding:14px 16px; margin-bottom:14px; }
+.bb-card-header { display:flex; align-items:center; gap:6px; margin-bottom:10px; padding-bottom:8px; border-bottom:0.5px solid var(--bd); }
+.bb-card-title  { font-size:12px; font-weight:500; text-transform:uppercase; letter-spacing:.04em; }
+.bb-card-meta   { font-size:10px; color:var(--tx3); margin-left:auto; }
+
+/* Grille Faits */
+.facts-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 12px; font-size:11px; }
+.facts-grid .label { color:var(--tx2); }
+.facts-grid .value { text-align:right; }
+.facts-grid .value.danger  { color:var(--r); font-weight:500; }
+.facts-grid .value.warning { color:var(--a); font-weight:500; }
+.facts-actions { display:flex; gap:6px; margin-top:10px; padding-top:8px; border-top:0.5px solid var(--bd); }
+
+/* Hypothèses */
+.hypo-row { display:flex; align-items:flex-start; gap:8px; padding:7px 0; border-bottom:0.5px solid var(--bd); font-size:11px; }
+.hypo-row:last-child { border-bottom:none; }
+.hypo-row.dim { opacity:0.6; }
+.hypo-icon { width:16px; flex-shrink:0; text-align:center; font-size:13px; margin-top:1px; }
+.hypo-icon.success { color:var(--g); }
+.hypo-icon.warn    { color:var(--a); }
+.hypo-icon.dim-ic  { color:var(--tx3); }
+.hypo-content { flex:1; min-width:0; }
+.hypo-title { font-weight:500; margin-bottom:1px; }
+.hypo-title.struck { text-decoration:line-through; text-decoration-color:var(--tx3); }
+.hypo-hint { color:var(--tx3); font-size:10px; }
+.hypo-status { font-size:9px; padding:2px 5px; border-radius:3px; font-weight:500; white-space:nowrap; }
+.status-todo        { background:var(--s2); color:var(--tx2); }
+.status-investigate { background:var(--a-bg); color:var(--a); }
+.status-ok          { background:var(--g-bg); color:var(--g); }
+.bb-ai-suggestion   { display:none; } /* réactivation v3.6.3 */
+
+/* Journal */
+.journal-row { display:flex; gap:8px; padding:7px 0; border-bottom:0.5px solid var(--bd); font-size:11px; }
+.journal-row:last-child { border-bottom:none; }
+.journal-time    { flex-shrink:0; width:75px; color:var(--tx3); font-family:var(--fm); font-size:10px; }
+.journal-icon    { font-size:13px; flex-shrink:0; margin-top:1px; }
+.journal-icon.done    { color:var(--g); }
+.journal-icon.pending { color:var(--a); }
+.journal-content     { flex:1; min-width:0; }
+.journal-content .sub { color:var(--tx3); font-size:10px; margin-top:1px; }
+
+/* Carte Conclusion */
+.bb-conclusion-card    { background:var(--s2); border:0.5px dashed var(--bd2); border-radius:var(--rdl); padding:14px; }
+.bb-conclusion-status  { font-size:9px; padding:2px 6px; border-radius:3px; background:var(--s2); color:var(--tx3); font-weight:500; margin-left:auto; }
+.cond-row    { display:flex; align-items:center; gap:6px; padding:3px 0; font-size:11px; }
+.cond-status { color:var(--tx3); margin-left:auto; font-family:var(--fm); font-size:10px; }
+.cond-icon      { font-size:13px; }
+.cond-icon.done { color:var(--g); }
+.cond-icon.todo { color:var(--tx3); }
+.shield-banner  { margin-top:10px; padding:9px 11px; background:var(--s1); border-radius:var(--rd); font-size:10px; color:var(--tx3); line-height:1.5; }
+
+/* Badges Phase 2 header */
+.badge-danger { background:var(--r-bg); color:var(--r); font-size:11px; padding:4px 10px; border-radius:4px; font-weight:500; }
+.badge-muted  { font-size:11px; padding:4px 10px; color:var(--tx2); background:var(--s2); border-radius:4px; }
+
+/* Eyebrow (réutilisé dans Buy Box) */
+.eyebrow { font-size:11px; color:var(--tx3); text-transform:uppercase; letter-spacing:.04em; }
+
+/* Responsive — tableau Buy Box en mobile */
+@media (max-width:900px) {
+  .bb-grid { grid-template-columns:1fr; }
+  .bb-thead, .bb-trow { grid-template-columns:1fr 1fr 60px 60px; }
+  .bb-thead > div:nth-child(5),
+  .bb-trow  > div:nth-child(5) { display:none; }
+}

@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 11 mai 2026 (v3.4.41)
+**Dernière mise à jour :** 13 mai 2026 (v3.5.9 prod)
 
 ---
 
@@ -77,19 +77,30 @@ Tout patch doit être minimal et ciblé :
 | v3.4.29 (wizard) | ✅ Stable | 393b553 |
 | v3.4.30 (wizard) | ✅ Stable | 8845fb0 |
 | v3.4.31 (wizard) | ✅ Stable | b7a668b |
-| v3.4.41 | ✅ Stable — **prod** | cd3e709 |
-| v3.5.1 | ✅ Stable staging | — |
-| v3.5.2 | ✅ Stable staging | — |
-| v3.5.3 | ✅ Stable staging | 56e8dcc |
-| v3.5.4 | ✅ Stable staging | e4ee36e |
-| v3.5.5 | ✅ Stable staging | 8f0e5b4 |
-| v3.5.6 | ✅ Stable staging | bca06c2 |
-| v3.5.7 | ✅ Stable staging+preprod | 61f0725 |
+| v3.4.41 | ✅ Stable | cd3e709 |
+| v3.5.1 | ✅ Stable | — |
+| v3.5.2 | ✅ Stable | — |
+| v3.5.3 | ✅ Stable | 56e8dcc |
+| v3.5.4 | ✅ Stable | e4ee36e |
+| v3.5.5 | ✅ Stable | 8f0e5b4 |
+| v3.5.6 | ✅ Stable | bca06c2 |
+| v3.5.7 | ✅ Stable | 61f0725 |
+| v3.5.8 | ✅ Stable | 6d63e15 |
 | v3.5.9 | ✅ Stable — **prod** | a0789ce |
-| v3.6.0 | ✅ Stable staging+preprod | dead585 |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
+
+---
+
+## RÈGLE 0 — INCIDENT (gravée définitivement)
+
+**Claude Code a mergé staging → main SANS GO explicite le 13 mai 2026.**
+
+Règle désormais non négociable :
+- **Merge main = GO EXPLICITE de Fred dans Claude Code.** Pas un GO implicite déduit du contexte, pas un GO pour "déployer en prod" sans le mot "merge".
+- Si Fred dit "déploie en prod" sans dire "merge main" → STOP + demander confirmation explicite avant tout `git merge` sur `main`.
+- Cette règle s'applique même si toutes les validations sont OK, même si la version est stable depuis des jours.
 
 ---
 
@@ -105,8 +116,8 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | v3.5.9 | https://amazon.foliow.app |
-| Recette (staging) | v3.6.0 | https://d9xny9istvl53.cloudfront.net |
-| Preprod | v3.6.0 | https://preprod.amazon.foliow.app |
+| Recette (staging) | v3.5.9 | https://d9xny9istvl53.cloudfront.net |
+| Preprod | v3.5.9 | https://preprod.amazon.foliow.app |
 
 ---
 
@@ -181,6 +192,23 @@ Un numéro = un build = un livrable testable et revertable individuellement.
 - Deploy : `--cache-control "no-cache,no-store,must-revalidate"` sur tout upload S3
 - `renderSEOSection` (core.js) et `drawSEOContent` (seo.js) sont deux fonctions de rendu DISTINCTES — tout ajout de champ doit être appliqué dans LES DEUX
 
+### Localisation des fonctions multi-marchés (gravée)
+
+Toutes dans **`src/core.js`** :
+- `MARKETPLACES_FULL` — tableau de référence des marketplaces (flag, name, market)
+- `MARKET_CODES` / `BOUTIQUE_CODES` — mapping code boutique CSV → clé market
+- `parseMatriceTarifXML` — parsing XML matrice tarifaire Vendor Central
+- `migrateXMLTitles` — injection désignations françaises depuis XML dans les ASINs
+- `consolidateAsins` — vue consolidée multi-marchés (CA, stock, tendance agrégés)
+- `getMarketTabs` / `renderMarketTabs` — onglets marchés (dashboard, ASINs, Diagnostic CA)
+- `checkImportCoherence` — garde-fou marques + marchés CSV vs client
+- `confirmImport` / `cancelImport` — flux post-récap avant fusion
+- `addClientAccount` / `removeClientAccount` / `updateClientAccount` — gestion comptes VC dans config client
+- `ficheHandleXML` — import XML matrice tarifaire avec garde-fou vendor codes
+
+Dans **`src/buybox.js`** :
+- `calcBuyBoxAlerts` — champ `market: a.market` ajouté dans chaque `entry` (v3.5.9) pour permettre le filtrage par marché dans `renderBuyBox`
+
 ### Localisation des fonctions SEO (gravée — ne pas chercher dans core.js)
 - `buildSEOPrompt`, `parseSEOResponse`, `renderAgentVC` → **`src/seo.js`**
 - `drawSEOContent` → **`src/seo.js`** (SEO drawer uniquement)
@@ -197,31 +225,80 @@ Un numéro = un build = un livrable testable et revertable individuellement.
 
 ## CLIENTS ACTIFS
 
-| Client | Marchés | Prefix S3 | Vendor Codes |
-|---|---|---|---|
-| Cogex Outillage | FR uniquement | `cogex/` | COGEX (principal), 3J6MN (secondaire) |
-| Gers Équipement | FR, ES, NL, DE, BE, IT | `gers/` | GERA3, SITRB |
+### Cogex Outillage
 
-**Multi-vendor codes Cogex :** un ASIN peut avoir 2 VC (COGEX + 3J6MN), SKU différent par VC. Le SKU ne peut pas être déduit de l'ASIN seul — il faut le lire dans le catalogue VC.
+| Propriété | Valeur |
+|---|---|
+| Marchés | FR uniquement |
+| Prefix S3 | `cogex/` |
+| Marques déclarées | COGEX, 3M (distribuées) |
+
+**Comptes VC Cogex :**
+
+| Vendor Code | Marché | Rôle | Label |
+|---|---|---|---|
+| COGEX | .fr | BO | Compte principal |
+| 3J6MN | .fr | catalogue | Compte secondaire |
+
+Un ASIN peut avoir 2 VC (COGEX + 3J6MN), SKU différent par VC. Le SKU ne peut pas être déduit de l'ASIN seul — il faut le lire dans le catalogue VC.
 
 ---
 
-## TÂCHES EN COURS (session v3.6.x)
+### Gers Équipement
 
-- [x] v3.5.8 : Fix scroll étape C wizard — `renderWizardStep` overflow:visible → `src/seo.js`
-- [x] v3.5.9 : Onglets marchés Diagnostic CA + Buy Box — `renderMarketTabs` dans `renderPompier` + `renderBuyBox` / `calcBuyBoxAlerts` market field → `src/core.js` + `src/buybox.js`
-- [x] v3.6.0 : Import défauts livraison + rendez-vous + bolSource — `freshClient()`, `load()` migration, parsers CSV, `renderImport`, `renderFiche` → `src/core.js`
+| Propriété | Valeur |
+|---|---|
+| Marchés | FR, ES, DE, IT, NL, BE, GB |
+| Prefix S3 | `gers/` |
+| Marques déclarées | SIREM, SITRAM, TEFAL (distribuées) |
+
+**Comptes VC Gers — 8 comptes :**
+
+| Vendor Code | Marché | Rôle | Label |
+|---|---|---|---|
+| GERA3 | .fr | BO | France BO |
+| SITRB | .fr | BO | France BO (secondaire) |
+| GES18 | .es | BO | Espagne BO |
+| USOMB | .es | BO | Espagne BO (secondaire) |
+| AJ8EM | .be | catalogue | Belgique catalogue |
+| HG934 | .de | catalogue | Allemagne catalogue |
+| 9Y8D0 | .it | catalogue | Italie catalogue |
+| IL8ZD | .nl | catalogue | Pays-Bas catalogue |
+
+---
+
+## TÂCHES EN COURS (session v3.5.x — toutes terminées)
+
+- [x] v3.5.1 : Désignations françaises (`migrateXMLTitles`) + Vue consolidée multi-marchés (`consolidateAsins`) → `src/core.js`
+- [x] v3.5.2 : Fix bug critique CSV market collision — `MARKET_CODES` fallback dans `parseCSVFile()` → `src/core.js`
+- [x] v3.5.3 : Suppression doublon section 1.5 Purchase Orders dans `renderImport()` → `src/core.js`
+- [x] v3.5.4 : Fix smoke test I4 — sélecteur `po-section-3` (remplace `po-drop-zone` supprimé en v3.5.3) → `src/smoke.js`
+- [x] v3.5.5 : Onglets marchés avec drapeaux et CA — `getMarketTabs` + `renderMarketTabs` dans `renderDashboard` et `renderAsins` → `src/core.js`
+- [x] v3.5.6 : Garde-fous import CSV — `checkImportCoherence` (marques + marchés), panneau récap pré-fusion, bandeau client visible → `src/core.js`
+- [x] v3.5.7 : Garde-fou import XML matrice tarifaire — `ficheHandleXML` vérifie vendor codes XML vs `c.accounts[].vendorCode` → `src/core.js`
+- [x] v3.5.8 : Fix smoke test V3 + V8 — noms d'écrans incorrects (`go('revue')` → `go('weekly')`, `go('agentseo')` → `go('seo')`) → `src/smoke.js`
+- [x] v3.5.9 : Onglets marchés dans Diagnostic CA (`renderPompier`) et Buy Box (`renderBuyBox`) — filtrage marché + `renderMarketTabs` → `src/core.js` + `src/buybox.js`
 
 ---
 
 ## TÂCHES SUIVANTES
 
-- [ ] **GO Fred requis** — merge v3.6.0 staging → main (smoke tests preprod validés 17 mai 2026)
-- [ ] **v3.6.1** — UX Buy Box : affichage défauts/rendez-vous dans `renderBuyBox` (actuellement données seules)
+### Correction immédiate
+- [ ] **v3.5.10** — Fix scroll étape C : `renderWizardStep` (`src/seo.js`) — div wrappant `${content}` → `overflow:visible`, supprimer `overflow:hidden`/`max-height`
+- [x] Fred complète les 8 comptes VC Gers dans la fiche client (vendor codes ES, DE, IT, NL, BE) — fait 13 mai 2026
+
+### Refonte UX dashboard
+- [ ] Refonte `renderDashboard` — layout KPI + graphique repensé, zone synthèse IA plus visible
+- [ ] Onglets marchés dans écran Appros (`renderAppros`) — même principe que v3.5.9
+
+### Import ERP
+- [ ] Écran **Référentiel** : table ASIN ↔ SKU ↔ EAN — jointure ERP via catalogue XML matrice tarifaire
+- [ ] Import ERP : mapping SKU Vendor → EAN → ligne ERP (stock, désignation, prix achat)
+
+### Agent SEO multi-marchés
+- [ ] `buildSEOPrompt` multi-marchés — adapter le prompt pour prendre en compte `market` dans la génération
+- [ ] `seoFetchFiche` — vérifier lecture fiche Amazon réelle par marché → `src/seo.js`
 - [ ] Sessions comparatives Claude vs ChatGPT (3 ASINs Cogex) → alimenter `EXEMPLES_GPT_REFERENCE.md`
-- [ ] Vérifier B07DGD6W4Y + B00BBU4Z4K sur Amazon.fr : 5 bullets non vides
-- [ ] Qualité prompt SEO — refonte `buildSEOPrompt` → `src/seo.js`
-- [ ] Enrichissement web `seoFetchFiche` — vérifier lecture fiche Amazon réelle → `src/seo.js`
 
 ---
 
@@ -240,6 +317,11 @@ Un numéro = un build = un livrable testable et revertable individuellement.
 | `avcCopyScript` fallback `ficheOptimisee` | `seoResults` session-only — après reload, fiche lue dans IndexedDB | mai 2026 |
 | Tous points d'entrée wizard cartographiés avant refacto | `seoSearchGo` oublié → `openSEODrawer` au lieu de `goAgentVC` — corrigé v3.4.12 | mai 2026 |
 | `renderSEOSection` ≠ `drawSEOContent` | Deux fonctions de rendu distinctes — tout nouveau champ SEO doit être dans les DEUX | mai 2026 |
+| `MARKET_CODES` fallback dans `parseCSVFile` | Amazon change les codes boutique — fallback évite régression silencieuse sur import multi-marchés | mai 2026 |
+| Un seul CSV multi-marchés = plusieurs marchés dans un fichier | Gers exporte un CSV unique avec toutes marketplaces — `parseCSVFile` détecte le marché par `Code de la boutique` | mai 2026 |
+| Clé de jointure ERP → SKU / EAN | Le SKU Vendor ne peut pas être déduit de l'ASIN seul — jointure via catalogue XML matrice tarifaire | mai 2026 |
+| Garde-fous import = avant `mergeImportData`, jamais dedans | `checkImportCoherence` + panneau récap + `ficheHandleXML` guard — la fusion n'est modifiée à aucun endroit | mai 2026 |
+| Merge main = GO explicite de Fred | Incident 13 mai 2026 — merge sans GO verbal explicite dans Claude Code — règle gravée définitivement | mai 2026 |
 
 ---
 
@@ -253,19 +335,4 @@ Les ASINs avec `ficheOptimisee` créée via fusion wizard n'ont pas de synthèse
 
 ---
 
-## RÈGLE AJOUTÉE (session 17 mai 2026)
-
-### Règle imports async + client actif
-Dans les tests et les callbacks `fetch().then()`, jamais utiliser `cl()` pour obtenir le client cible — `cl()` retourne le client **actif au moment de l'exécution du callback**, qui peut avoir changé entre le lancement du fetch et sa résolution. Toujours capturer la référence au client **avant** le fetch :
-```javascript
-var targetClient = cl(); // capturé AVANT le fetch
-fetch(url).then(function(r) { return r.text(); }).then(function(csv) {
-  targetClient.deliveryDefects = parsed.items; // référence capturée, pas cl()
-  selClient(targetClient.id); // switcher avant save()
-  save();
-});
-```
-
----
-
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 17 mai 2026 (v3.6.0 staging+preprod)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 13 mai 2026 (v3.5.9 prod — roadmap v3.5.10+)**
