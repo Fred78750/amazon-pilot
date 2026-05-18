@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 18 mai 2026 (v3.6.1.4 staging+preprod — algo dynamique stock-insufficient)
+**Dernière mise à jour :** 18 mai 2026 (v3.6.1.5 staging+preprod — fmtNum, zéro .toFixed() brut)
 
 ---
 
@@ -92,7 +92,8 @@ Tout patch doit être minimal et ciblé :
 | v3.6.1.1 | ✅ Stable | 2c067ea |
 | v3.6.1.2 | ✅ Stable | 34b094e |
 | v3.6.1.3 | ✅ Stable | 11c52ee |
-| v3.6.1.4 | ✅ Stable staging+preprod — **en test usage réel Cogex+Gers** | c19969b |
+| v3.6.1.4 | ✅ Stable | c19969b |
+| v3.6.1.5 | ✅ Stable staging+preprod — prêt merge main | 6732cec |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -122,10 +123,11 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | v3.5.9 | https://amazon.foliow.app |
-| Recette (staging) | v3.6.1.4 (commit c19969b) | https://d9xny9istvl53.cloudfront.net |
-| Preprod | v3.6.1.4 (commit c19969b) — en test usage réel | https://preprod.amazon.foliow.app |
+| Recette (staging) | v3.6.1.5 (commit 6732cec) | https://d9xny9istvl53.cloudfront.net |
+| Preprod | v3.6.1.5 (commit 6732cec) — validée, smoke OK | https://preprod.amazon.foliow.app |
 
-⚠️ v3.6.0 + v3.6.1 + v3.6.1.x non encore mergés en main — merge groupé uniquement après GO explicite de Fred à l'issue des tests usage réel (Cogex + Gers).
+⚠️ **Merge main en attente de validation visuelle Fred sur preprod.**
+Scope merge groupé : v3.6.0 + v3.6.1 + v3.6.1.1 + v3.6.1.2 + v3.6.1.3 + v3.6.1.4 + v3.6.1.5
 
 ---
 
@@ -295,7 +297,8 @@ Un ASIN peut avoir 2 VC (COGEX + 3J6MN), SKU différent par VC. Le SKU ne peut p
 - [x] **v3.6.1.1** : Fix delta S-1 — `calcBuyBoxAlerts` lisait `hist[length-1]` (S-0) au lieu de `hist[length-2]` (S-1) → +0 pt pour tous les ASINs. Correction : index -2, condition `>= 2`. Smoke ✅ 223 deltas variés, 82 affichent `—` (1 seule semaine). (18 mai 2026)
 - [x] **v3.6.1.2** : 4 corrections `renderBuyBox` + `calcBuyBoxAlerts`
 - [x] **v3.6.1.3** : Auto-évaluation niveau 1
-- [x] **v3.6.1.4** : Algo dynamique `stock-insufficient` v2 (couvStock/couvTotale en semaines, 5 branches vélocité) + `computeBuyboxFacts` enrichi (velocity, couvertureTotale) + formatage Phase 2 `toFixed(1)` virgule. Note : evidence strings dans hypothèses utilisent encore `.` décimal (cosmétique, hors scope). Smoke ✅ T1(PO couvre→rejected), T2(rupture imminente→investigate), T3(surplus→rejected), T5(formatage virgule). (18 mai 2026) — `buyboxAutoEvaluateHypotheses()` pré-marque 3 hypothèses à l'ouverture d'un cas : `stock-insufficient` (stock/couverture), `po-not-confirmed` (openPOQty), `listing-inactive` (glanceViews S-0 et S-1). Badge `⚙ auto` dans renderBuyBoxCase, disparaît si changement manuel. Anti-régression : cas existants non modifiés. Smoke ✅ 3 profils testés, reset flag validé. (18 mai 2026) : (1) `caMonthEst` = moyenne 4 sem × 4 avec fallback `getRevenue`, respecte `kpiPrimaireCA` ; (2) `criticite` = caMonthEst×(1-rPct/100)×boost_delta ; (3) tri par criticité (défaut) ou CA, boutons avec état actif ; (4) deltaStr `toFixed(2)` virgule. KPI caAtRisk mis à jour sur caMonthEst. `src/styles.css` : `.sort-btn`/`.sort-btn-active`. Smoke ✅ formule validée sur 5 ASINs, ordre criticité ≠ ordre CA. (18 mai 2026)
+- [x] **v3.6.1.4** : Algo dynamique `stock-insufficient` v2
+- [x] **v3.6.1.5** : Helper `fmtNum(v, decimals)` — zéro `.toFixed()` brut dans UI/evidence. 7 occurrences remplacées (4 evidence strings, velocityFormatted, deltaStr, couverture Phase 2). Smoke ✅ `fmtNum(1.7,1)==='1,7'`, evidence virgule, journal sans point décimal. (18 mai 2026) (couvStock/couvTotale en semaines, 5 branches vélocité) + `computeBuyboxFacts` enrichi (velocity, couvertureTotale) + formatage Phase 2 `toFixed(1)` virgule. Note : evidence strings dans hypothèses utilisent encore `.` décimal (cosmétique, hors scope). Smoke ✅ T1(PO couvre→rejected), T2(rupture imminente→investigate), T3(surplus→rejected), T5(formatage virgule). (18 mai 2026) — `buyboxAutoEvaluateHypotheses()` pré-marque 3 hypothèses à l'ouverture d'un cas : `stock-insufficient` (stock/couverture), `po-not-confirmed` (openPOQty), `listing-inactive` (glanceViews S-0 et S-1). Badge `⚙ auto` dans renderBuyBoxCase, disparaît si changement manuel. Anti-régression : cas existants non modifiés. Smoke ✅ 3 profils testés, reset flag validé. (18 mai 2026) : (1) `caMonthEst` = moyenne 4 sem × 4 avec fallback `getRevenue`, respecte `kpiPrimaireCA` ; (2) `criticite` = caMonthEst×(1-rPct/100)×boost_delta ; (3) tri par criticité (défaut) ou CA, boutons avec état actif ; (4) deltaStr `toFixed(2)` virgule. KPI caAtRisk mis à jour sur caMonthEst. `src/styles.css` : `.sort-btn`/`.sort-btn-active`. Smoke ✅ formule validée sur 5 ASINs, ordre criticité ≠ ordre CA. (18 mai 2026)
   - P1 : Constantes `BUYBOX_HYPOTHESES` (11), `BUYBOX_CONCLUSION_CONDITIONS`, `BUYBOX_CONTEXT_BANNER` → `src/core.js`
   - P2/P3 : `freshClient()` + `load()` migration `buyboxCases[]`, suppression `bbCases`/`bbKnowledge`
   - P5 : Nouveau moteur `buyboxOpenCase/UpdateHypothesis/AddJournal/CheckConclusionReady/CloseCase`
@@ -399,10 +402,10 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 
 ## ÉTAT SESSION SUIVANTE PROBABLE
 
-- **Si tests OK** → Fred donne GO merge → merge groupé v3.6.0 + v3.6.1 + v3.6.1.x → main → déploiement prod
+- **GO merge reçu** → procédure : `git checkout main && git pull && git merge staging && git push origin main` → GitHub Actions déploie sur prod (S3 `amazon-pilot-foliow` + CloudFront `E3ERL241475BJI`) → invalidation manuelle → vérif `APP_VERSION === '3.6.1.5'` + smokeTest(false) prod
 - **Si bug/frottement identifié** → Fred ouvre une session et décrit le problème → patch v3.6.1.1 (ou v3.6.2 si scope plus large)
 - **Dans tous les cas** : Fred rouvre la session — Claude Code n'anticipe rien
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 18 mai 2026 (v3.6.1.4 staging+preprod — test usage réel en cours — v3.5.9 prod)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 18 mai 2026 (v3.6.1.5 prêt merge main — v3.5.9 prod)**
