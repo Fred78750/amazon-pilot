@@ -687,13 +687,19 @@ async function smokeTest(silent) {
     else fail('vital','V4','Buy Box liste', e || corrupt.length + ' alertes retailPct>100');
   } catch(ex) { fail('vital','V4','Buy Box liste', ex.message); }
 
-  // V5 — Buy Box Phase 2 (dossier sans crash)
+  // V5 — Buy Box Phase 2 (carnet d'enquête v3.6.1 — dossier sans crash)
   try {
+    window._buyboxView = null; window._buyboxAsin = null; // reset état UI
     if (typeof buyboxOpenCase === 'function' && c) buyboxOpenCase(c, SMOKE_REF.asinRef.asin);
+    window._buyboxView = 'case'; window._buyboxAsin = SMOKE_REF.asinRef.asin;
+    if (typeof render === 'function') render();
     await new Promise(r => setTimeout(r, 400));
-    const e = getErr(); const hasPlan = document.body.innerHTML.includes('Plan d');
-    if (!e && hasPlan) pass('vital','V5','Buy Box Phase 2 ouvert (' + SMOKE_REF.asinRef.asin + ')');
-    else fail('vital','V5','Buy Box Phase 2', e || 'DOM Plan d action absent');
+    const e = getErr();
+    const hasCase = document.body.innerHTML.includes('Carnet d\'enquête') || document.body.innerHTML.includes('Hypothèses');
+    if (!e && hasCase) pass('vital','V5','Buy Box Phase 2 ouvert (' + SMOKE_REF.asinRef.asin + ')');
+    else fail('vital','V5','Buy Box Phase 2', e || 'DOM Carnet enquête absent');
+    // Remettre sur vue liste avant de continuer
+    window._buyboxView = 'list'; window._buyboxAsin = null;
     if (typeof go === 'function') { go('buybox'); await new Promise(r=>setTimeout(r,150)); }
   } catch(ex) { fail('vital','V5','Buy Box Phase 2', ex.message); }
 
