@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 18 mai 2026 (v3.6.1 validée UX preprod — en test usage réel)
+**Dernière mise à jour :** 18 mai 2026 (v3.6.1.1 staging+preprod — fix delta S-1)
 
 ---
 
@@ -88,7 +88,8 @@ Tout patch doit être minimal et ciblé :
 | v3.5.8 | ✅ Stable | 6d63e15 |
 | v3.5.9 | ✅ Stable — **prod** | a0789ce |
 | v3.6.0 | ✅ Stable staging+preprod | dead585 |
-| v3.6.1 | ✅ Stable staging+preprod — **en test usage réel Cogex+Gers** | df21047 |
+| v3.6.1   | ✅ Stable | df21047 |
+| v3.6.1.1 | ✅ Stable staging+preprod — **en test usage réel Cogex+Gers** | 2c067ea |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -118,11 +119,10 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | v3.5.9 | https://amazon.foliow.app |
-| Recette (staging) | v3.6.1 (commit df21047) | https://d9xny9istvl53.cloudfront.net |
-| Preprod | v3.6.1 (commit df21047) — validée UX, en test usage réel | https://preprod.amazon.foliow.app |
+| Recette (staging) | v3.6.1.1 (commit 2c067ea) | https://d9xny9istvl53.cloudfront.net |
+| Preprod | v3.6.1.1 (commit 2c067ea) — en test usage réel | https://preprod.amazon.foliow.app |
 
-⚠️ v3.6.0 + v3.6.1 non encore mergés en main — merge groupé uniquement après GO explicite de Fred à l'issue des tests usage réel (Cogex + Gers, Buy Box cas d'enquête / journal / hypothèses / imports).
-⚠️ Aucun patch de code tant que Fred n'a pas remonté de retour d'usage. Si bug ou frottement UX → attendre les instructions de Fred, ne pas anticiper.
+⚠️ v3.6.0 + v3.6.1 + v3.6.1.1 non encore mergés en main — merge groupé uniquement après GO explicite de Fred à l'issue des tests usage réel (Cogex + Gers).
 
 ---
 
@@ -289,6 +289,7 @@ Un ASIN peut avoir 2 VC (COGEX + 3J6MN), SKU différent par VC. Le SKU ne peut p
 - [x] v3.5.1–v3.5.9 : (cf. historique ci-dessous)
 - [x] **v3.6.0** : Import défauts livraison (`importBuyBoxDefects`) + rendez-vous (`importBuyBoxAppointments`) + champ `bolSource` → `src/core.js`
 - [x] **v3.6.1** : Refonte Buy Box Phase 1+2 + toast imports — 9 patches + CSS → smoke 27/27 ✅ (18 mai 2026)
+- [x] **v3.6.1.1** : Fix delta S-1 — `calcBuyBoxAlerts` lisait `hist[length-1]` (S-0) au lieu de `hist[length-2]` (S-1) → +0 pt pour tous les ASINs. Correction : index -2, condition `>= 2`. Smoke ✅ 223 deltas variés, 82 affichent `—` (1 seule semaine). (18 mai 2026)
   - P1 : Constantes `BUYBOX_HYPOTHESES` (11), `BUYBOX_CONCLUSION_CONDITIONS`, `BUYBOX_CONTEXT_BANNER` → `src/core.js`
   - P2/P3 : `freshClient()` + `load()` migration `buyboxCases[]`, suppression `bbCases`/`bbKnowledge`
   - P5 : Nouveau moteur `buyboxOpenCase/UpdateHypothesis/AddJournal/CheckConclusionReady/CloseCase`
@@ -392,10 +393,10 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 
 ## ÉTAT SESSION SUIVANTE PROBABLE
 
-- **Si tests OK** → Fred donne GO merge → merge groupé v3.6.0 + v3.6.1 → main → déploiement prod
+- **Si tests OK** → Fred donne GO merge → merge groupé v3.6.0 + v3.6.1 + v3.6.1.1 → main → déploiement prod
 - **Si bug/frottement identifié** → Fred ouvre une session et décrit le problème → patch v3.6.1.1 (ou v3.6.2 si scope plus large)
 - **Dans tous les cas** : Fred rouvre la session — Claude Code n'anticipe rien
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 18 mai 2026 (v3.6.1 validée UX preprod — test usage réel en cours — v3.5.9 prod)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 18 mai 2026 (v3.6.1.1 staging+preprod — test usage réel en cours — v3.5.9 prod)**

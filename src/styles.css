@@ -496,6 +496,10 @@ a:hover { text-decoration: underline; }
 /* Eyebrow (réutilisé dans Buy Box) */
 .eyebrow { font-size:11px; color:var(--tx3); text-transform:uppercase; letter-spacing:.04em; }
 
+/* Boutons tri Buy Box v3.6.1.2 */
+.sort-btn        { background:var(--s2); color:var(--tx2); border:0.5px solid var(--bd2); }
+.sort-btn-active { background:var(--b-bg,rgba(0,122,255,.08)); color:var(--b); border-color:var(--b); font-weight:500; }
+
 /* Responsive — tableau Buy Box en mobile */
 @media (max-width:900px) {
   .bb-grid { grid-template-columns:1fr; }

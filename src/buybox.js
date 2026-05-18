@@ -44,7 +44,21 @@ function calcBuyBoxAlerts(c) {
     const joursAvantLimite = _apro?.joursAvantLimite ?? null;
     const stockUrgent = couvertureSem !== null && couvertureSem < 3;
 
-    const entry = { asin: a.asin, title: a.title, brand: a.brand, market: a.market, rPct, prevRetail, delta, cause, zeroWeeks, revenue: getRevenue(a,c), segment: calcSegment(a, c.asins.reduce((s,x)=>s+(getRevenue(x,c)||0),0), c), sellableUnits: a.sellableUnits, couvertureSem, joursAvantLimite, stockUrgent };
+    // CA mensuel estimé = moyenne mobile 4 semaines × 4 (respecte kpiPrimaireCA)
+    const pref    = (c && c.kpiPrimaireCA) || 'ordered';
+    const revs    = (a.history || []).slice(-4).map(h =>
+      pref === 'shipped'
+        ? (parseNum(h.shippedRevenue) || parseNum(h.revenue) || 0)
+        : (parseNum(h.orderedRevenue) || parseNum(h.revenue) || 0)
+    ).filter(v => v > 0);
+    const avgWeek    = revs.length > 0 ? revs.reduce((s, v) => s + v, 0) / revs.length : (getRevenue(a, c) || 0);
+    const caMonthEst = Math.round(avgWeek * 4);
+    // Criticité = CA à risque mensuel × boost delta négatif
+    const deltaForCrit = delta !== null ? delta : 0;
+    const caEstAtRisk  = caMonthEst * (1 - rPct / 100);
+    const deltaBoost   = 1 + Math.max(0, -deltaForCrit) / 10;
+    const criticite    = caEstAtRisk * deltaBoost;
+    const entry = { asin: a.asin, title: a.title, brand: a.brand, market: a.market, rPct, prevRetail, delta, cause, zeroWeeks, revenue: getRevenue(a,c), caMonthEst, criticite, segment: calcSegment(a, c.asins.reduce((s,x)=>s+(getRevenue(x,c)||0),0), c), sellableUnits: a.sellableUnits, couvertureSem, joursAvantLimite, stockUrgent };
 
     if (isSuppressed)                          suppressed.push(entry);
     else if (isCritical)                       critical.push(entry);
@@ -262,16 +276,21 @@ function renderBuyBox() {
 
   // Tab actif
   var activeTab = window._buyboxTab || 'lost';
-  var displayList = activeTab === 'lost'        ? lostF
-                  : activeTab === 'compromised' ? compromisedF
-                  : activeTab === 'fragile'     ? fragile
-                  : recovered;
+  var sortBy = window._buyboxSort || 'criticite';
+  var displayList = (activeTab === 'lost'        ? lostF
+                   : activeTab === 'compromised' ? compromisedF
+                   : activeTab === 'fragile'     ? fragile
+                   : recovered).slice();
+  displayList.sort(function(a, b) {
+    if (sortBy === 'criticite') return (b.criticite || 0) - (a.criticite || 0);
+    return (b.caMonthEst || 0) - (a.caMonthEst || 0);
+  });
 
   // KPIs
   var asinsInTrouble = lostF.length + compromisedF.length;
   var totalActiveAsins = (c.asins || []).filter(function(a) { return getRevenue(a, c) > 0; }).length;
-  var caAtRisk = lostF.reduce(function(s, e) { return s + (e.revenue || 0); }, 0)
-               + compromisedF.reduce(function(s, e) { return s + (e.revenue || 0); }, 0);
+  var caAtRisk = lostF.reduce(function(s, e) { return s + (e.caMonthEst || 0); }, 0)
+               + compromisedF.reduce(function(s, e) { return s + (e.caMonthEst || 0); }, 0);
   var openCasesCount = buyboxGetCases(c).filter(function(x) { return x.status !== 'closed'; }).length;
   var ninetyDaysAgo  = Date.now() - 90 * 24 * 3600 * 1000;
   var resolved90d    = buyboxGetCases(c).filter(function(x) {
@@ -336,6 +355,13 @@ function renderBuyBox() {
   h += '<span style="font-size:10px;color:var(--tx3);margin-left:6px;">(filtrage cycle de vie en v3.6.2)</span>';
   h += '</div>';
 
+  // ── Tri ──
+  h += '<div style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--tx2);margin-bottom:10px;">';
+  h += '<span>Trier par :</span>';
+  h += '<button class="btn btn-sm sort-btn' + (sortBy === 'criticite' ? ' sort-btn-active' : '') + '" onclick="window._buyboxSort=\'criticite\';render()">⚠ Criticité</button>';
+  h += '<button class="btn btn-sm sort-btn' + (sortBy === 'ca' ? ' sort-btn-active' : '') + '" onclick="window._buyboxSort=\'ca\';render()">CA</button>';
+  h += '</div>';
+
   // ── Tabs ──
   h += '<div class="tabs" style="margin-bottom:0;">';
   var tabs = [
@@ -358,7 +384,7 @@ function renderBuyBox() {
 
   // En-tête tableau
   h += '<div class="bb-thead" style="display:grid;grid-template-columns:60px 1fr 70px 70px 1fr 80px 110px;padding:8px 14px;background:var(--s2);font-size:11px;color:var(--tx3);font-weight:500;border-bottom:0.5px solid var(--bd);">';
-  h += '<div>Type</div><div>ASIN · Produit</div><div style="text-align:right;">Retail%</div><div style="text-align:right;">Δ S-1</div><div>Cause suspectée</div><div style="text-align:right;">CA/mois</div><div></div>';
+  h += '<div>Type</div><div>ASIN · Produit</div><div style="text-align:right;">Retail%</div><div style="text-align:right;">Δ S-1</div><div>Cause suspectée</div><div style="text-align:right;">CA / mois (est.)</div><div></div>';
   h += '</div>';
 
   if (displayList.length === 0) {
@@ -372,9 +398,11 @@ function renderBuyBox() {
       var delta = entry.delta !== null && entry.delta !== undefined ? entry.delta : null;
       var rPctStr = rPct !== null ? rPct + ' %' : '—';
       var rPctDanger = rPct !== null && rPct < 80;
-      var deltaStr = delta !== null ? (delta >= 0 ? '+' : '') + delta + ' pt' : '—';
+      var deltaStr = delta !== null
+        ? (delta >= 0 ? '+' : '') + delta.toFixed(2).replace('.', ',') + ' pt'
+        : '—';
       var deltaColor = delta !== null && delta < 0 ? 'var(--r)' : delta > 0 ? 'var(--g)' : 'var(--tx3)';
-      var rev = getRevenue(entry, c) || entry.revenue || 0;
+      var rev = entry.caMonthEst || entry.revenue || 0;
       var hasCase = buyboxGetCase(c, asin) !== null;
 
       h += '<div class="bb-trow" style="display:grid;grid-template-columns:60px 1fr 70px 70px 1fr 80px 110px;padding:12px 14px;border-bottom:0.5px solid var(--bd);align-items:center;font-size:12px;">';
