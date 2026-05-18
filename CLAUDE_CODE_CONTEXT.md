@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 18 mai 2026 (anti-régression complète v3.6.1.5 — PRÊT MERGE MAIN)
+**Dernière mise à jour :** 18 mai 2026 (v3.6.1.5 mergé en prod — hash fae7d79)
 
 ---
 
@@ -93,7 +93,7 @@ Tout patch doit être minimal et ciblé :
 | v3.6.1.2 | ✅ Stable | 34b094e |
 | v3.6.1.3 | ✅ Stable | 11c52ee |
 | v3.6.1.4 | ✅ Stable | c19969b |
-| v3.6.1.5 | ✅ Stable staging+preprod — prêt merge main | 6732cec |
+| v3.6.1.5 | ✅ **PROD** — mergé 18 mai 2026 | fae7d79 |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -122,11 +122,11 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | v3.5.9 | https://amazon.foliow.app |
-| Recette (staging) | v3.6.1.5 (commit 6732cec) | https://d9xny9istvl53.cloudfront.net |
-| Preprod | v3.6.1.5 (commit 6732cec) — validée, smoke OK | https://preprod.amazon.foliow.app |
+| Production (main) | **v3.6.1.5** (merge fae7d79 — 18 mai 2026) | https://amazon.foliow.app |
+| Recette (staging) | v3.6.1.5 (commit 2635bd4) | https://d9xny9istvl53.cloudfront.net |
+| Preprod | v3.6.1.5 (commit 2635bd4) — validée, smoke OK | https://preprod.amazon.foliow.app |
 
-✅ **Anti-régression 18/19 validée (V9a/V9b = data drift Cogex, recalibrés). En attente GO merge Fred.**
+✅ **MERGÉ EN PROD le 18 mai 2026** — merge fae7d79, APP_VERSION 3.6.1.5 vérifié, CloudFront invalidé.
 Scope merge groupé : v3.6.0 + v3.6.1 + v3.6.1.1 + v3.6.1.2 + v3.6.1.3 + v3.6.1.4 + v3.6.1.5
 
 ---
@@ -402,8 +402,8 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 
 ## ÉTAT SESSION SUIVANTE PROBABLE
 
-- **GO merge reçu** → procédure : `git checkout main && git pull && git merge staging && git push origin main` → GitHub Actions déploie sur prod (S3 `amazon-pilot-foliow` + CloudFront `E3ERL241475BJI`) → invalidation manuelle → vérif `APP_VERSION === '3.6.1.5'` + smokeTest(false) prod
-- **Si bug/frottement identifié** → Fred ouvre une session et décrit le problème → patch v3.6.1.1 (ou v3.6.2 si scope plus large)
+- **v3.6.1.5 en prod** — si bug/frottement identifié → Fred ouvre une session et décrit le problème → patch v3.6.1.x ou v3.6.2
+- **Prochain scope** : v3.6.2 Buy Box Phase 2 complète (défauts livraison × ASIN, filtres cycle de vie, causes en colonne Phase 1)
 - **Dans tous les cas** : Fred rouvre la session — Claude Code n'anticipe rien
 
 ---
