@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 18 mai 2026 (v3.6.1 staging+preprod)
+**Dernière mise à jour :** 18 mai 2026 (v3.6.1 validée UX preprod — en test usage réel)
 
 ---
 
@@ -88,7 +88,7 @@ Tout patch doit être minimal et ciblé :
 | v3.5.8 | ✅ Stable | 6d63e15 |
 | v3.5.9 | ✅ Stable — **prod** | a0789ce |
 | v3.6.0 | ✅ Stable staging+preprod | dead585 |
-| v3.6.1 | ✅ Stable staging+preprod | 9e49d44 |
+| v3.6.1 | ✅ Stable staging+preprod — **en test usage réel Cogex+Gers** | df21047 |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -118,10 +118,11 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | v3.5.9 | https://amazon.foliow.app |
-| Recette (staging) | v3.6.1 | https://d9xny9istvl53.cloudfront.net |
-| Preprod | v3.6.1 | https://preprod.amazon.foliow.app |
+| Recette (staging) | v3.6.1 (commit df21047) | https://d9xny9istvl53.cloudfront.net |
+| Preprod | v3.6.1 (commit df21047) — validée UX, en test usage réel | https://preprod.amazon.foliow.app |
 
-⚠️ v3.6.0 + v3.6.1 non encore mergés en main — attente GO Fred pour merge groupé.
+⚠️ v3.6.0 + v3.6.1 non encore mergés en main — merge groupé uniquement après GO explicite de Fred à l'issue des tests usage réel (Cogex + Gers, Buy Box cas d'enquête / journal / hypothèses / imports).
+⚠️ Aucun patch de code tant que Fred n'a pas remonté de retour d'usage. Si bug ou frottement UX → attendre les instructions de Fred, ne pas anticiper.
 
 ---
 
@@ -387,4 +388,14 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 18 mai 2026 (v3.6.1 staging+preprod — v3.5.9 prod)**
+---
+
+## ÉTAT SESSION SUIVANTE PROBABLE
+
+- **Si tests OK** → Fred donne GO merge → merge groupé v3.6.0 + v3.6.1 → main → déploiement prod
+- **Si bug/frottement identifié** → Fred ouvre une session et décrit le problème → patch v3.6.1.1 (ou v3.6.2 si scope plus large)
+- **Dans tous les cas** : Fred rouvre la session — Claude Code n'anticipe rien
+
+---
+
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 18 mai 2026 (v3.6.1 validée UX preprod — test usage réel en cours — v3.5.9 prod)**
