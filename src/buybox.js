@@ -1,6 +1,13 @@
 // Amazon Pilot — Module Buy Box
 // Extrait automatiquement — ne pas éditer directement
 
+// Helper formatage numérique FR (virgule décimale)
+function fmtNum(v, decimals) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  var d = decimals !== undefined ? decimals : 1;
+  return v.toFixed(d).replace('.', ',');
+}
+
 function calcBuyBoxAlerts(c) {
   if (!c?.asins?.length) return { critical: [], warning: [], suppressed: [] };
   const critical   = []; // Retail% < 80%
@@ -250,16 +257,16 @@ function buyboxAutoEvaluateHypotheses(c, asin) {
     }
   } else if (couvStock < 2 && couvTotale < 4) {
     stockStatus   = 'investigate';
-    stockEvidence = 'Stock ' + stock + ' u. (' + couvStock.toFixed(1) + ' sem) + PO ' + poQty + ' u. = couv totale ' + couvTotale.toFixed(1) + ' sem — rupture imminente.';
+    stockEvidence = 'Stock ' + stock + ' u. (' + fmtNum(couvStock, 1) + ' sem) + PO ' + poQty + ' u. = couv totale ' + fmtNum(couvTotale, 1) + ' sem — rupture imminente.';
   } else if (couvStock < 2 && couvTotale >= 4) {
     stockStatus   = 'rejected';
-    stockEvidence = 'Stock ' + stock + ' u. (' + couvStock.toFixed(1) + ' sem) mais PO ' + poQty + ' u. couvre ' + couvTotale.toFixed(1) + ' sem — pas d\'urgence stock.';
+    stockEvidence = 'Stock ' + stock + ' u. (' + fmtNum(couvStock, 1) + ' sem) mais PO ' + poQty + ' u. couvre ' + fmtNum(couvTotale, 1) + ' sem — pas d\'urgence stock.';
   } else if (couvStock < 4 && couvTotale < 6) {
     stockStatus   = 'investigate';
-    stockEvidence = 'Stock ' + stock + ' u. (' + couvStock.toFixed(1) + ' sem), couv totale ' + couvTotale.toFixed(1) + ' sem — tension à surveiller.';
+    stockEvidence = 'Stock ' + stock + ' u. (' + fmtNum(couvStock, 1) + ' sem), couv totale ' + fmtNum(couvTotale, 1) + ' sem — tension à surveiller.';
   } else if (couvTotale > 12) {
     stockStatus   = 'rejected';
-    stockEvidence = 'Couv totale ' + couvTotale.toFixed(1) + ' sem — surplus, stock pas le sujet.';
+    stockEvidence = 'Couv totale ' + fmtNum(couvTotale, 1) + ' sem — surplus, stock pas le sujet.';
   }
 
   if (stockStatus !== null) {
@@ -352,7 +359,7 @@ function computeBuyboxFacts(c, asin) {
       couverture:        couvStockF,
       couvertureTotale:  couvTotaleF,
       velocity:          velFacts,
-      velocityFormatted: velFacts !== null ? velFacts.toFixed(1).replace('.', ',') + ' u./sem' : '—'
+      velocityFormatted: velFacts !== null ? fmtNum(velFacts, 1) + ' u./sem' : '—'
     },
     po:              { open: openPO, event: lastPOEvent },
     defects:         { count: defectsRecent, label: defectsLabel },
@@ -518,7 +525,7 @@ function renderBuyBox() {
       var rPctStr = rPct !== null ? rPct + ' %' : '—';
       var rPctDanger = rPct !== null && rPct < 80;
       var deltaStr = delta !== null
-        ? (delta >= 0 ? '+' : '') + delta.toFixed(2).replace('.', ',') + ' pt'
+        ? (delta >= 0 ? '+' : '') + fmtNum(delta, 2) + ' pt'
         : '—';
       var deltaColor = delta !== null && delta < 0 ? 'var(--r)' : delta > 0 ? 'var(--g)' : 'var(--tx3)';
       var rev = entry.caMonthEst || entry.revenue || 0;
@@ -654,7 +661,7 @@ function renderBuyBoxCase(c, asin) {
     h += '<div style="text-align:right;font-weight:500;color:' + (rPctNow < 80 ? 'var(--r)' : 'var(--tx)') + ';">' + rPctStr + ' <span style="color:var(--tx3);font-weight:400;font-size:10px;">' + rPct9Str + '</span></div>';
     h += '<div style="color:var(--tx2);">Stock Amazon</div>';
     var couvFmtF = (facts.stockAmazon.couverture !== null && facts.stockAmazon.couverture !== undefined)
-      ? facts.stockAmazon.couverture.toFixed(1).replace('.', ',') + ' sem'
+      ? fmtNum(facts.stockAmazon.couverture, 1) + ' sem'
       : null;
     var velFmtF  = facts.stockAmazon.velocityFormatted && facts.stockAmazon.velocityFormatted !== '—'
       ? facts.stockAmazon.velocityFormatted : null;
