@@ -20,9 +20,8 @@ jobs:
 
       - name: Deploy to S3
         run: |
-          FILE=$(ls amazon-pilot-v*.html | sort -V | tail -1)
-          echo "Deploying $FILE"
-          aws s3 cp $FILE s3://amazon-pilot-foliow/index.html \
+          echo "Deploying amazon-pilot-latest.html"
+          aws s3 cp amazon-pilot-latest.html s3://amazon-pilot-foliow/index.html \
             --cache-control "no-cache,no-store,must-revalidate"
 
       - name: Invalidate CloudFront
