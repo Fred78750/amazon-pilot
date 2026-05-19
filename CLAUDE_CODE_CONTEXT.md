@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 19 mai 2026 (v3.6.2 sur staging — hash 665d4cb)
+**Dernière mise à jour :** 19 mai 2026 (v3.6.2 mergé en prod — merge 01656bc, tag v3.6.2)
 
 ---
 
@@ -94,7 +94,7 @@ Tout patch doit être minimal et ciblé :
 | v3.6.1.3 | ✅ Stable | 11c52ee |
 | v3.6.1.4 | ✅ Stable | c19969b |
 | v3.6.1.5 | ✅ **PROD** — mergé 18 mai 2026 | fae7d79 |
-| v3.6.2 | ✅ Staging+Preprod — validé Fred 19 mai 2026 | 665d4cb |
+| v3.6.2 | ✅ **PROD** — mergé 19 mai 2026 | 01656bc (merge) / tag v3.6.2 |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -123,14 +123,15 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | **v3.6.1.5** (merge fae7d79 — 18 mai 2026) | https://amazon.foliow.app |
+| Production (main) | **v3.6.2** (merge 01656bc — 19 mai 2026) | https://amazon.foliow.app |
 | Recette (staging) | **v3.6.2** (commit 665d4cb — 19 mai 2026) | https://d9xny9istvl53.cloudfront.net |
-| Preprod | **v3.6.2** (commit 665d4cb — 19 mai 2026) — validée Fred | https://preprod.amazon.foliow.app |
+| Preprod | **v3.6.2** (commit 665d4cb — 19 mai 2026) | https://preprod.amazon.foliow.app |
+
+✅ **MERGÉ EN PROD le 19 mai 2026** — merge 01656bc, tag v3.6.2, APP_VERSION 3.6.2 vérifié, CloudFront invalidé.
+Scope : moteur de recherche ASIN transversal topbar + rebranchement Buy Box / Appros / Prévisionnel.
 
 ✅ **MERGÉ EN PROD le 18 mai 2026** — merge fae7d79, APP_VERSION 3.6.1.5 vérifié, CloudFront invalidé.
 Scope merge groupé : v3.6.0 + v3.6.1 + v3.6.1.1 + v3.6.1.2 + v3.6.1.3 + v3.6.1.4 + v3.6.1.5
-
-🚧 **v3.6.2 en cours de validation** — moteur de recherche ASIN transversal (topbar). En attente GO Fred pour merge main.
 
 ---
 
@@ -416,7 +417,7 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 
 ## ÉTAT SESSION SUIVANTE PROBABLE
 
-- **v3.6.2 en attente de GO merge prod** — barre recherche ASIN topbar validée par Fred sur recette + preprod
+- **v3.6.2 en prod** — barre recherche ASIN topbar. Fix CI deploy.yml + deploy-staging.yml (→ amazon-pilot-latest.html)
 - **Prochain scope** : v3.6.3 Buy Box Phase 2 complète (défauts livraison × ASIN, filtres cycle de vie, causes en colonne Phase 1)
 - **Dans tous les cas** : Fred rouvre la session — Claude Code n'anticipe rien
 
@@ -435,4 +436,4 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 19 mai 2026 (v3.6.2 staging+preprod — 665d4cb)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 19 mai 2026 (v3.6.2 en prod — merge 01656bc, tag v3.6.2)**
