@@ -1,8 +1,13 @@
 # Claude_Orchestrateur_Context.md
-**Version :** V0 — 19 mai 2026
-**Maintenu par :** Claude orchestrateur (proposition de diff en fin de session)
-**Déployé par :** Claude Code (commit GitHub + sync repo local)
-**Lu par :** Claude orchestrateur en début de chaque session chat avec Fred
+**Version :** V0.1 — 19 mai 2026 (soir)
+**Produit par :** Claude Orchestrateur (contenu)
+**Déposé sur le repo par :** Claude Code (commit + sync repo local) — Claude Code ne modifie pas le contenu
+**Transmission :** Fred fait le pont entre Orchestrateur (qui produit) et Claude Code (qui dépose)
+**Lu par :** Claude Orchestrateur en début de chaque session chat avec Fred
+
+**Historique de versions :**
+- V0 (matin 19 mai) — création initiale, cadrage roadmap v3.6.2 → v3.11
+- V0.1 (soir 19 mai) — ajout patterns `oninput`/`render()`, CI vs `.gitignore`, `PYTHONIOENCODING` ; ajout règle de maintenance du fichier ; mise à jour statut prod v3.6.2 ; mise à jour roadmap
 
 ---
 
@@ -32,6 +37,7 @@
 | 7 | Les instructions Claude Code sont livrées en **fichier markdown téléchargeable** via `present_files`, pas seulement en chat. | Fred copie/colle le fichier directement |
 | 8 | Nommage fichier livrable : `amazon-pilot-vX.Y.Z.html` (Fred renomme en `amazon-pilot-latest.html` pour le repo) | Confusion versionning |
 | 9 | Annoncer le rôle Scanderia à chaque livrable : Orchestrateur, Content, Veille, Data Analyst, Designer, Media Buyer, Service Client, Juridique. | Perte de traçabilité |
+| 10 | **Seul Claude Orchestrateur produit les mises à jour de `Claude_Orchestrateur_Context.md`.** Claude Code peut déposer le fichier (commit + sync repo) mais n'a pas le droit d'en modifier le contenu. Fred fait le pont entre les deux. | Mémoire orchestrateur polluée |
 
 ---
 
@@ -55,6 +61,9 @@ Patterns observés et corrigés à de multiples reprises. Si je détecte que je 
 - **Seuils métier inventés** : si un seuil n'est pas dans `AMAZON_PILOT_REFERENCE.md` ou la doc pilotage du 11 avril, **demander à Fred** au lieu d'inventer.
 - **Tests automatiques verts = merge OK** : non, la revue UI visuelle par Fred est **obligatoire** avant tout merge sur main.
 - **`.toFixed()` sans `.replace('.', ',')`** : formatage français cassé. Utiliser le helper `fmtNum()` unifié.
+- **`oninput` + `render()` dans la topbar** : tout champ input dans la topbar qui déclenche `render()` à chaque frappe reconstruit le DOM et détruit le focus → saisie lettre par lettre impossible (panne Fragile). Règle : dans la topbar, utiliser `onkeydown="if(event.key==='Enter')..."` ou `onchange` ; jamais `oninput`. Déclenchement de l'action sur Enter ou clic action explicite. À écrire en limite négative explicite dans tout brief touchant à la topbar. (Identifié v3.6.2, fix `665d4cb`)
+- **CI déploie l'ancienne version malgré push réussi** : le `.gitignore` du repo contient `amazon-pilot-v*.html`, donc tout script CI faisant `ls amazon-pilot-v*.html | sort -V | tail -1` trouve la dernière version commitée (souvent obsolète) et pas le fichier de travail. Règle : tout CI doit déployer `amazon-pilot-latest.html` (qui n'est pas gitignored), jamais le pattern versionné. (Identifié v3.6.2, fix `644471f` sur `deploy-staging.yml`)
+- **`PYTHONIOENCODING` requis sur Windows pour `build.py`** : caractères Unicode (▶ U+25B6, emojis) dans `build.py` cassent sur terminal cp1252. Commande à utiliser : `PYTHONIOENCODING=utf-8 python build.py`. À documenter dans le `README` ou rappeler en début de session si Claude Code doit relancer un build local.
 
 ---
 
@@ -96,15 +105,16 @@ Patterns observés et corrigés à de multiples reprises. Si je détecte que je 
 ### Statut prod actuel (à mettre à jour à chaque session)
 | Environnement | Version |
 |---|---|
-| **Prod (main)** | v3.6.1.5 (commit `fae7d79`) |
-| **Staging (CI)** | v3.6.1.5 |
-| **Preprod** | v3.6.1.5 |
+| **Prod (main)** | v3.6.2 (à compléter avec hash après merge prod) — précédent v3.6.1.5 (`fae7d79`) |
+| **Staging (CI)** | v3.6.2 (`665d4cb`) |
+| **Preprod** | v3.6.2 (`665d4cb`) |
 
 ### Roadmap validée — cible commercialisation été 2026
 
-| Version | Étape | Délai estimé | Contenu |
+| Version | Étape | Statut / Délai | Contenu |
 |---|---|---|---|
-| **v3.6.2** | Préalable | 1 sem | Header avec moteur de recherche ASIN transversal |
+| **v3.6.2** | Préalable | ✅ **Livrée preprod** — attente merge prod | Header avec moteur de recherche ASIN transversal + rebranchement Buy Box / Appros / Prévisionnel sur `getFilteredAsins` |
+| **v3.6.3** | ⚠ À arbitrer | À trancher avec Fred | Le récap Claude Code v3.6.2 mentionne "Buy Box Phase 2 complète" (croisement défauts × ASIN, filtres cycle de vie, causes suspectées, logique `fragile`/`recovered`). Or le principe roadmap initial disait "Pas de chantier Buy Box dédié v3.6.2/v3.6.3, Buy Box s'enrichit en parasitage des sous-routines YoY". **Contradiction à trancher avant le prochain chantier.** |
 | **v3.8** | YoY Étape 1 | 3 sem | Constat factuel — tableau de bord YoY brut |
 | **v3.9** | YoY Étape 2 | 1 sem | Warnings — règles d'alerte visuelles |
 | **v3.10** | YoY Étape 3a | 4 sem | Enquête ASINs disparus — classification 4 catégories |
