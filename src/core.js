@@ -3116,7 +3116,7 @@ function renderTopbar() {
         : '';
       slot.innerHTML = `<div class="topbar-search${asinSearch && asinSearch.trim() ? ' active' : ''}">
         <button class="topbar-search-btn" onclick="triggerSearch()">🔍</button>
-        <input id="asin-search-input" class="topbar-search-input" type="text" value="${esc(asinSearch)}" placeholder="ASIN · SKU · EAN · titre" oninput="asinSearch=this.value;render()" onkeydown="if(event.key==='Enter')triggerSearch()" />
+        <input id="asin-search-input" class="topbar-search-input" type="text" value="${esc(asinSearch)}" placeholder="ASIN · SKU · EAN · titre" onkeydown="if(event.key==='Enter')triggerSearch()" />
         ${countHtml}${clearHtml}
       </div>`;
     } else {
