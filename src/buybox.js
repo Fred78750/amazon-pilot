@@ -388,7 +388,14 @@ function renderBuyBox() {
     return renderBuyBoxCase(c, window._buyboxAsin);
   }
 
-  var alerts = calcBuyBoxAlerts(c);
+  // v3.6.2 : appliquer le filtre de recherche transversal
+  var cFiltered = c;
+  if (asinSearch && asinSearch.trim()) {
+    var filteredAsins = getFilteredAsins(c);
+    cFiltered = Object.assign({}, c, { asins: filteredAsins });
+  }
+
+  var alerts = calcBuyBoxAlerts(cFiltered);
   var lost        = alerts.critical;
   var compromised = alerts.warning;
   var fragile     = [];   // v3.6.1 : toujours vide (dérivation v3.6.2)
@@ -414,7 +421,7 @@ function renderBuyBox() {
 
   // KPIs
   var asinsInTrouble = lostF.length + compromisedF.length;
-  var totalActiveAsins = (c.asins || []).filter(function(a) { return getRevenue(a, c) > 0; }).length;
+  var totalActiveAsins = (cFiltered.asins || []).filter(function(a) { return getRevenue(a, c) > 0; }).length;
   var caAtRisk = lostF.reduce(function(s, e) { return s + (e.caMonthEst || 0); }, 0)
                + compromisedF.reduce(function(s, e) { return s + (e.caMonthEst || 0); }, 0);
   var openCasesCount = buyboxGetCases(c).filter(function(x) { return x.status !== 'closed'; }).length;
