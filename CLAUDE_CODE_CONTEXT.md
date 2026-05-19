@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 18 mai 2026 (v3.6.1.5 mergé en prod — hash fae7d79)
+**Dernière mise à jour :** 19 mai 2026 (v3.6.2 sur staging — hash 665d4cb)
 
 ---
 
@@ -94,6 +94,7 @@ Tout patch doit être minimal et ciblé :
 | v3.6.1.3 | ✅ Stable | 11c52ee |
 | v3.6.1.4 | ✅ Stable | c19969b |
 | v3.6.1.5 | ✅ **PROD** — mergé 18 mai 2026 | fae7d79 |
+| v3.6.2 | ✅ Staging+Preprod — validé Fred 19 mai 2026 | 665d4cb |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -123,11 +124,13 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | **v3.6.1.5** (merge fae7d79 — 18 mai 2026) | https://amazon.foliow.app |
-| Recette (staging) | v3.6.1.5 (commit 2635bd4) | https://d9xny9istvl53.cloudfront.net |
-| Preprod | v3.6.1.5 (commit 2635bd4) — validée, smoke OK | https://preprod.amazon.foliow.app |
+| Recette (staging) | **v3.6.2** (commit 665d4cb — 19 mai 2026) | https://d9xny9istvl53.cloudfront.net |
+| Preprod | **v3.6.2** (commit 665d4cb — 19 mai 2026) — validée Fred | https://preprod.amazon.foliow.app |
 
 ✅ **MERGÉ EN PROD le 18 mai 2026** — merge fae7d79, APP_VERSION 3.6.1.5 vérifié, CloudFront invalidé.
 Scope merge groupé : v3.6.0 + v3.6.1 + v3.6.1.1 + v3.6.1.2 + v3.6.1.3 + v3.6.1.4 + v3.6.1.5
+
+🚧 **v3.6.2 en cours de validation** — moteur de recherche ASIN transversal (topbar). En attente GO Fred pour merge main.
 
 ---
 
@@ -298,6 +301,17 @@ Un ASIN peut avoir 2 VC (COGEX + 3J6MN), SKU différent par VC. Le SKU ne peut p
 - [x] **v3.6.1.2** : 4 corrections `renderBuyBox` + `calcBuyBoxAlerts`
 - [x] **v3.6.1.3** : Auto-évaluation niveau 1
 - [x] **v3.6.1.4** : Algo dynamique `stock-insufficient` v2
+- [x] **v3.6.2** : Moteur de recherche ASIN transversal dans le topbar (19 mai 2026)
+  - CSS `.topbar-search*` → `src/styles.css`
+  - DOM `#tb-search-slot` entre topbar-l et topbar-r → `src/shell.html`
+  - `renderTopbar()` injecte le widget centré (loupe + input + compteur X/Y + ✕) → `src/core.js`
+  - Suppression widget inline dans `renderAsins` → `src/core.js`
+  - `getFilteredAsins` : suppression filtre brand, fix `String(cat.ean)` → `src/core.js`
+  - `renderBuyBox` : Scénario A — `cFiltered = Object.assign({}, c, { asins: filteredAsins })` → `src/buybox.js`
+  - `renderApprosResults` + `renderApprosForecast` : rebranchement sur `baseAsinsAppros`/`baseAsinsForecast` → `src/core.js`
+  - Fix CI `deploy-staging.yml` : utilise `amazon-pilot-latest.html` (les `v*.html` sont dans .gitignore)
+  - Fix UX : suppression `oninput` sur l'input — la recherche se déclenche uniquement via Enter ou 🔍
+  - Commits : `f992ee2` (feat) + `644471f` (fix CI) + `665d4cb` (fix oninput)
 - [x] **v3.6.1.5** : Helper `fmtNum(v, decimals)` — zéro `.toFixed()` brut dans UI/evidence. 7 occurrences remplacées (4 evidence strings, velocityFormatted, deltaStr, couverture Phase 2). Smoke ✅ `fmtNum(1.7,1)==='1,7'`, evidence virgule, journal sans point décimal. (18 mai 2026) (couvStock/couvTotale en semaines, 5 branches vélocité) + `computeBuyboxFacts` enrichi (velocity, couvertureTotale) + formatage Phase 2 `toFixed(1)` virgule. Note : evidence strings dans hypothèses utilisent encore `.` décimal (cosmétique, hors scope). Smoke ✅ T1(PO couvre→rejected), T2(rupture imminente→investigate), T3(surplus→rejected), T5(formatage virgule). (18 mai 2026) — `buyboxAutoEvaluateHypotheses()` pré-marque 3 hypothèses à l'ouverture d'un cas : `stock-insufficient` (stock/couverture), `po-not-confirmed` (openPOQty), `listing-inactive` (glanceViews S-0 et S-1). Badge `⚙ auto` dans renderBuyBoxCase, disparaît si changement manuel. Anti-régression : cas existants non modifiés. Smoke ✅ 3 profils testés, reset flag validé. (18 mai 2026) : (1) `caMonthEst` = moyenne 4 sem × 4 avec fallback `getRevenue`, respecte `kpiPrimaireCA` ; (2) `criticite` = caMonthEst×(1-rPct/100)×boost_delta ; (3) tri par criticité (défaut) ou CA, boutons avec état actif ; (4) deltaStr `toFixed(2)` virgule. KPI caAtRisk mis à jour sur caMonthEst. `src/styles.css` : `.sort-btn`/`.sort-btn-active`. Smoke ✅ formule validée sur 5 ASINs, ordre criticité ≠ ordre CA. (18 mai 2026)
   - P1 : Constantes `BUYBOX_HYPOTHESES` (11), `BUYBOX_CONCLUSION_CONDITIONS`, `BUYBOX_CONTEXT_BANNER` → `src/core.js`
   - P2/P3 : `freshClient()` + `load()` migration `buyboxCases[]`, suppression `bbCases`/`bbKnowledge`
@@ -314,7 +328,7 @@ Un ASIN peut avoir 2 VC (COGEX + 3J6MN), SKU différent par VC. Le SKU ne peut p
 
 ## TÂCHES SUIVANTES
 
-### v3.6.2 — Buy Box Phase 2 complète + intégration données
+### v3.6.3 — Buy Box Phase 2 complète + intégration données
 - [ ] Croisement défauts livraison × ASIN (matching PO → ASIN dans `importBuyBoxDefects`)
 - [ ] Filtres cycle de vie réels dans Phase 1 (quand `codeVie` intégré à `c.asins`)
 - [ ] Causes suspectées en colonne Phase 1 (dérivées de l'hypothèse validée du dossier)
@@ -343,7 +357,7 @@ Un ASIN peut avoir 2 VC (COGEX + 3J6MN), SKU différent par VC. Le SKU ne peut p
 |---|---|---|
 | ASINs sourcingOnly = 0 en CA Ordered | Évite faux positifs sur ASINs Appro uniquement | mai 2026 |
 | Chemin `seoResults[asin][market]` avec market | backendKW et description stockés par marché, pas à plat | mai 2026 |
-| `amazon-pilot-latest.html` hors `.gitignore` | CI déployait ancienne version — fix `ls amazon-pilot-v*.html | sort -V | tail -1` dans deploy.yml | mai 2026 |
+| `amazon-pilot-latest.html` hors `.gitignore` | CI déployait ancienne version — `deploy-staging.yml` pointe désormais sur `amazon-pilot-latest.html` directement (les `v*.html` sont ignorés par git) | mai 2026 |
 | Plus de livraison HTML par Claude chat | Fichiers trop gros — Claude Code génère et dépose | mai 2026 |
 | Fonctions SEO dans `src/seo.js` pas `src/core.js` | buildSEOPrompt, parseSEOResponse, renderAgentVC, helpers avc* | mai 2026 |
 | `git add -f amazon-pilot-vX.Y.Z.html` obligatoire | `.gitignore` a `amazon-pilot-v*.html` — force-add systématique pour CI | mai 2026 |
@@ -402,8 +416,8 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 
 ## ÉTAT SESSION SUIVANTE PROBABLE
 
-- **v3.6.1.5 en prod** — si bug/frottement identifié → Fred ouvre une session et décrit le problème → patch v3.6.1.x ou v3.6.2
-- **Prochain scope** : v3.6.2 Buy Box Phase 2 complète (défauts livraison × ASIN, filtres cycle de vie, causes en colonne Phase 1)
+- **v3.6.2 en attente de GO merge prod** — barre recherche ASIN topbar validée par Fred sur recette + preprod
+- **Prochain scope** : v3.6.3 Buy Box Phase 2 complète (défauts livraison × ASIN, filtres cycle de vie, causes en colonne Phase 1)
 - **Dans tous les cas** : Fred rouvre la session — Claude Code n'anticipe rien
 
 ---
@@ -417,7 +431,8 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 | `20260508_RECAP_ET_PLAN_v3_4_24.md` | Session 8 mai 2026 |
 | `20260510_RECAP_SESSION_v3_4_29.md` | Session 10 mai 2026 |
 | `20260518_RECAP_SESSION_v3_6_1_5.md` | Session 18 mai 2026 — v3.6.1.5 en prod — Note 8/10 |
+| `20260519_RECAP_SESSION_v3_6_2.md` | Session 19 mai 2026 — v3.6.2 staging+preprod — moteur recherche ASIN topbar |
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 18 mai 2026 (v3.6.1.5 en prod — fae7d79)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 19 mai 2026 (v3.6.2 staging+preprod — 665d4cb)**
