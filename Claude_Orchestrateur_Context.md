@@ -1,5 +1,5 @@
 # Claude_Orchestrateur_Context.md
-**Version :** V0.1 — 19 mai 2026 (soir)
+**Version :** V0.2 — 20 mai 2026
 **Produit par :** Claude Orchestrateur (contenu)
 **Déposé sur le repo par :** Claude Code (commit + sync repo local) — Claude Code ne modifie pas le contenu
 **Transmission :** Fred fait le pont entre Orchestrateur (qui produit) et Claude Code (qui dépose)
@@ -7,7 +7,8 @@
 
 **Historique de versions :**
 - V0 (matin 19 mai) — création initiale, cadrage roadmap v3.6.2 → v3.11
-- V0.1 (soir 19 mai) — ajout patterns `oninput`/`render()`, CI vs `.gitignore`, `PYTHONIOENCODING` ; ajout règle de maintenance du fichier ; mise à jour statut prod v3.6.2 ; mise à jour roadmap
+- V0.1 (soir 19 mai) — ajout patterns `oninput`/`render()`, CI vs `.gitignore`, `PYTHONIOENCODING` ; règle de maintenance ; statut prod v3.6.2 ; mise à jour roadmap
+- V0.2 (20 mai) — ajout sections **Personas et circuit d'achat**, **Démo commerciale cible**, **Cartographie fonctionnelle 80/20** ; arbitrage v3.6.3 tranché ; règles orchestrateur ajoutées sur le cadrage stratégique ; existence du fichier `CLAUDE_CODE_CONTEXT.md` parallèle documentée ; patterns d'erreur enrichis (forEach+await, cl() dans async callback, fonctions Buy Box dans `src/buybox.js`)
 
 ---
 
@@ -38,6 +39,9 @@
 | 8 | Nommage fichier livrable : `amazon-pilot-vX.Y.Z.html` (Fred renomme en `amazon-pilot-latest.html` pour le repo) | Confusion versionning |
 | 9 | Annoncer le rôle Scanderia à chaque livrable : Orchestrateur, Content, Veille, Data Analyst, Designer, Media Buyer, Service Client, Juridique. | Perte de traçabilité |
 | 10 | **Seul Claude Orchestrateur produit les mises à jour de `Claude_Orchestrateur_Context.md`.** Claude Code peut déposer le fichier (commit + sync repo) mais n'a pas le droit d'en modifier le contenu. Fred fait le pont entre les deux. | Mémoire orchestrateur polluée |
+| 11 | **Avant tout cadrage de chantier**, vérifier 4 ancrages : (a) qui paie, (b) qui utilise, (c) sur quelle démo on signe, (d) quel est le livrable vendable. Si un manque, demander avant de proposer. | Cadrage en aveugle, révisions multiples en cours de session |
+| 12 | **Avant toute proposition de nouvelle fonctionnalité**, auditer l'existant (tris/filtres/exports/alertes/vues prédéfinies déjà disponibles). Le réflexe est d'inventer ; le bon réflexe est de vérifier. | Panne Zélé — fonctionnalité dupliquée |
+| 13 | **Fichier parallèle `CLAUDE_CODE_CONTEXT.md`** existe à la racine du repo, maintenu par Claude Code. Il contient TODOs hérités, checklists push, hashes versions stables, décisions archi. **Il peut diverger silencieusement** de cette mémoire orchestrateur. À chaque cadrage, vérifier si une priorité Claude Code héritée pourrait entrer en conflit avec un principe roadmap. Ne pas absorber son contenu ici. | Conflits roadmap silencieux |
 
 ---
 
@@ -64,6 +68,56 @@ Patterns observés et corrigés à de multiples reprises. Si je détecte que je 
 - **`oninput` + `render()` dans la topbar** : tout champ input dans la topbar qui déclenche `render()` à chaque frappe reconstruit le DOM et détruit le focus → saisie lettre par lettre impossible (panne Fragile). Règle : dans la topbar, utiliser `onkeydown="if(event.key==='Enter')..."` ou `onchange` ; jamais `oninput`. Déclenchement de l'action sur Enter ou clic action explicite. À écrire en limite négative explicite dans tout brief touchant à la topbar. (Identifié v3.6.2, fix `665d4cb`)
 - **CI déploie l'ancienne version malgré push réussi** : le `.gitignore` du repo contient `amazon-pilot-v*.html`, donc tout script CI faisant `ls amazon-pilot-v*.html | sort -V | tail -1` trouve la dernière version commitée (souvent obsolète) et pas le fichier de travail. Règle : tout CI doit déployer `amazon-pilot-latest.html` (qui n'est pas gitignored), jamais le pattern versionné. (Identifié v3.6.2, fix `644471f` sur `deploy-staging.yml`)
 - **`PYTHONIOENCODING` requis sur Windows pour `build.py`** : caractères Unicode (▶ U+25B6, emojis) dans `build.py` cassent sur terminal cp1252. Commande à utiliser : `PYTHONIOENCODING=utf-8 python build.py`. À documenter dans le `README` ou rappeler en début de session si Claude Code doit relancer un build local.
+- **`forEach` + `await` synchrone** : les callbacks `forEach` sont synchrones, jamais utiliser `await` à l'intérieur. Utiliser une boucle `for` indexée ou `for...of`. (Règle Claude Code session 11 mai 2026)
+- **`cl()` dans async callback** : dans un callback `fetch().then()` ou `FileReader.onload`, `cl()` retourne le client actif **au moment de l'exécution**, pas au lancement. Solution obligatoire : capturer `var targetId = cl().id;` AVANT le fetch, puis `selClient(targetId); save();` DANS le callback. (Règle gravée — incident 13 mai 2026)
+- **Localisation fonctions Buy Box** : toutes les fonctions Buy Box sont dans `src/buybox.js`, **pas** dans `src/core.js` malgré ce que disent certaines INSTRUCTIONS Claude Code. Tout brief touchant Buy Box doit pointer `src/buybox.js`. (Discordance documentée v3.6.1+)
+- **Optimisation locale sur question globale** : quand Fred pose ce qui semble être un arbitrage binaire mais qui repose sur des fondations non discutées (acheteur, personas, démo cible), **remonter aux fondations avant d'arbitrer**. Pattern observé en session du 20 mai sur arbitrage v3.6.3 → 4 révisions au lieu d'une seule décision propre. (Panne Dériveur prolongée)
+- **Production en aveugle pour "avancer dans la session"** : envie de rédiger un brief, une roadmap, un livrable parce que la session avance sans production concrète. Symptôme : commencer à écrire avant d'avoir l'info nécessaire. Garde-fou : si je suis sur le point d'écrire un livrable sans avoir lu un fichier que Fred vient de m'envoyer, ou en interpolant des fonctionnalités existantes, **m'arrêter**. (Identifié 20 mai)
+
+---
+
+## PERSONAS ET CIRCUIT D'ACHAT (V0.2)
+
+**Cette section est la boussole stratégique. La relire à chaque session de cadrage produit/roadmap.**
+
+### Persona 1 — Le Directeur (cible commerciale, acheteur)
+- **Rôle** : Directeur Commercial / COO / CEO chez la marque vendeuse Amazon
+- **Comportement** : Veut comprendre la **santé globale du compte**. Lit un rapport, valide, signe.
+- **Ce qui le convainc** : Un rapport en 4 étapes (Constat → Warning → Enquête → Rendu béotien) qui donne un diagnostic santé sans drill-down.
+- **Ce qu'il achète** : **Le rapport YoY 4 étapes** + la preuve que son KAM a un outil opérationnel pour traiter ce que le rapport pointe.
+
+### Persona 2 — Le KAM (utilisateur quotidien, pas l'acheteur)
+- **Rôle** : Key Account Manager Vendor Central (interne marque ou consultant comme Fred)
+- **Comportement** : Connaît son 20/80 par cœur. Pilote au quotidien sur ses gros ASINs. **Survole le bruit** (longue traîne) parce qu'il n'a pas le temps.
+- **Ce qui lui manque** : Un mécanisme d'éveil aux dérives silencieuses du 80/20 (érosion lente sur la longue traîne, invisible à grande échelle).
+- **Ce qu'il utilise** : Buy Box opérationnelle (cas Phase 2), Appros, Analyse ASINs, Revue Hebdo.
+
+### Circuit d'achat
+- **Acheteur** : Directeur (Co/COO/CEO)
+- **Utilisateur quotidien** : KAM (utilisateur secondaire, non payeur)
+- **Cobayes actuels** : Cogex Outillage + Gers Équipement (que Fred garde de toute façon comme clients)
+- **Cible commerciale** : tous les autres prospects à partir de l'été 2026
+- **Urgence** : "Le plus vite possible" — pour signer + pour usage propre Fred sur Cogex/Gers
+
+### Démo commerciale cible — convergence YoY ↔ Buy Box
+
+Démo live structurée en 4 actes :
+1. On entre des données réelles YoY du prospect
+2. Le rapport 4 étapes se déroule sous ses yeux (Constat → Warning → Enquête → Rendu béotien)
+3. **Pendant ce temps**, la rubrique Buy Box converge automatiquement : les ASINs identifiés par YoY remontent en haut de la liste Buy Box
+4. Le directeur voit la chaîne complète : *"voici le problème → voici le détail → voici ce que mon KAM va traiter"*
+
+**Implication roadmap** : la convergence n'est pas un nice-to-have, c'est la démonstration. Tous les chantiers se mesurent à l'aune de "ce que la démo a besoin pour fonctionner".
+
+### Stratégie YoY ↔ Buy Box
+YoY et Buy Box ne sont pas concurrents — **ils servent des personas différents et se complètent** :
+
+| Persona | Outil | Vue |
+|---|---|---|
+| Directeur | YoY (Étapes 1 à 4) | Macro / agrégat / diagnostic |
+| KAM | Buy Box (Phase 1 + Phase 2) | Micro / opérationnel / traitement |
+
+**Le mécanisme d'éveil au 80/20** est le pont entre les deux : c'est ce qui force le KAM à regarder ce qu'il ignore par défaut, parce que le rapport l'a remonté au directeur.
 
 ---
 
@@ -105,7 +159,7 @@ Patterns observés et corrigés à de multiples reprises. Si je détecte que je 
 ### Statut prod actuel (à mettre à jour à chaque session)
 | Environnement | Version |
 |---|---|
-| **Prod (main)** | v3.6.2 (à compléter avec hash après merge prod) — précédent v3.6.1.5 (`fae7d79`) |
+| **Prod (main)** | **v3.6.2** — mergé 19 mai 2026 (merge `01656bc`, tag `v3.6.2`) |
 | **Staging (CI)** | v3.6.2 (`665d4cb`) |
 | **Preprod** | v3.6.2 (`665d4cb`) |
 
@@ -113,21 +167,55 @@ Patterns observés et corrigés à de multiples reprises. Si je détecte que je 
 
 | Version | Étape | Statut / Délai | Contenu |
 |---|---|---|---|
-| **v3.6.2** | Préalable | ✅ **Livrée preprod** — attente merge prod | Header avec moteur de recherche ASIN transversal + rebranchement Buy Box / Appros / Prévisionnel sur `getFilteredAsins` |
-| **v3.6.3** | ⚠ À arbitrer | À trancher avec Fred | Le récap Claude Code v3.6.2 mentionne "Buy Box Phase 2 complète" (croisement défauts × ASIN, filtres cycle de vie, causes suspectées, logique `fragile`/`recovered`). Or le principe roadmap initial disait "Pas de chantier Buy Box dédié v3.6.2/v3.6.3, Buy Box s'enrichit en parasitage des sous-routines YoY". **Contradiction à trancher avant le prochain chantier.** |
+| **v3.6.2** | Préalable | ✅ **Livrée prod** 19 mai (merge `01656bc`) | Header avec moteur de recherche ASIN transversal + rebranchement Buy Box / Appros / Prévisionnel sur `getFilteredAsins` |
+| **v3.6.3** | Prérequis démo | ✅ **Tranché** 20 mai — items (c) + (d) uniquement, ~1.5 j Claude Code | (c) Causes en colonne Phase 1 Buy Box (champ `cause` déjà présent dans `calcBuyBoxAlerts`) + (d) statuts `fragile`/`recovered`. Items (a) croisement défauts × ASIN et (b) filtres cycle de vie reportés (bloqués techniquement). |
 | **v3.8** | YoY Étape 1 | 3 sem | Constat factuel — tableau de bord YoY brut |
-| **v3.9** | YoY Étape 2 | 1 sem | Warnings — règles d'alerte visuelles |
+| **v3.9** | YoY Étape 2 | 1 sem | Warnings — règles d'alerte visuelles. **Candidat naturel pour le mécanisme d'éveil 80/20** (alerte cumulative longue traîne, KPI agrégé "X ASINs longue traîne en érosion = Y €/mois"). |
 | **v3.10** | YoY Étape 3a | 4 sem | Enquête ASINs disparus — classification 4 catégories |
-| **v3.11** | YoY Étape 4 | 3 sem | Rendu béotien — export Word + narrative IA Claude |
+| **v3.11** | YoY Étape 4 | 3 sem | Rendu béotien — export Word + narrative IA Claude. **Livrable commercialement vendable** au directeur. |
 | | **── Commercialisation été 2026 ──** | | |
-| v3.12 | YoY Étape 3b | automne 2026 | Couche causale défauts livraison + BOL Mismatch |
+| v3.12 | YoY Étape 3b | automne 2026 | Couche causale défauts livraison + BOL Mismatch — réintègre les items (a) Buy Box bloqués en v3.6.3 |
 | v3.13+ | Refacto archi modulaire | post-commercialisation | |
 
 ### Principes structurants roadmap
 - **4 étapes YoY traitées dans l'ordre** : Constat → Warning → Enquête → Rendu béotien. Pas de saut d'étape.
-- **Buy Box s'enrichit en parasitage** des sous-routines YoY. Pas de chantier Buy Box dédié v3.6.2/v3.6.3.
+- **Buy Box s'enrichit principalement en parasitage YoY** (item a "croisement défauts × ASIN" sortira en v3.12). **Exception** : des enrichissements UI à coût marginal (~1.5 j) avec données déjà disponibles peuvent vivre en v3.6.3 sans déranger la roadmap, **s'ils servent la démo commerciale convergence YoY ↔ Buy Box**. C'est le cas des items (c) et (d) de v3.6.3.
 - **Pas de refacto archi avant commercialisation** — acceptation de la dette technique pour tenir l'été 2026.
 - **Header moteur de recherche ASIN** = UI structurante, pas feature isolée.
+- **Tout chantier se mesure à la démo commerciale** : ce qui n'avance pas la convergence YoY ↔ Buy Box ou le rapport 4 étapes est secondaire.
+
+### Cartographie fonctionnelle Amazon Pilot v3.6.2 (audit 20 mai)
+
+Cette cartographie évite le piège **Zélé** (proposer un mécanisme nouveau alors que l'existant suffit). Référence avant tout brief de chantier UI/fonctionnel.
+
+**12 pages auditées** : Dashboard, Revue Hebdo, Analyse ASINs, Diagnostic CA (Pompier), Buy Box Phase 1, Buy Box Phase 2, Appros, Prévisionnel, Agent SEO/VC, Fiche Client, Import, Potentiel.
+
+#### Fonctionnalités 80/20 déjà disponibles
+- **Analyse ASINs** : vue Segment C (= 5 derniers % du CA, définition exacte longue traîne) + compteur + export dédié. Tris "CA croissant", "Health Score bas", "Stock critique en premier", "Plus fortes baisses". Vues prédéfinies Ruptures / Baisses / Croissance / A / B / C avec compteurs et bordures rouges/oranges. **Page la plus complète sur le 80/20.**
+- **Diagnostic CA (Pompier)** : tri "CA actuel croissant" et "CA perdu croissant" — remontent les petits ASINs en baisse.
+- **Module Potentiel** : scoring 5 signaux (prévisions Amazon, tendance, PPM, stock, conversion) peut identifier des petits ASINs à fort potentiel **indépendamment** de leur CA absolu. Sert l'upside, pas le downside.
+- **Dashboard** : filtre Segment C accessible via dropdown segment. **Mais aucun tri longue traîne** dans le tableau (tri CA décroissant en dur).
+
+#### Trous identifiés (matière pour v3.9 / v3.10 sur le mécanisme d'éveil 80/20)
+- **Aucune alerte cumulative longue traîne** nulle part (Dashboard, Revue Hebdo, Diagnostic CA, Buy Box, Appros, Prévisionnel).
+- **Aucun KPI agrégé** type "X ASINs longue traîne en érosion = Y €/mois cumulé".
+- **Buy Box Phase 1** : pas de filtre/alerte segment C. Tri criticité favorise les gros ASINs. Connection YoY ↔ Buy Box sur la longue traîne impossible en l'état.
+- **Appros / Prévisionnel** : pas de filtre segment, pas de compteur "ruptures cumulées longue traîne".
+- **Toutes les alertes sont "criticité absolue"** (CA en baisse > 10 %, stock < 30 u) — pas "cumul longue traîne".
+
+#### Outils opérationnels KAM méconnus (utiles pour la démo)
+- **Module Cas Vendor Central** dans Analyse ASINs (8 types de textes pré-remplis : stock, buybox, suppress, content, catalogue, detail_page, pricing, returns) — outil opérationnel KAM directement copiable dans VC.
+- **Mode congés** dans Revue Hebdo qui suspend les alertes (argument démo : continuité KAM/intérim).
+- **Analyse IA** disponible sur : Revue Hebdo (Diagnostic / Opportunités / Risques), Diagnostic CA (`runAI('decline')`), Appros, fiche détail ASIN.
+- **Script VC publication** dans Agent SEO/VC — prompt prêt à coller dans Claude in Chrome.
+
+#### Bugs/incohérences UI repérés à l'audit (à creuser)
+- **Buy Box Phase 1** : filtre cycle de vie "Best / Permanent / Fin de vie" **visuellement présent mais sans effet fonctionnel** en v3.6.2 (`codeVie` non joint à `c.asins`).
+- **Tabs Buy Box Phase 1** : "Fragile" et "Récupérées" toujours vides en v3.6.2 — résolus par v3.6.3 (item d).
+
+#### Conséquences pour les briefs futurs
+- Avant d'inventer un module 80/20 nouveau : vérifier si Analyse ASINs / Diagnostic CA peuvent déjà servir (souvent oui).
+- Le **mécanisme d'éveil au 80/20** = 3-4 KPIs agrégés + alertes cumulatives posés au bon endroit (Dashboard, Revue Hebdo). Pas un chantier majeur — à cadrer en **v3.9 ou v3.10**, pas v3.6.3.
 
 ### Clients actuels
 - **Cogex Outillage** — marché FR — codes vendor `COGEX` et `3J6MN` — préfixe S3 `cogex/`

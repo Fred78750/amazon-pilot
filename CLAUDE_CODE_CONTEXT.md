@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 19 mai 2026 (v3.6.2 mergé en prod — merge 01656bc, tag v3.6.2)
+**Dernière mise à jour :** 20 mai 2026 (Claude_Orchestrateur_Context.md V0.2 déposé — arbitrage v3.6.3 tranché)
 
 ---
 
@@ -329,11 +329,18 @@ Un ASIN peut avoir 2 VC (COGEX + 3J6MN), SKU différent par VC. Le SKU ne peut p
 
 ## TÂCHES SUIVANTES
 
-### v3.6.3 — Buy Box Phase 2 complète + intégration données
-- [ ] Croisement défauts livraison × ASIN (matching PO → ASIN dans `importBuyBoxDefects`)
-- [ ] Filtres cycle de vie réels dans Phase 1 (quand `codeVie` intégré à `c.asins`)
-- [ ] Causes suspectées en colonne Phase 1 (dérivées de l'hypothèse validée du dossier)
-- [ ] `fragile` et `recovered` : logique calcul (delta négatif ≥2 semaines / cas fermé success + Retail% ≥ 95%)
+### v3.6.3 — Buy Box enrichissements UI (arbitrage orchestrateur 20 mai — items (c)+(d) UNIQUEMENT)
+
+**Tranché : ~1.5 sessions Claude Code — données déjà disponibles, pas de nouveau chantier.**
+
+- [ ] **(c) Causes en colonne Phase 1** : champ `cause` déjà calculé dans `calcBuyBoxAlerts` (`suppression/po_unconfirmed/stock/prix_3p/surveillance/ok`) — ajouter comme colonne dans tableau Phase 1 (`renderBuyBox`). Changement UI pur.
+- [ ] **(d) Statuts `fragile` et `recovered`** : `fragile` = Retail% > 0 mais delta négatif ≥2 semaines consécutives (`a.history`) ; `recovered` = cas `buyboxCases` fermé `outcome==='success'` + `retailPct ≥ 95`. Données disponibles. Tabs Phase 1 actuellement vides.
+
+**Reportés (bloqués techniquement) :**
+- ~~(a) Croisement défauts livraison × ASIN~~ → **v3.12** — CSV Delivery Defects sans champ ASIN ; jointure PO→ASIN non implémentée
+- ~~(b) Filtres cycle de vie Phase 1~~ → **bloqué** — `codeVie` ERP non joint à `c.asins` (dépend chantier "Référentiel ERP" non livré)
+
+**Après v3.6.3 :** enchaîner **v3.8 YoY Étape 1** (Constat factuel — tableau de bord YoY brut)
 
 ### Correction immédiate (reportée depuis v3.5.10)
 - [ ] Fix scroll étape C : `renderWizardStep` (`src/seo.js`) — div wrappant `${content}` → `overflow:visible`, supprimer `overflow:hidden`/`max-height`
@@ -418,7 +425,8 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 ## ÉTAT SESSION SUIVANTE PROBABLE
 
 - **v3.6.2 en prod** — barre recherche ASIN topbar. Fix CI deploy.yml + deploy-staging.yml (→ amazon-pilot-latest.html)
-- **Prochain scope** : v3.6.3 Buy Box Phase 2 complète (défauts livraison × ASIN, filtres cycle de vie, causes en colonne Phase 1)
+- **Prochain scope : v3.6.3** — items (c) + (d) uniquement : colonne `cause` Phase 1 + logique `fragile`/`recovered`. ~1.5 sessions. Brief orchestrateur à venir.
+- **Ensuite : v3.8** — YoY Étape 1 (Constat factuel — tableau de bord YoY brut). 3 sem.
 - **Dans tous les cas** : Fred rouvre la session — Claude Code n'anticipe rien
 
 ---
@@ -436,4 +444,4 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 19 mai 2026 (v3.6.2 en prod — merge 01656bc, tag v3.6.2)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 20 mai 2026 (Claude_Orchestrateur_Context.md V0.2 + arbitrage v3.6.3 items (c)+(d))**
