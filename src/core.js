@@ -10,7 +10,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.5.8';
+const APP_VERSION = '3.6.2';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -1980,10 +1980,10 @@ function getFilteredAsins(client) {
     const tc = asins.reduce((s, a) => s + (getRevenue(a,client)||0), 0);
     asins = asins.filter(a => calcSegment(a, tc, client) === filters.segment);
   }
-  // Recherche texte : ASIN, SKU (depuis catalogue), mot dans le titre, marque
+  // Recherche texte : ASIN, SKU (depuis catalogue), mot dans le titre
   if (asinSearch && asinSearch.trim()) {
     const q = asinSearch.trim().toLowerCase();
-    // Construire un index SKU depuis le catalogue si disponible
+    // Construire un index SKU/EAN depuis le catalogue si disponible
     const catMap = {};
     (client.catalogue || []).forEach(e => { catMap[e.asin] = e; });
     asins = asins.filter(a => {
@@ -1991,9 +1991,8 @@ function getFilteredAsins(client) {
       return (
         (a.asin  && a.asin.toLowerCase().includes(q)) ||
         (a.title && a.title.toLowerCase().includes(q)) ||
-        (a.brand && a.brand.toLowerCase().includes(q)) ||
         (cat?.sku && cat.sku.toLowerCase().includes(q)) ||
-        (cat?.ean && cat.ean.toLowerCase().includes(q))
+        (cat?.ean && String(cat.ean).toLowerCase().includes(q))
       );
     });
   }
@@ -3104,6 +3103,26 @@ function renderTopbar() {
     }
   }
   document.getElementById('tb-badges').innerHTML = badges;
+  // v3.6.2 — moteur de recherche ASIN transversal dans le topbar
+  const slot = document.getElementById('tb-search-slot');
+  if (slot) {
+    if (c) {
+      const filteredCount = (asinSearch && asinSearch.trim()) ? getFilteredAsins(c).length : null;
+      const countHtml = filteredCount !== null
+        ? `<span class="topbar-search-count">${filteredCount} / ${c.asins.length}</span>`
+        : '';
+      const clearHtml = (asinSearch && asinSearch.trim())
+        ? `<button class="topbar-search-clear" onclick="asinSearch='';document.getElementById('asin-search-input').value='';render()">✕</button>`
+        : '';
+      slot.innerHTML = `<div class="topbar-search${asinSearch && asinSearch.trim() ? ' active' : ''}">
+        <button class="topbar-search-btn" onclick="triggerSearch()">🔍</button>
+        <input id="asin-search-input" class="topbar-search-input" type="text" value="${esc(asinSearch)}" placeholder="ASIN · SKU · EAN · titre" onkeydown="if(event.key==='Enter')triggerSearch()" />
+        ${countHtml}${clearHtml}
+      </div>`;
+    } else {
+      slot.innerHTML = '';
+    }
+  }
   let acts = '';
   if (c) {
     acts = `<button class="btn btn-sm" onclick="go('import')">📥 Import</button>`;
@@ -5060,25 +5079,6 @@ function renderAsins() {
     }
 
     // ── Filtres enrichis ──────────────────────────────────────────
-    // ── Barre de recherche ──
-    h += `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--s1);border:2px solid ${asinSearch ? 'var(--or)' : 'var(--bd2)'};border-radius:var(--rdl);margin-bottom:14px;transition:border-color .2s;box-shadow:${asinSearch ? '0 0 0 3px var(--or-l)' : 'none'}">
-      <button onclick="triggerSearch()" style="background:none;border:none;font-size:18px;cursor:pointer;flex-shrink:0;padding:0;line-height:1" title="Lancer la recherche">🔍</button>
-      <input
-        id="asin-search-input"
-        type="text"
-        value="${esc(asinSearch)}"
-        placeholder="Rechercher par ASIN, SKU, EAN ou mot dans le titre... (Entrée pour valider)"
-        onkeydown="if(event.key==='Enter'){triggerSearch()}"
-        onfocus="this.closest('div').style.borderColor='var(--or)'"
-        onblur="this.closest('div').style.borderColor=this.value?'var(--or)':'var(--bd2)'"
-        style="flex:1;border:none;background:transparent;font-size:14px;color:var(--tx);outline:none;font-family:inherit"
-      />
-      ${asinSearch
-        ? `<span style="font-size:11px;color:var(--or);font-weight:600;white-space:nowrap">${asins.length} résultat${asins.length>1?'s':''}</span>
-           <button onclick="asinSearch='';document.getElementById('asin-search-input').value='';render()" style="background:var(--r-bg);border:1px solid var(--r-bd);color:var(--r);cursor:pointer;font-size:12px;padding:3px 8px;border-radius:20px;font-weight:600">✕ Effacer</button>`
-        : `<span style="font-size:11px;color:var(--tx3)">ASIN · SKU · EAN · titre</span>`
-      }
-    </div>`;
 
     const asinSortOpts = [
       { v: 'ca_desc',    l: '💰 CA décroissant' },
@@ -6893,7 +6893,9 @@ function renderApprosResults() {
   h += `</div>`;
 
   // ── Calcul et affichage du tableau ────────────────────────────
-  const activeAsins = c.asins.filter(a => (getRevenue(a,c)||0) > 0);
+  // v3.6.2 : appliquer le filtre de recherche transversal
+  const baseAsinsAppros = (asinSearch && asinSearch.trim()) ? getFilteredAsins(c) : c.asins;
+  const activeAsins = baseAsinsAppros.filter(a => (getRevenue(a,c)||0) > 0);
   const catMap = {};
   (c.catalogue || []).forEach(e => { catMap[e.asin] = e; });
 
@@ -7109,7 +7111,9 @@ function renderApprosForecast() {
     });
   }
 
-  const activeAsins = c.asins.filter(a => (getRevenue(a,c)||0) > 0);
+  // v3.6.2 : appliquer le filtre de recherche transversal
+  const baseAsinsForecast = (asinSearch && asinSearch.trim()) ? getFilteredAsins(c) : c.asins;
+  const activeAsins = baseAsinsForecast.filter(a => (getRevenue(a,c)||0) > 0);
   const appros = activeAsins
     .map(a => ({ a, r: calcAppro(a, c, catMap[a.asin], erpMap[a.asin]) }))
     .filter(({ r }) => r !== null && !r.stockManquant);

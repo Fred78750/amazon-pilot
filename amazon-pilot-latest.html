@@ -126,6 +126,13 @@ a:hover { text-decoration: underline; }
 .topbar-l { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .topbar-t { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-r { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.topbar-search { display:flex; align-items:center; gap:8px; padding:6px 10px; background:var(--s2); border:1px solid var(--bd2); border-radius:var(--rd); min-width:280px; max-width:380px; transition:border-color .15s,box-shadow .15s; }
+.topbar-search.active { border-color:var(--or); box-shadow:0 0 0 2px var(--or-l); }
+.topbar-search-btn { background:none; border:none; font-size:16px; cursor:pointer; padding:0; line-height:1; flex-shrink:0; }
+.topbar-search-input { flex:1; border:none; background:transparent; font-size:13px; color:var(--tx); outline:none; font-family:inherit; min-width:0; }
+.topbar-search-input::placeholder { color:var(--tx3); font-size:12px; }
+.topbar-search-count { font-size:10px; color:var(--or); font-weight:600; white-space:nowrap; flex-shrink:0; }
+.topbar-search-clear { background:var(--r-bg); border:1px solid var(--r-bd); color:var(--r); cursor:pointer; font-size:11px; padding:2px 6px; border-radius:12px; font-weight:600; flex-shrink:0; }
 .ct { flex: 1; min-height: 0; overflow-y: auto; padding: 20px; background: var(--bg); }
 
 
@@ -514,6 +521,10 @@ a:hover { text-decoration: underline; }
 /* Eyebrow (réutilisé dans Buy Box) */
 .eyebrow { font-size:11px; color:var(--tx3); text-transform:uppercase; letter-spacing:.04em; }
 
+/* Boutons tri Buy Box v3.6.1.2 */
+.sort-btn        { background:var(--s2); color:var(--tx2); border:0.5px solid var(--bd2); }
+.sort-btn-active { background:var(--b-bg,rgba(0,122,255,.08)); color:var(--b); border-color:var(--b); font-weight:500; }
+
 /* Responsive — tableau Buy Box en mobile */
 @media (max-width:900px) {
   .bb-grid { grid-template-columns:1fr; }
@@ -548,6 +559,7 @@ a:hover { text-decoration: underline; }
         <span class="topbar-t" id="tb-name">Amazon Pilot</span>
         <span id="tb-badges"></span>
       </div>
+      <div id="tb-search-slot" style="flex:1;display:flex;justify-content:center"></div>
       <div class="topbar-r" id="tb-actions"></div>
     </div>
     <div class="ct" id="content"></div>
@@ -564,7 +576,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.6.1';
+const APP_VERSION = '3.6.3';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -631,15 +643,15 @@ const aiUsage = {
 
 
 const SMOKE_REF = {
-  ca2024:  { val: 1678110, tol: 0.02, expiry: '2026-12-31', label: 'CA 2024' },
-  ca2025:  { val: 1297621, tol: 0.01, expiry: '2027-12-31', label: 'CA 2025' },
+  ca2024:  { val: 1547729, tol: 0.02, expiry: '2026-12-31', label: 'CA 2024' }, // recalibré 2026-05-18 après reimport Cogex
+  ca2025:  { val: 1166183, tol: 0.02, expiry: '2027-12-31', label: 'CA 2025' }, // recalibré 2026-05-18 après reimport Cogex
   asinMin: { val: 1500,               expiry: null,          label: 'ASINs catalogue >= 1500' },
   asinRef: { asin: 'B009G3EMDI', label: 'ASIN B009G3EMDI cohérence pipeline' }
 };
 
 async function smokeTest(silent) {
   const now = new Date();
-  const results = { vital: [], important: [], manual: [], ts: now.toISOString(), version: APP_VERSION };
+  const results = { vital: [], important: [], ts: now.toISOString(), version: APP_VERSION };
   const pass = (lvl, id, lbl) => results[lvl].push({ id, label: lbl, ok: true });
   const fail = (lvl, id, lbl, msg) => results[lvl].push({ id, label: lbl, ok: false, msg });
   const refExpired = (ref) => ref.expiry && new Date(ref.expiry) < now;
@@ -650,9 +662,7 @@ async function smokeTest(silent) {
   const c = typeof cl === 'function' ? cl() : null;
   if (c && c.name && c.asins && c.asins.length >= SMOKE_REF.asinMin.val)
     pass('vital','V1', 'Client actif : ' + c.name + ' (' + c.asins.length + ' ASINs)');
-  else if (c && c.name && c.catalogueXML && c.catalogueXML.length > 0)
-    pass('vital','V1', 'Client actif : ' + c.name + ' (catalogueXML ' + c.catalogueXML.length + ' lignes — CSV non encore importé)');
-  else fail('vital','V1','Client actif', !c ? 'Aucun client' : 'Seulement ' + (c && c.asins ? c.asins.length : 0) + ' ASINs');
+  else fail('vital','V1','Client actif', !c ? 'Aucun client' : 'Seulement ' + (c?.asins?.length||0) + ' ASINs');
 
   // V2 — Tableau de bord
   try {
@@ -733,35 +743,35 @@ async function smokeTest(silent) {
     else fail('vital','V8','Agent SEO', e || 'Contenu SEO absent');
   } catch(ex) { fail('vital','V8','Agent SEO', ex.message); }
 
-  // V9a — CA 2024 [manuel — recalibrer après reimport Gers]
+  // V9a — CA 2024
   if (!refExpired(SMOKE_REF.ca2024)) {
     const v = Math.round(c?.annualData?.['2024']?.ventes?.totalCA||0);
-    if (v === 0) pass('manual','V9a','CA 2024 : non importé (optionnel)');
+    if (v === 0) pass('vital','V9a','CA 2024 : non importé (optionnel)');
     else if (inTol(v, SMOKE_REF.ca2024.val, SMOKE_REF.ca2024.tol))
-      pass('manual','V9a','CA 2024 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
-    else fail('manual','V9a','CA 2024 dévié','Attendu ~' + SMOKE_REF.ca2024.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
+      pass('vital','V9a','CA 2024 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
+    else fail('vital','V9a','CA 2024 dévié','Attendu ~' + SMOKE_REF.ca2024.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
   }
 
-  // V9b — CA 2025 [manuel — recalibrer après reimport Gers]
+  // V9b — CA 2025
   if (!refExpired(SMOKE_REF.ca2025)) {
     const v = Math.round(c?.annualData?.['2025']?.ventes?.totalCA||0);
-    if (v === 0) pass('manual','V9b','CA 2025 : non importé (optionnel)');
+    if (v === 0) pass('vital','V9b','CA 2025 : non importé (optionnel)');
     else if (inTol(v, SMOKE_REF.ca2025.val, SMOKE_REF.ca2025.tol))
-      pass('manual','V9b','CA 2025 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
-    else fail('manual','V9b','CA 2025 dévié','Attendu ~' + SMOKE_REF.ca2025.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
+      pass('vital','V9b','CA 2025 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
+    else fail('vital','V9b','CA 2025 dévié','Attendu ~' + SMOKE_REF.ca2025.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
   }
 
-  // V9c — ASINs catalogue [manuel — recalibrer après reimport Gers]
+  // V9c — ASINs catalogue
   const asinCnt = c?.asins?.length||0;
-  if (asinCnt >= SMOKE_REF.asinMin.val) pass('manual','V9c','Catalogue : ' + asinCnt + ' ASINs');
-  else fail('manual','V9c','Catalogue ASINs', asinCnt + ' < minimum ' + SMOKE_REF.asinMin.val);
+  if (asinCnt >= SMOKE_REF.asinMin.val) pass('vital','V9c','Catalogue : ' + asinCnt + ' ASINs');
+  else fail('vital','V9c','Catalogue ASINs', asinCnt + ' < minimum ' + SMOKE_REF.asinMin.val);
 
-  // V9d — ASIN de référence : invariants pipeline [manuel — recalibrer après reimport Gers]
+  // V9d — ASIN de référence : invariants pipeline (PAS la santé business)
   // v3.1.70 — On vérifie que l'import n'a pas cassé la cohérence des données,
   //          pas que le CA est dans une fourchette (volatile par nature)
   const refA = c?.asins?.find(a => a.asin === SMOKE_REF.asinRef.asin);
   if (!refA) {
-    fail('manual','V9d','ASIN réf. ABSENT du catalogue après import', SMOKE_REF.asinRef.asin);
+    fail('vital','V9d','ASIN réf. ABSENT du catalogue après import', SMOKE_REF.asinRef.asin);
   } else {
     const rev = Math.round(refA.revenue || 0);
     const units = refA.units || refA.orderedUnits || 0;
@@ -786,9 +796,9 @@ async function smokeTest(silent) {
 
     if (checks.length === 0) {
       const detail = rev === 0 ? 'pas de vente cette semaine (OK)' : rev + '€ / ' + units + 'u (cohérent)';
-      pass('manual','V9d','ASIN réf. ' + SMOKE_REF.asinRef.asin + ' : ' + detail);
+      pass('vital','V9d','ASIN réf. ' + SMOKE_REF.asinRef.asin + ' : ' + detail);
     } else {
-      fail('manual','V9d','ASIN réf. cohérence pipeline', checks.join(' | '));
+      fail('vital','V9d','ASIN réf. cohérence pipeline', checks.join(' | '));
     }
   }
 
@@ -855,11 +865,9 @@ async function smokeTest(silent) {
   // Score et résumé
   const vFails = results.vital.filter(t => !t.ok);
   const iFails = results.important.filter(t => !t.ok);
-  const mFails = results.manual.filter(t => !t.ok);
   results.summary = {
     vitalTotal: results.vital.length, vitalOk: results.vital.filter(t=>t.ok).length, vitalFails: vFails.length,
     importantTotal: results.important.length, importantOk: results.important.filter(t=>t.ok).length, importantFails: iFails.length,
-    manualTotal: results.manual.length, manualOk: results.manual.filter(t=>t.ok).length, manualFails: mFails.length,
     status: vFails.length > 0 ? 'CRITICAL' : iFails.length > 0 ? 'WARNING' : 'OK'
   };
   try { localStorage.setItem('ap-smoketest-last', JSON.stringify(results)); } catch(e) {}
@@ -879,15 +887,10 @@ function renderSmokeResult(r) {
     : 'Smoke test OK — ' + s.vitalOk + '/' + s.vitalTotal + ' vitaux · ' + s.importantOk + '/' + s.importantTotal + ' importants';
   const fails = [...(r.vital||[]),...(r.important||[])].filter(t=>!t.ok);
   const detail = fails.map(t => '<span style="display:block;font-size:10px;margin-top:2px">&#8594; ' + t.id + ' ' + t.label + (t.msg?' : <em>'+t.msg+'</em>':'') + '</span>').join('');
-  const mFails = (r.manual||[]).filter(t=>!t.ok);
-  const manualDetail = mFails.length > 0
-    ? '<span style="display:block;font-size:10px;margin-top:6px;color:#888;border-top:1px solid #ddd;padding-top:4px">[MANUEL — à recalibrer] ' +
-      mFails.map(t => t.id + ' ' + t.label + (t.msg ? ' : ' + t.msg : '')).join(' · ') + '</span>'
-    : '';
   const div = document.createElement('div');
   div.id = 'smoke-banner';
   div.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9999;max-width:440px;padding:10px 14px;border-radius:8px;border-left:4px solid '+bd+';background:'+bg+';box-shadow:0 2px 8px rgba(0,0,0,0.12);font-size:12px;font-family:var(--font,sans-serif);cursor:default';
-  div.innerHTML = '<strong>' + icon + ' ' + lbl + '</strong> <span style="color:#888;font-size:10px">' + APP_VERSION + ' · ' + new Date(r.ts).toLocaleTimeString('fr-FR') + '</span>' + detail + manualDetail
+  div.innerHTML = '<strong>' + icon + ' ' + lbl + '</strong> <span style="color:#888;font-size:10px">' + APP_VERSION + ' · ' + new Date(r.ts).toLocaleTimeString('fr-FR') + '</span>' + detail
     + '<button onclick="this.parentElement.remove()" style="position:absolute;top:4px;right:6px;background:none;border:none;font-size:14px;cursor:pointer;color:#888">&#215;</button>';
   document.body.appendChild(div);
   if (s.status === 'OK') setTimeout(() => div.remove(), 8000);
@@ -2797,10 +2800,10 @@ function getFilteredAsins(client) {
     const tc = asins.reduce((s, a) => s + (getRevenue(a,client)||0), 0);
     asins = asins.filter(a => calcSegment(a, tc, client) === filters.segment);
   }
-  // Recherche texte : ASIN, SKU (depuis catalogue), mot dans le titre, marque
+  // Recherche texte : ASIN, SKU (depuis catalogue), mot dans le titre
   if (asinSearch && asinSearch.trim()) {
     const q = asinSearch.trim().toLowerCase();
-    // Construire un index SKU depuis le catalogue si disponible
+    // Construire un index SKU/EAN depuis le catalogue si disponible
     const catMap = {};
     (client.catalogue || []).forEach(e => { catMap[e.asin] = e; });
     asins = asins.filter(a => {
@@ -2808,9 +2811,8 @@ function getFilteredAsins(client) {
       return (
         (a.asin  && a.asin.toLowerCase().includes(q)) ||
         (a.title && a.title.toLowerCase().includes(q)) ||
-        (a.brand && a.brand.toLowerCase().includes(q)) ||
         (cat?.sku && cat.sku.toLowerCase().includes(q)) ||
-        (cat?.ean && cat.ean.toLowerCase().includes(q))
+        (cat?.ean && String(cat.ean).toLowerCase().includes(q))
       );
     });
   }
@@ -3921,6 +3923,26 @@ function renderTopbar() {
     }
   }
   document.getElementById('tb-badges').innerHTML = badges;
+  // v3.6.2 — moteur de recherche ASIN transversal dans le topbar
+  const slot = document.getElementById('tb-search-slot');
+  if (slot) {
+    if (c) {
+      const filteredCount = (asinSearch && asinSearch.trim()) ? getFilteredAsins(c).length : null;
+      const countHtml = filteredCount !== null
+        ? `<span class="topbar-search-count">${filteredCount} / ${c.asins.length}</span>`
+        : '';
+      const clearHtml = (asinSearch && asinSearch.trim())
+        ? `<button class="topbar-search-clear" onclick="asinSearch='';document.getElementById('asin-search-input').value='';render()">✕</button>`
+        : '';
+      slot.innerHTML = `<div class="topbar-search${asinSearch && asinSearch.trim() ? ' active' : ''}">
+        <button class="topbar-search-btn" onclick="triggerSearch()">🔍</button>
+        <input id="asin-search-input" class="topbar-search-input" type="text" value="${esc(asinSearch)}" placeholder="ASIN · SKU · EAN · titre" onkeydown="if(event.key==='Enter')triggerSearch()" />
+        ${countHtml}${clearHtml}
+      </div>`;
+    } else {
+      slot.innerHTML = '';
+    }
+  }
   let acts = '';
   if (c) {
     acts = `<button class="btn btn-sm" onclick="go('import')">📥 Import</button>`;
@@ -4744,6 +4766,13 @@ function renderImport() {
 // MODULE BUY BOX — Surveillance & Plan d'action
 // ══════════════════════════════════════════════════════════════════
 
+// Helper formatage numérique FR (virgule décimale)
+function fmtNum(v, decimals) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  var d = decimals !== undefined ? decimals : 1;
+  return v.toFixed(d).replace('.', ',');
+}
+
 function calcBuyBoxAlerts(c) {
   if (!c?.asins?.length) return { critical: [], warning: [], suppressed: [] };
   const critical   = []; // Retail% < 80%
@@ -4758,7 +4787,7 @@ function calcBuyBoxAlerts(c) {
 
     // Vérifier historique pour détecter baisse vs S-1 et 0% chronique
     const hist = a.history || [];
-    const prevRetail = hist.length >= 1 ? parseNum(hist[hist.length - 1].retailPct) : null;
+    const prevRetail = hist.length >= 2 ? parseNum(hist[hist.length - 2].retailPct) : null;
     const zeroWeeks = hist.filter(h => parseNum(h.retailPct) === 0).length + (rPct === 0 ? 1 : 0);
 
     const delta = prevRetail !== null ? rPct - prevRetail : null;
@@ -4787,7 +4816,21 @@ function calcBuyBoxAlerts(c) {
     const joursAvantLimite = _apro?.joursAvantLimite ?? null;
     const stockUrgent = couvertureSem !== null && couvertureSem < 3;
 
-    const entry = { asin: a.asin, title: a.title, brand: a.brand, market: a.market, rPct, prevRetail, delta, cause, zeroWeeks, revenue: getRevenue(a,c), segment: calcSegment(a, c.asins.reduce((s,x)=>s+(getRevenue(x,c)||0),0), c), sellableUnits: a.sellableUnits, couvertureSem, joursAvantLimite, stockUrgent };
+    // CA mensuel estimé = moyenne mobile 4 semaines × 4 (respecte kpiPrimaireCA)
+    const pref    = (c && c.kpiPrimaireCA) || 'ordered';
+    const revs    = (a.history || []).slice(-4).map(h =>
+      pref === 'shipped'
+        ? (parseNum(h.shippedRevenue) || parseNum(h.revenue) || 0)
+        : (parseNum(h.orderedRevenue) || parseNum(h.revenue) || 0)
+    ).filter(v => v > 0);
+    const avgWeek    = revs.length > 0 ? revs.reduce((s, v) => s + v, 0) / revs.length : (getRevenue(a, c) || 0);
+    const caMonthEst = Math.round(avgWeek * 4);
+    // Criticité = CA à risque mensuel × boost delta négatif
+    const deltaForCrit = delta !== null ? delta : 0;
+    const caEstAtRisk  = caMonthEst * (1 - rPct / 100);
+    const deltaBoost   = 1 + Math.max(0, -deltaForCrit) / 10;
+    const criticite    = caEstAtRisk * deltaBoost;
+    const entry = { asin: a.asin, title: a.title, brand: a.brand, market: a.market, rPct, prevRetail, delta, cause, zeroWeeks, revenue: getRevenue(a,c), caMonthEst, criticite, segment: calcSegment(a, c.asins.reduce((s,x)=>s+(getRevenue(x,c)||0),0), c), sellableUnits: a.sellableUnits, couvertureSem, joursAvantLimite, stockUrgent };
 
     if (isSuppressed)                          suppressed.push(entry);
     else if (isCritical)                       critical.push(entry);
@@ -4839,6 +4882,26 @@ function buyboxOpenCase(c, asin) {
     ],
     conclusion: { state: 'locked', proposedAction: '', outcome: null, closedAt: null }
   };
+  // Pré-évaluation automatique de 3 hypothèses
+  var autoEvals = buyboxAutoEvaluateHypotheses(c, asin);
+  for (var ke = 0; ke < autoEvals.length; ke++) {
+    var ev = autoEvals[ke];
+    var h = newCase.hypotheses.find(function(x) { return x.id === ev.id; });
+    if (!h) continue;
+    h.status    = ev.status;
+    h.evidence  = ev.evidence;
+    h.auto      = true;
+    h.updatedAt = nowISO;
+    var hypoLabel = (BUYBOX_HYPOTHESES.find(function(x) { return x.id === ev.id; }) || {}).label || ev.id;
+    var verb = ev.status === 'investigate' ? 'orientée vers À investiguer (auto)'
+             : ev.status === 'rejected'    ? 'écartée automatiquement (auto)'
+             :                              'pré-évaluée (auto)';
+    newCase.journal.push({
+      ts: nowISO, type: 'auto',
+      content: 'Hypothèse "' + hypoLabel + '" ' + verb + ' — ' + ev.evidence,
+      author: 'system'
+    });
+  }
   buyboxGetCases(c).push(newCase);
   save();
   return newCase;
@@ -4849,6 +4912,10 @@ function buyboxUpdateHypothesis(c, caseId, hypoId, fields) {
   if (!cs) return;
   var h = cs.hypotheses.find(function(x) { return x.id === hypoId; });
   if (!h) return;
+  // Si l'utilisateur surcharge un marquage auto, la décision devient humaine
+  if (h.auto && fields.status && fields.status !== h.status) {
+    h.auto = false;
+  }
   for (var k in fields) {
     if (Object.prototype.hasOwnProperty.call(fields, k)) h[k] = fields[k];
   }
@@ -4914,6 +4981,89 @@ function buyboxCloseCase(c, caseId, outcome, proposedAction) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// BUY BOX v3.6.1.3 — Pré-évaluation automatique de 3 hypothèses
+// ═══════════════════════════════════════════════════════════════════
+
+function buyboxAutoEvaluateHypotheses(c, asin) {
+  var a = (c.asins || []).find(function(x) { return x.asin === asin; });
+  if (!a) return [];
+
+  var evaluations = [];
+  var hist = a.history || [];
+
+  // ── Stock insuffisant — algorithme dynamique v3.6.1.4 ─────────────
+  var stock = parseNum(a.sellableUnits) || 0;
+  var poQty = parseNum(a.openPOQty) || 0;
+
+  var recentUnits = hist.slice(-4).map(function(h) { return parseNum(h.units) || 0; });
+  var v = recentUnits.length > 0
+    ? recentUnits.reduce(function(s, u) { return s + u; }, 0) / recentUnits.length
+    : null;
+
+  var longHist = hist.slice(-16, -4).map(function(h) { return parseNum(h.units) || 0; });
+  var hl = longHist.length > 0
+    ? longHist.reduce(function(s, u) { return s + u; }, 0) / longHist.length
+    : 0;
+
+  var couvStock  = (v !== null && v > 0) ? stock / v : null;
+  var couvTotale = (v !== null && v > 0) ? (stock + poQty) / v : null;
+
+  var stockStatus   = null;
+  var stockEvidence = '';
+
+  if (v === null) {
+    stockStatus = null; // pas d'historique — pas de marquage
+  } else if (v === 0) {
+    if (hl >= 5) {
+      stockStatus   = null; // ambigü — reste 'todo'
+    } else {
+      stockStatus   = 'rejected';
+      stockEvidence = 'Aucune vente (v=0) et historique faible — produit dormant.';
+    }
+  } else if (couvStock < 2 && couvTotale < 4) {
+    stockStatus   = 'investigate';
+    stockEvidence = 'Stock ' + stock + ' u. (' + fmtNum(couvStock, 1) + ' sem) + PO ' + poQty + ' u. = couv totale ' + fmtNum(couvTotale, 1) + ' sem — rupture imminente.';
+  } else if (couvStock < 2 && couvTotale >= 4) {
+    stockStatus   = 'rejected';
+    stockEvidence = 'Stock ' + stock + ' u. (' + fmtNum(couvStock, 1) + ' sem) mais PO ' + poQty + ' u. couvre ' + fmtNum(couvTotale, 1) + ' sem — pas d\'urgence stock.';
+  } else if (couvStock < 4 && couvTotale < 6) {
+    stockStatus   = 'investigate';
+    stockEvidence = 'Stock ' + stock + ' u. (' + fmtNum(couvStock, 1) + ' sem), couv totale ' + fmtNum(couvTotale, 1) + ' sem — tension à surveiller.';
+  } else if (couvTotale > 12) {
+    stockStatus   = 'rejected';
+    stockEvidence = 'Couv totale ' + fmtNum(couvTotale, 1) + ' sem — surplus, stock pas le sujet.';
+  }
+
+  if (stockStatus !== null) {
+    evaluations.push({ id: 'stock-insufficient', status: stockStatus, evidence: stockEvidence });
+  }
+
+  // ── PO non confirmé ───────────────────────────────────────────────
+  // (poQty déjà déclaré ci-dessus)
+  if (poQty > 0) {
+    evaluations.push({ id: 'po-not-confirmed', status: 'rejected',
+      evidence: 'PO ouvert ' + poQty + ' u. — hypothèse non pertinente.' });
+  } else if (poQty === 0 && stock < 30) {
+    evaluations.push({ id: 'po-not-confirmed', status: 'investigate',
+      evidence: 'Aucun PO ouvert · stock ' + stock + ' u. — risque rupture.' });
+  }
+
+  // ── Listing inactif ───────────────────────────────────────────────
+  var gvS0 = parseNum(a.glanceViews) || 0;
+  var gvS1 = hist.length >= 2 ? (parseNum(hist[hist.length - 2].glanceViews) || 0) : 0;
+
+  if (gvS0 === 0 && gvS1 === 0) {
+    evaluations.push({ id: 'listing-inactive', status: 'investigate',
+      evidence: 'GV S-0 et S-1 à 0 — listing potentiellement inactif.' });
+  } else if (gvS0 > 100) {
+    evaluations.push({ id: 'listing-inactive', status: 'rejected',
+      evidence: 'GV ' + gvS0 + ' cette semaine — listing actif.' });
+  }
+
+  return evaluations;
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // BUY BOX v3.6.1 — Calcul auto bloc Faits (Phase 2)
 // ═══════════════════════════════════════════════════════════════════
 
@@ -4930,9 +5080,15 @@ function computeBuyboxFacts(c, asin) {
   var hist = a.history || [];
   var rPct9w = hist.length >= 9 ? parseNum(String((hist[hist.length - 9].retailPct || '').toString()).replace(',', '.').replace(/[^0-9.]/g, '')) : null;
 
-  // Stock Amazon + couverture
-  var stockAmz = a.sellableUnits || 0;
-  var couv = (e && e.couvertureSem !== null && e.couvertureSem !== undefined) ? e.couvertureSem : null;
+  // Stock Amazon + couverture dynamique v3.6.1.4
+  var stockAmz   = parseNum(a.sellableUnits) || 0;
+  var poAmz      = parseNum(a.openPOQty) || 0;
+  var ruFacts    = hist.slice(-4).map(function(h) { return parseNum(h.units) || 0; });
+  var velFacts   = ruFacts.length > 0 && ruFacts.some(function(u) { return u > 0; })
+    ? ruFacts.reduce(function(s, u) { return s + u; }, 0) / ruFacts.length
+    : null;
+  var couvStockF  = (velFacts !== null && velFacts > 0) ? stockAmz / velFacts : null;
+  var couvTotaleF = (velFacts !== null && velFacts > 0) ? (stockAmz + poAmz) / velFacts : null;
 
   // PO ouvert
   var openPO = parseNum(a.openPOQty) || 0;
@@ -4963,7 +5119,13 @@ function computeBuyboxFacts(c, asin) {
 
   return {
     retailPct:       { current: rPctNow, nineWeeksAgo: rPct9w },
-    stockAmazon:     { units: stockAmz, couverture: couv },
+    stockAmazon:     {
+      units:             stockAmz,
+      couverture:        couvStockF,
+      couvertureTotale:  couvTotaleF,
+      velocity:          velFacts,
+      velocityFormatted: velFacts !== null ? fmtNum(velFacts, 1) + ' u./sem' : '—'
+    },
     po:              { open: openPO, event: lastPOEvent },
     defects:         { count: defectsRecent, label: defectsLabel },
     price:           priceNow,
@@ -4973,6 +5135,24 @@ function computeBuyboxFacts(c, asin) {
     seasonality:     seasonality,
     computedAt:      new Date().toISOString()
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BUY BOX v3.6.3 — Helpers affichage Phase 1
+// ═══════════════════════════════════════════════════════════════════
+
+function buyboxCauseLabel(cause) {
+  switch (cause) {
+    case 'suppression':    return { icon: '🚫', label: 'Suppression listing',   color: 'var(--r)'   };
+    case 'po_unconfirmed': return { icon: '📦', label: 'PO non confirmé',        color: 'var(--or)'  };
+    case 'stock':          return { icon: '📉', label: 'Stock insuffisant',      color: 'var(--or)'  };
+    case 'prix_3p':        return { icon: '💰', label: 'Concurrent 3P probable', color: 'var(--r)'   };
+    case 'surveillance':   return { icon: '👁️', label: 'À surveiller',           color: 'var(--tx3)' };
+    case 'ok':             return { icon: '✓',  label: '—',                     color: 'var(--tx3)' };
+    case 'fragile_trend':  return { icon: '⚠️', label: 'Dégradation 2 sem.',    color: 'var(--or)'  };
+    case 'recovered':      return { icon: '✅', label: 'Récupérée',             color: 'var(--g)'   };
+    default:               return { icon: '?',  label: cause || '—',            color: 'var(--tx3)' };
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -4991,30 +5171,90 @@ function renderBuyBox() {
     return renderBuyBoxCase(c, window._buyboxAsin);
   }
 
-  var alerts = calcBuyBoxAlerts(c);
+  // v3.6.2 : appliquer le filtre de recherche transversal
+  var cFiltered = c;
+  if (asinSearch && asinSearch.trim()) {
+    var filteredAsins = getFilteredAsins(c);
+    cFiltered = Object.assign({}, c, { asins: filteredAsins });
+  }
+
+  var alerts = calcBuyBoxAlerts(cFiltered);
   var lost        = alerts.critical;
   var compromised = alerts.warning;
-  var fragile     = [];   // v3.6.1 : toujours vide (dérivation v3.6.2)
-  var recovered   = [];   // v3.6.1 : toujours vide (cas fermés success — dérivation v3.6.2)
+  // (d.1) fragile : rPct > 0 + delta négatif sur 2 semaines consécutives dans l'historique
+  var fragile = (function() {
+    var result = [];
+    var totalCA = (cFiltered.asins || []).reduce(function(s, x) { return s + (getRevenue(x, c) || 0); }, 0);
+    (cFiltered.asins || []).forEach(function(a) {
+      var rPct = parseNum(String(a.retailPct || '').replace(',', '.').replace(/[^0-9.]/g, ''));
+      if (!(rPct > 0)) return;                     // exclut les Perdus (rPct=0)
+      var hist = a.history || [];
+      if (hist.length < 3) return;                 // pas assez d'historique (< 3 semaines)
+      var s0 = parseNum(String((hist[hist.length - 1].retailPct || '').toString()).replace(',', '.').replace(/[^0-9.]/g, ''));
+      var s1 = parseNum(String((hist[hist.length - 2].retailPct || '').toString()).replace(',', '.').replace(/[^0-9.]/g, ''));
+      var s2 = parseNum(String((hist[hist.length - 3].retailPct || '').toString()).replace(',', '.').replace(/[^0-9.]/g, ''));
+      if ((s0 - s1) < 0 && (s1 - s2) < 0) {
+        var rev = getRevenue(a, c) || 0;
+        result.push({ asin: a.asin, title: a.title, brand: a.brand, market: a.market,
+          rPct: rPct, prevRetail: s1, delta: s0 - s1, cause: 'fragile_trend',
+          revenue: rev, caMonthEst: rev * 4.33, criticite: rev * 4.33 * Math.abs((s0 - s1) / 100),
+          segment: calcSegment(a, totalCA, c),
+          sellableUnits: a.sellableUnits, couvertureSem: null, joursAvantLimite: null, stockUrgent: false });
+      }
+    });
+    return result;
+  }());
+
+  // (d.2) recovered : cas Phase 2 fermés success dans les 90 derniers jours + rPct >= 95
+  var recovered = (function() {
+    var NOW = Date.now();
+    var WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
+    var totalCA = (cFiltered.asins || []).reduce(function(s, x) { return s + (getRevenue(x, c) || 0); }, 0);
+    var closedCases = buyboxGetCases(c).filter(function(cs) {
+      if (cs.status !== 'closed') return false;
+      if (!cs.conclusion || cs.conclusion.outcome !== 'success') return false;
+      if (!cs.closedAt) return false;
+      return (NOW - new Date(cs.closedAt).getTime()) <= WINDOW_MS;
+    });
+    return closedCases.map(function(cs) {
+      var a = (cFiltered.asins || []).find(function(x) { return x.asin === cs.asin; });
+      if (!a) return null;
+      var rPct = parseNum(String(a.retailPct || '').replace(',', '.').replace(/[^0-9.]/g, ''));
+      if (rPct < 95) return null;
+      var rev = getRevenue(a, c) || 0;
+      return { asin: a.asin, title: a.title, brand: a.brand, market: a.market,
+        rPct: rPct, prevRetail: null, delta: 0, cause: 'recovered',
+        revenue: rev, caMonthEst: rev * 4.33, criticite: 0,
+        segment: calcSegment(a, totalCA, c),
+        sellableUnits: a.sellableUnits, couvertureSem: null, joursAvantLimite: null, stockUrgent: false };
+    }).filter(Boolean);
+  }());
 
   // Filtrage marché
   var marketFilter = window._buyboxMarket || 'all';
   var byMarket = function(e) { return marketFilter === 'all' || e.market === marketFilter; };
   var lostF       = lost.filter(byMarket);
   var compromisedF= compromised.filter(byMarket);
+  var fragileF    = fragile.filter(byMarket);
+  var recoveredF  = recovered.filter(byMarket);
 
   // Tab actif
   var activeTab = window._buyboxTab || 'lost';
-  var displayList = activeTab === 'lost'        ? lostF
-                  : activeTab === 'compromised' ? compromisedF
-                  : activeTab === 'fragile'     ? fragile
-                  : recovered;
+  var sortBy = window._buyboxSort || 'criticite';
+  var displayList = (activeTab === 'lost'        ? lostF
+                   : activeTab === 'compromised' ? compromisedF
+                   : activeTab === 'fragile'     ? fragileF
+                   : recoveredF).slice();
+  displayList.sort(function(a, b) {
+    if (sortBy === 'criticite') return (b.criticite || 0) - (a.criticite || 0);
+    return (b.caMonthEst || 0) - (a.caMonthEst || 0);
+  });
 
   // KPIs
   var asinsInTrouble = lostF.length + compromisedF.length;
-  var totalActiveAsins = (c.asins || []).filter(function(a) { return getRevenue(a, c) > 0; }).length;
-  var caAtRisk = lostF.reduce(function(s, e) { return s + (e.revenue || 0); }, 0)
-               + compromisedF.reduce(function(s, e) { return s + (e.revenue || 0); }, 0);
+  var totalActiveAsins = (cFiltered.asins || []).filter(function(a) { return getRevenue(a, c) > 0; }).length;
+  var caAtRisk = lostF.reduce(function(s, e) { return s + (e.caMonthEst || 0); }, 0)
+               + compromisedF.reduce(function(s, e) { return s + (e.caMonthEst || 0); }, 0);
   var openCasesCount = buyboxGetCases(c).filter(function(x) { return x.status !== 'closed'; }).length;
   var ninetyDaysAgo  = Date.now() - 90 * 24 * 3600 * 1000;
   var resolved90d    = buyboxGetCases(c).filter(function(x) {
@@ -5079,13 +5319,20 @@ function renderBuyBox() {
   h += '<span style="font-size:10px;color:var(--tx3);margin-left:6px;">(filtrage cycle de vie en v3.6.2)</span>';
   h += '</div>';
 
+  // ── Tri ──
+  h += '<div style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--tx2);margin-bottom:10px;">';
+  h += '<span>Trier par :</span>';
+  h += '<button class="btn btn-sm sort-btn' + (sortBy === 'criticite' ? ' sort-btn-active' : '') + '" onclick="window._buyboxSort=\'criticite\';render()">⚠ Criticité</button>';
+  h += '<button class="btn btn-sm sort-btn' + (sortBy === 'ca' ? ' sort-btn-active' : '') + '" onclick="window._buyboxSort=\'ca\';render()">CA</button>';
+  h += '</div>';
+
   // ── Tabs ──
   h += '<div class="tabs" style="margin-bottom:0;">';
   var tabs = [
     { id: 'lost',        label: 'Perdue',       count: lostF.length },
     { id: 'compromised', label: 'Compromise',   count: compromisedF.length },
-    { id: 'fragile',     label: 'Fragile',      count: 0 },
-    { id: 'recovered',   label: 'Récupérées',   count: 0 }
+    { id: 'fragile',     label: 'Fragile',      count: fragileF.length },
+    { id: 'recovered',   label: 'Récupérées',   count: recoveredF.length }
   ];
   tabs.forEach(function(t) {
     var isActive = activeTab === t.id;
@@ -5101,7 +5348,7 @@ function renderBuyBox() {
 
   // En-tête tableau
   h += '<div class="bb-thead" style="display:grid;grid-template-columns:60px 1fr 70px 70px 1fr 80px 110px;padding:8px 14px;background:var(--s2);font-size:11px;color:var(--tx3);font-weight:500;border-bottom:0.5px solid var(--bd);">';
-  h += '<div>Type</div><div>ASIN · Produit</div><div style="text-align:right;">Retail%</div><div style="text-align:right;">Δ S-1</div><div>Cause suspectée</div><div style="text-align:right;">CA/mois</div><div></div>';
+  h += '<div>Type</div><div>ASIN · Produit</div><div style="text-align:right;">Retail%</div><div style="text-align:right;">Δ S-1</div><div>Cause suspectée</div><div style="text-align:right;">CA / mois (est.)</div><div></div>';
   h += '</div>';
 
   if (displayList.length === 0) {
@@ -5115,9 +5362,11 @@ function renderBuyBox() {
       var delta = entry.delta !== null && entry.delta !== undefined ? entry.delta : null;
       var rPctStr = rPct !== null ? rPct + ' %' : '—';
       var rPctDanger = rPct !== null && rPct < 80;
-      var deltaStr = delta !== null ? (delta >= 0 ? '+' : '') + delta + ' pt' : '—';
+      var deltaStr = delta !== null
+        ? (delta >= 0 ? '+' : '') + fmtNum(delta, 2) + ' pt'
+        : '—';
       var deltaColor = delta !== null && delta < 0 ? 'var(--r)' : delta > 0 ? 'var(--g)' : 'var(--tx3)';
-      var rev = getRevenue(entry, c) || entry.revenue || 0;
+      var rev = entry.caMonthEst || entry.revenue || 0;
       var hasCase = buyboxGetCase(c, asin) !== null;
 
       h += '<div class="bb-trow" style="display:grid;grid-template-columns:60px 1fr 70px 70px 1fr 80px 110px;padding:12px 14px;border-bottom:0.5px solid var(--bd);align-items:center;font-size:12px;">';
@@ -5135,8 +5384,9 @@ function renderBuyBox() {
       // Δ S-1
       h += '<div style="text-align:right;color:' + deltaColor + ';">' + deltaStr + '</div>';
 
-      // Cause suspectée (v3.6.1 : statique)
-      h += '<div><span style="color:var(--tx3);font-size:11px;">—</span></div>';
+      // Cause suspectée (v3.6.3 : dynamique)
+      var causeMeta = buyboxCauseLabel(entry.cause);
+      h += '<div><span style="color:' + causeMeta.color + ';font-size:11px;">' + causeMeta.icon + ' ' + causeMeta.label + '</span></div>';
 
       // CA/mois
       h += '<div style="text-align:right;color:var(--tx2);">' + fmtCA(rev) + '</div>';
@@ -5249,8 +5499,13 @@ function renderBuyBoxCase(c, asin) {
     h += '<div style="color:var(--tx2);">Retail% actuel</div>';
     h += '<div style="text-align:right;font-weight:500;color:' + (rPctNow < 80 ? 'var(--r)' : 'var(--tx)') + ';">' + rPctStr + ' <span style="color:var(--tx3);font-weight:400;font-size:10px;">' + rPct9Str + '</span></div>';
     h += '<div style="color:var(--tx2);">Stock Amazon</div>';
-    var couvStr = facts.stockAmazon.couverture !== null ? ' · couv. ' + facts.stockAmazon.couverture + ' sem.' : '';
-    h += '<div style="text-align:right;">' + facts.stockAmazon.units + ' u.' + couvStr + '</div>';
+    var couvFmtF = (facts.stockAmazon.couverture !== null && facts.stockAmazon.couverture !== undefined)
+      ? fmtNum(facts.stockAmazon.couverture, 1) + ' sem'
+      : null;
+    var velFmtF  = facts.stockAmazon.velocityFormatted && facts.stockAmazon.velocityFormatted !== '—'
+      ? facts.stockAmazon.velocityFormatted : null;
+    var stockDetail = [velFmtF ? 'vél. ' + velFmtF : null, couvFmtF ? 'couv. ' + couvFmtF : null].filter(Boolean).join(' · ');
+    h += '<div style="text-align:right;">' + facts.stockAmazon.units + ' u.' + (stockDetail ? ' · ' + stockDetail : '') + '</div>';
     h += '<div style="color:var(--tx2);">PO ouvert</div>';
     h += '<div style="text-align:right;">' + facts.po.event + '</div>';
     h += '<div style="color:var(--tx2);">Défauts livraison</div>';
@@ -5317,7 +5572,10 @@ function renderBuyBoxCase(c, asin) {
     h += '<div style="font-weight:500;margin-bottom:1px;' + (isRejected ? 'text-decoration:line-through;text-decoration-color:var(--tx3);' : '') + '">' + def.label + '</div>';
     h += '<div style="color:var(--tx3);font-size:10px;">' + def.hint + '</div>';
     // Select statut
-    h += '<div style="margin-top:4px;display:flex;gap:4px;align-items:center;">';
+    h += '<div style="margin-top:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap;">';
+    if (hypo.auto) {
+      h += '<span style="display:inline-block;padding:2px 6px;font-size:10px;background:var(--b-bg,rgba(0,122,255,.08));color:var(--b);border-radius:4px;flex-shrink:0;" title="Évaluée automatiquement à l\'ouverture du dossier">⚙ auto</span>';
+    }
     h += '<select style="font-size:10px;padding:2px 4px;background:var(--s2);border:0.5px solid var(--bd2);border-radius:4px;color:var(--tx);" onchange="buyboxUpdateHypothesis(cl(),\'' + caseId + '\',\'' + hypo.id + '\',{status:this.value});render();">';
     statusOpts.forEach(function(opt) {
       h += '<option value="' + opt.val + '"' + (hypo.status === opt.val ? ' selected' : '') + '>' + opt.label + '</option>';
@@ -6556,25 +6814,6 @@ function renderAsins() {
     }
 
     // ── Filtres enrichis ──────────────────────────────────────────
-    // ── Barre de recherche ──
-    h += `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--s1);border:2px solid ${asinSearch ? 'var(--or)' : 'var(--bd2)'};border-radius:var(--rdl);margin-bottom:14px;transition:border-color .2s;box-shadow:${asinSearch ? '0 0 0 3px var(--or-l)' : 'none'}">
-      <button onclick="triggerSearch()" style="background:none;border:none;font-size:18px;cursor:pointer;flex-shrink:0;padding:0;line-height:1" title="Lancer la recherche">🔍</button>
-      <input
-        id="asin-search-input"
-        type="text"
-        value="${esc(asinSearch)}"
-        placeholder="Rechercher par ASIN, SKU, EAN ou mot dans le titre... (Entrée pour valider)"
-        onkeydown="if(event.key==='Enter'){triggerSearch()}"
-        onfocus="this.closest('div').style.borderColor='var(--or)'"
-        onblur="this.closest('div').style.borderColor=this.value?'var(--or)':'var(--bd2)'"
-        style="flex:1;border:none;background:transparent;font-size:14px;color:var(--tx);outline:none;font-family:inherit"
-      />
-      ${asinSearch
-        ? `<span style="font-size:11px;color:var(--or);font-weight:600;white-space:nowrap">${asins.length} résultat${asins.length>1?'s':''}</span>
-           <button onclick="asinSearch='';document.getElementById('asin-search-input').value='';render()" style="background:var(--r-bg);border:1px solid var(--r-bd);color:var(--r);cursor:pointer;font-size:12px;padding:3px 8px;border-radius:20px;font-weight:600">✕ Effacer</button>`
-        : `<span style="font-size:11px;color:var(--tx3)">ASIN · SKU · EAN · titre</span>`
-      }
-    </div>`;
 
     const asinSortOpts = [
       { v: 'ca_desc',    l: '💰 CA décroissant' },
@@ -8389,7 +8628,9 @@ function renderApprosResults() {
   h += `</div>`;
 
   // ── Calcul et affichage du tableau ────────────────────────────
-  const activeAsins = c.asins.filter(a => (getRevenue(a,c)||0) > 0);
+  // v3.6.2 : appliquer le filtre de recherche transversal
+  const baseAsinsAppros = (asinSearch && asinSearch.trim()) ? getFilteredAsins(c) : c.asins;
+  const activeAsins = baseAsinsAppros.filter(a => (getRevenue(a,c)||0) > 0);
   const catMap = {};
   (c.catalogue || []).forEach(e => { catMap[e.asin] = e; });
 
@@ -8605,7 +8846,9 @@ function renderApprosForecast() {
     });
   }
 
-  const activeAsins = c.asins.filter(a => (getRevenue(a,c)||0) > 0);
+  // v3.6.2 : appliquer le filtre de recherche transversal
+  const baseAsinsForecast = (asinSearch && asinSearch.trim()) ? getFilteredAsins(c) : c.asins;
+  const activeAsins = baseAsinsForecast.filter(a => (getRevenue(a,c)||0) > 0);
   const appros = activeAsins
     .map(a => ({ a, r: calcAppro(a, c, catMap[a.asin], erpMap[a.asin]) }))
     .filter(({ r }) => r !== null && !r.stockManquant);
