@@ -428,13 +428,18 @@ function yoyBuildHeaderMap(headers) {
 
 /**
  * Valide que le headerMap contient les colonnes obligatoires
+ * En cas d'échec, expose les en-têtes détectés pour faciliter le debug
  */
-function yoyValidateHeaders(headerMap) {
+function yoyValidateHeaders(headerMap, rawHeadersForDebug) {
   var required = ['asin', 'ca_cmd', 'u_cmd', 'ca_exp', 'cogs', 'u_exp'];
   var found = Object.values(headerMap);
   var missing = required.filter(function(k) { return found.indexOf(k) < 0; });
   if (missing.length > 0) {
-    throw new Error('Colonnes manquantes dans le fichier : ' + missing.join(', ') + '. Vérifiez que c\'est bien un export "Ventes par ASIN" Vendor Central.');
+    var detectedKeys = (rawHeadersForDebug || []).filter(Boolean).slice(0, 8).join(' | ') || '(aucune)';
+    throw new Error(
+      'Colonnes manquantes : ' + missing.join(', ') + '. ' +
+      'En-têtes détectés dans le fichier : ' + detectedKeys
+    );
   }
 }
 
@@ -635,19 +640,50 @@ function parseYoYXLSX(file) {
         }
       }
 
-      // Trouver la ligne d'en-tête (première ligne qui contient 'ASIN')
+      // ── Détection ligne d'en-tête ──────────────────────────────────────────
+      // Stratégie : trouver la ligne avec le plus grand nombre de colonnes
+      // reconnues dans YOY_COL_MAP (robuste aux métadonnées, lignes vides, merges)
       var headerRowIdx = -1;
+      var headerRowScore = 0;
+
+      // Pré-calculer une version normalisée de YOY_COL_MAP pour le scoring
+      var _colMapNorm = {};
+      for (var _k in YOY_COL_MAP) { _colMapNorm[yoyNormalizeHeader(_k)] = true; }
+
       for (var i = 0; i < Math.min(10, raw.length); i++) {
-        var rowStr = raw[i].join('|');
-        if (rowStr.indexOf('ASIN') >= 0) { headerRowIdx = i; break; }
-      }
-      if (headerRowIdx < 0) {
-        return reject(new Error('Colonne ASIN introuvable dans le fichier XLSX. Vérifiez que c\'est un export "Ventes par ASIN" VC.'));
+        var rowCells = raw[i] || [];
+        var score = 0;
+        for (var ci = 0; ci < rowCells.length; ci++) {
+          var cell = yoyNormalizeHeader(String(rowCells[ci] || ''));
+          if (_colMapNorm[cell]) score++;
+        }
+        if (score > headerRowScore) {
+          headerRowScore = score;
+          headerRowIdx = i;
+        }
       }
 
-      var headers = raw[headerRowIdx].map(function(h) { return yoyNormalizeHeader(String(h || '')); });
+      // Debug : logger les 3 premières lignes brutes pour aide au diagnostic
+      console.log('[YoY XLSX] headerRowIdx=' + headerRowIdx + ' score=' + headerRowScore);
+      for (var di = 0; di < Math.min(3, raw.length); di++) {
+        console.log('[YoY XLSX] row[' + di + '] :', JSON.stringify((raw[di]||[]).slice(0,6)));
+      }
+
+      if (headerRowIdx < 0 || headerRowScore === 0) {
+        return reject(new Error(
+          'Aucune colonne Vendor Central reconnue dans le fichier XLSX. ' +
+          'Vérifiez que c\'est bien un export "Ventes par ASIN — Fabrication". ' +
+          'Première ligne lue : ' + JSON.stringify((raw[0]||[]).slice(0,5))
+        ));
+      }
+
+      var rawHeaders = raw[headerRowIdx].map(function(h) { return String(h || '').trim(); });
+      var headers    = rawHeaders.map(function(h) { return yoyNormalizeHeader(h); });
+      console.log('[YoY XLSX] headers normalisés :', JSON.stringify(headers.slice(0, 12)));
+
       var headerMap = yoyBuildHeaderMap(headers);
-      try { yoyValidateHeaders(headerMap); } catch(e) { return reject(e); }
+      console.log('[YoY XLSX] headerMap :', JSON.stringify(headerMap));
+      try { yoyValidateHeaders(headerMap, rawHeaders); } catch(e) { return reject(e); }
 
       // Convertir les lignes de données
       var dataRows = [];
