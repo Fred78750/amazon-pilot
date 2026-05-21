@@ -295,28 +295,86 @@ function renderYoYResult() {
   const deltaTauxMarge = dim4.deltaTauxMarge != null ? yoyFmtPts(dim4.deltaTauxMarge) : '—';
   const kpi3Class = dim4.deltaTauxMarge != null ? yoyDeltaClass(dim4.deltaTauxMarge) : 'muted';
 
-  // ── KPI 4 : Pro stub
-  const kpi4 = `<span style="opacity:.45;font-size:11px">disponible en mode Pro</span>`;
+  // ── KPI 4 : Diagnostic heuristique (règles dim 1-12, sans appel IA)
+  const _dim7kpi = d.dim7 || {};
+  const _disparusCAkpi  = (_dim7kpi.sumDisparusRef || 0) * (dRef || 1);
+  const _disparusPctkpi = dim1.caRef > 0 ? _disparusCAkpi / dim1.caRef * 100 : 0;
+  const _deltaUkpi   = (d.dim2 || {}).deltaUPct  || 0;
+  const _deltaPMVkpi = (d.dim3 || {}).deltaPMVPct || 0;
+  let kpi4Icon, kpi4Label;
+  if (deltaCAPct == null || Math.abs(deltaCAPct) < 3) {
+    kpi4Icon = '➡️'; kpi4Label = 'Stable';
+  } else if (deltaCAPct < 0) {
+    if (_disparusPctkpi > 25)           { kpi4Icon = '📦'; kpi4Label = 'Perte périmètre'; }
+    else if (_deltaUkpi < -10 && Math.abs(_deltaPMVkpi) < 5) { kpi4Icon = '📉'; kpi4Label = 'Recul de volume'; }
+    else if (_deltaPMVkpi < -5)         { kpi4Icon = '💰'; kpi4Label = 'Pression prix'; }
+    else                                { kpi4Icon = '⚠️'; kpi4Label = 'Multi-facteurs'; }
+  } else {
+    if (_deltaUkpi > 10)                { kpi4Icon = '📈'; kpi4Label = 'Volume en hausse'; }
+    else if (_deltaPMVkpi > 5)          { kpi4Icon = '✨'; kpi4Label = 'Mix favorable'; }
+    else                                { kpi4Icon = '📈'; kpi4Label = 'Croissance CA'; }
+  }
+  const kpi4 = `<span style="font-size:13px">${kpi4Icon}&nbsp;${esc(kpi4Label)}</span>`;
 
-  // ── Section 1 : Performance volume / prix (dim1-3)
+  // ── Section 1 : Performance volume / prix / marge / retours (dim1-6)
   const dim2 = d.dim2 || {};
   const dim3 = d.dim3 || {};
+  const dim5 = d.dim5 || {};
+  const dim6 = d.dim6 || {};
   const s1Title = YOY_TITLES.s1[sign];
+  // Annualisation des valeurs totales
+  const dAn  = dA  || 1;
+  const dRen = dRef || 1;
+  const annA   = v => v != null ? yoyFmtEur(v * 365 / dAn)  : '—';
+  const annRef = v => v != null ? yoyFmtEur(v * 365 / dRen) : '—';
+  // COGS par unité expédiée
+  const cogsUnitA   = dim6.uExpA   > 0 ? (dim4.cogsA   / dim6.uExpA)   : null;
+  const cogsUnitRef = dim6.uExpRef > 0 ? (dim4.cogsRef  / dim6.uExpRef) : null;
+  const cogsUnitDp  = cogsUnitRef  > 0 ? (cogsUnitA / cogsUnitRef - 1) * 100 : null;
+  // Marge brute delta %
+  const margeDp = dim4.margeRef > 0 ? (dim4.margeA / dim4.margeRef - 1) * 100 : null;
+  // Retours delta %
+  const retDp = dim5.retoursRef > 0 ? (dim5.retoursA / dim5.retoursRef - 1) * 100 : null;
+
   const s1Table = `<table class="yoy-table">
-    <thead><tr><th>Indicateur</th><th>Période A</th><th>Réf</th><th>Variation</th></tr></thead>
+    <thead><tr><th>Indicateur</th><th>Période A (annualisé)</th><th>Réf (annualisé)</th><th>Variation</th></tr></thead>
     <tbody>
-      <tr><td>CA cmd (annualisé)</td>
-          <td class="num">${dim1.caAProj != null ? yoyFmtEur(dim1.caAProj) : '—'}</td>
-          <td class="num">${dim1.caRef   != null ? yoyFmtEur(dim1.caRef * (365 / (dRef||365))) : '—'}</td>
+      <tr><td>CA commandé</td>
+          <td class="num">${dim1.caA != null ? annA(dim1.caA) : '—'}</td>
+          <td class="num">${dim1.caRef != null ? annRef(dim1.caRef) : '—'}</td>
           <td class="num ${kpi1Class}">${deltaCAPctFmt}</td></tr>
-      <tr><td>Unités cmd (annualisées)</td>
-          <td class="num">${dim2.uAProj != null ? yoyFmtNum(dim2.uAProj) : '—'}</td>
-          <td class="num">${dim2.uRef   != null ? yoyFmtNum(dim2.uRef * (365 / (dRef||365))) : '—'}</td>
+      <tr><td>CA expédié</td>
+          <td class="num">${dim4.caExpA != null ? annA(dim4.caExpA) : '—'}</td>
+          <td class="num">${dim4.caExpRef != null ? annRef(dim4.caExpRef) : '—'}</td>
+          <td class="num ${dim4.caExpRef > 0 ? yoyDeltaClass((dim4.caExpA/dim4.caExpRef-1)*100) : 'muted'}">${dim4.caExpRef > 0 ? yoyFmtPct((dim4.caExpA/dim4.caExpRef-1)*100, true) : '—'}</td></tr>
+      <tr><td>Ratio exp/cmd (CA)</td>
+          <td class="num">${dim6.ratioCAA != null ? yoyFmtPct(dim6.ratioCAA) : '—'}</td>
+          <td class="num">${dim6.ratioCARef != null ? yoyFmtPct(dim6.ratioCARef) : '—'}</td>
+          <td class="num ${dim6.ratioCAA != null ? yoyDeltaClass(dim6.ratioCAA - dim6.ratioCARef) : 'muted'}">${dim6.ratioCAA != null ? yoyFmtPts(dim6.ratioCAA - dim6.ratioCARef) : '—'}</td></tr>
+      <tr><td>Unités commandées</td>
+          <td class="num">${dim2.uA != null ? yoyFmtNum(dim2.uA * 365 / dAn) : '—'}</td>
+          <td class="num">${dim2.uRef != null ? yoyFmtNum(dim2.uRef * 365 / dRen) : '—'}</td>
           <td class="num ${dim2.deltaUPct != null ? yoyDeltaClass(dim2.deltaUPct) : 'muted'}">${dim2.deltaUPct != null ? yoyFmtPct(dim2.deltaUPct, true) : '—'}</td></tr>
       <tr><td>Prix moyen de vente</td>
-          <td class="num">${dim3.pmvA   != null ? yoyFmtEur(dim3.pmvA)   : '—'}</td>
+          <td class="num">${dim3.pmvA != null ? yoyFmtEur(dim3.pmvA) : '—'}</td>
           <td class="num">${dim3.pmvRef != null ? yoyFmtEur(dim3.pmvRef) : '—'}</td>
           <td class="num ${dim3.deltaPMVPct != null ? yoyDeltaClass(dim3.deltaPMVPct) : 'muted'}">${dim3.deltaPMVPct != null ? yoyFmtPct(dim3.deltaPMVPct, true) : '—'}</td></tr>
+      <tr style="border-top:2px solid var(--bd2)"><td>COGS / unité expédiée</td>
+          <td class="num">${cogsUnitA != null ? yoyFmtEur(cogsUnitA) : '—'}</td>
+          <td class="num">${cogsUnitRef != null ? yoyFmtEur(cogsUnitRef) : '—'}</td>
+          <td class="num ${cogsUnitDp != null ? yoyDeltaClass(-cogsUnitDp) : 'muted'}">${cogsUnitDp != null ? yoyFmtPct(cogsUnitDp, true) : '—'}</td></tr>
+      <tr><td>Marge brute Amazon</td>
+          <td class="num">${dim4.margeA != null ? annA(dim4.margeA) : '—'}</td>
+          <td class="num">${dim4.margeRef != null ? annRef(dim4.margeRef) : '—'}</td>
+          <td class="num ${margeDp != null ? yoyDeltaClass(margeDp) : 'muted'}">${margeDp != null ? yoyFmtPct(margeDp, true) : '—'}</td></tr>
+      <tr><td>Taux de marge</td>
+          <td class="num">${dim4.tauxMargeA != null ? yoyFmtPct(dim4.tauxMargeA) : '—'}</td>
+          <td class="num">${dim4.tauxMargeRef != null ? yoyFmtPct(dim4.tauxMargeRef) : '—'}</td>
+          <td class="num ${dim4.deltaTauxMarge != null ? yoyDeltaClass(dim4.deltaTauxMarge) : 'muted'}">${dim4.deltaTauxMarge != null ? yoyFmtPts(dim4.deltaTauxMarge) : '—'}</td></tr>
+      <tr><td>Taux retour client</td>
+          <td class="num">${dim5.tauxRetA != null ? yoyFmtPct(dim5.tauxRetA) : '—'}</td>
+          <td class="num">${dim5.tauxRetRef != null ? yoyFmtPct(dim5.tauxRetRef) : '—'}</td>
+          <td class="num ${dim5.deltaTauxRet != null ? yoyDeltaClass(-dim5.deltaTauxRet) : 'muted'}">${dim5.deltaTauxRet != null ? yoyFmtPts(dim5.deltaTauxRet) : '—'}</td></tr>
     </tbody>
   </table>`;
   const s1Lecture = ``; // CP3
@@ -386,11 +444,14 @@ function renderYoYResult() {
   const s4Title = YOY_TITLES.s4[sign];
   const topBrands = dim10.topBrands || [];
   const s4Rows = topBrands.slice(0, 10).map(b => {
-    const dClass = b.deltaPct != null ? yoyDeltaClass(b.deltaPct) : 'muted';
+    // backward compat : deltaPct ajouté en v3.6.5.4, calculer à la volée si absent
+    const dp = b.deltaPct != null ? b.deltaPct
+             : (b.caRefPerDay > 0 ? (b.caAPerDay / b.caRefPerDay - 1) * 100 : null);
+    const dClass = dp != null ? yoyDeltaClass(dp) : 'muted';
     return `<tr><td>${esc(b.marque || '—')}</td>
       <td class="num">${b.caAPerDay != null ? yoyFmtEur(b.caAPerDay) : '—'}</td>
       <td class="num">${b.caRefPerDay != null ? yoyFmtEur(b.caRefPerDay) : '—'}</td>
-      <td class="num ${dClass}">${b.deltaPct != null ? yoyFmtPct(b.deltaPct, true) : '—'}</td></tr>`;
+      <td class="num ${dClass}">${dp != null ? yoyFmtPct(dp, true) : '—'}</td></tr>`;
   }).join('') || `<tr><td colspan="4" class="muted" style="text-align:center">Données insuffisantes</td></tr>`;
   const s4Table = `<table class="yoy-table">
     <thead><tr><th>Marque</th><th>CA/j Période A</th><th>CA/j Réf</th><th>Δ</th></tr></thead>
@@ -470,12 +531,77 @@ function renderYoYResult() {
     </div>`;
   }
 
-  // ── Conclusion
-  const concluHtml = `<div class="yoy-section" id="yoy-sec-conclusion" style="margin-top:8px">
-    <div class="yoy-section-header">
-      <h3 class="yoy-section-title">Conclusion générale</h3>
+  // ── Section 7 : Mon diagnostic (heuristique dim 1-12)
+  const _d1 = d.dim1 || {}, _d2 = d.dim2 || {}, _d3 = d.dim3 || {};
+  const _d4 = d.dim4 || {}, _d5 = d.dim5 || {}, _d7 = d.dim7 || {}, _d9 = d.dim9 || {};
+  const _disparusN7   = _d7.disparus ? _d7.disparus.length : 0;
+  const _disparusCA7  = (_d7.sumDisparusRef || 0) * (dRef || 1);
+  const _disparusPct7 = _d1.caRef > 0 ? _disparusCA7 / _d1.caRef * 100 : 0;
+  const _concDelta7   = _d9.concA && _d9.concRef ? (_d9.concA.top10 - _d9.concRef.top10) : null;
+  const _margeDir7    = _d4.deltaTauxMarge != null ? (_d4.deltaTauxMarge >= 0 ? 'progresse' : 'recule') : null;
+  const _retDir7      = _d5.deltaTauxRet   != null ? (_d5.deltaTauxRet  >= 0 ? 'en hausse' : 'en baisse') : null;
+
+  const s7Points = [];
+  if (_d1.deltaCAPct != null)
+    s7Points.push(`Le CA ${_d1.deltaCAPct < 0 ? 'recule' : 'progresse'} de <strong>${yoyFmtPct(Math.abs(_d1.deltaCAPct))}</strong> en annualisé (${yoyFmtEurSigned(_d1.deltaCAAnnu)} / an).`);
+  if (_d2.deltaUPct != null && _d3.deltaPMVPct != null) {
+    const volPart = Math.abs(_d2.deltaUPct) > 2 ? `volume <strong>${yoyFmtPct(_d2.deltaUPct, true)}</strong>` : 'volume stable';
+    const pmvPart = Math.abs(_d3.deltaPMVPct) > 1 ? `, PMV <strong>${yoyFmtPct(_d3.deltaPMVPct, true)}</strong>` : '';
+    s7Points.push(`Décomposition : ${volPart}${pmvPart}.`);
+  }
+  if (_disparusN7 > 0)
+    s7Points.push(`<strong>${_disparusN7} ASIN(s) disparus</strong> représentent ${yoyFmtPct(_disparusPct7)} du CA Réf (${yoyFmtEur(_disparusCA7)}).`);
+  if (_concDelta7 != null)
+    s7Points.push(`La concentration Top 10 ${_concDelta7 > 0 ? 's\'est accentuée' : 's\'est allégée'} (${yoyFmtPts(_concDelta7)}).`);
+  if (_margeDir7 && _d4.deltaTauxMarge != null)
+    s7Points.push(`La marge brute Amazon ${_margeDir7} de <strong>${yoyFmtPts(_d4.deltaTauxMarge)}</strong>.`);
+  if (_retDir7 && _d5.deltaTauxRet != null && Math.abs(_d5.deltaTauxRet) > 0.3)
+    s7Points.push(`Taux de retour ${_retDir7} (${yoyFmtPts(_d5.deltaTauxRet)}).`);
+
+  const s7Html = `<div class="yoy-section" id="yoy-sec-s7">
+    <h3 class="yoy-section-title">Mon diagnostic</h3>
+    <ul style="margin:12px 0;padding-left:20px;font-size:13px;line-height:1.8;color:var(--tx)">
+      ${s7Points.map(p => `<li>${p}</li>`).join('') || '<li style="color:var(--tx2)">Données insuffisantes pour le diagnostic.</li>'}
+    </ul>
+    <div class="verdict-block ${vClass}" style="font-style:normal">
+      <strong>Cause principale identifiée :</strong> ${kpi4Icon}&nbsp;${esc(kpi4Label)}
+      ${_disparusPct7 > 25 ? ` — ${Math.round(_disparusPct7)}% du CA Réf perdu sur ASINs disparus` : ''}
     </div>
-    <!-- CP3 -->
+  </div>`;
+
+  // ── Section 8 : Plan d'action priorisé (heuristique, CP4 = IA)
+  const s8Actions = [];
+  if (_disparusN7 > 0 && _disparusPct7 > 10)
+    s8Actions.push({ prio: 1, titre: 'Auditer les ASINs disparus', desc: `${_disparusN7} ASINs ont disparu. Identifier lesquels sont récupérables (rupture stock, déréférencement) vs structurels.` });
+  if (_d4.deltaTauxMarge != null && _d4.deltaTauxMarge < -2)
+    s8Actions.push({ prio: 2, titre: 'Revoir les conditions COGS', desc: `La marge a baissé de ${yoyFmtPts(_d4.deltaTauxMarge)}. Vérifier les prix de cession et la structure de coûts.` });
+  if (_d2.deltaUPct != null && _d2.deltaUPct < -10)
+    s8Actions.push({ prio: 3, titre: 'Relancer les volumes', desc: `Les unités commandées reculent de ${yoyFmtPct(_d2.deltaUPct, true)}. Actions promotionnelles ou revue du catalogue actif.` });
+  if (anomPairs.length > 0)
+    s8Actions.push({ prio: 4, titre: 'Nettoyer les doublons catalogue', desc: `${anomPairs.length} doublon(s) de marque détecté(s). Harmoniser les libellés pour consolider les données.` });
+  if (s8Actions.length === 0)
+    s8Actions.push({ prio: 1, titre: 'Maintenir la dynamique', desc: 'Aucune action corrective urgente identifiée. Surveiller les indicateurs de volume et de marge.' });
+
+  const s8Html = `<div class="yoy-section" id="yoy-sec-s8">
+    <h3 class="yoy-section-title">Ce que je ferais maintenant — plan d'action priorisé</h3>
+    <ol style="margin:12px 0;padding-left:20px;font-size:13px;line-height:1.9;color:var(--tx)">
+      ${s8Actions.map(a => `<li><strong>${esc(a.titre)}</strong> — ${a.desc}</li>`).join('')}
+    </ol>
+  </div>`;
+
+  // ── Conclusion générale
+  const _caDir = _d1.deltaCAPct != null ? (_d1.deltaCAPct < -3 ? 'en recul' : _d1.deltaCAPct > 3 ? 'en progression' : 'stable') : '—';
+  const _concluPara = _d1.deltaCAPct != null
+    ? `Sur la période analysée, le CA est <strong>${_caDir}</strong> de <strong>${yoyFmtPct(Math.abs(_d1.deltaCAPct))}</strong>
+       en rythme annualisé (${yoyFmtEurSigned(_d1.deltaCAAnnu)}/an).
+       ${_disparusN7 > 0 ? `La perte de ${_disparusN7} ASIN(s) explique une part significative de cette évolution. ` : ''}
+       ${_d4.deltaTauxMarge != null ? `La marge brute Amazon ${_d4.deltaTauxMarge >= 0 ? 'se maintient' : 'se contracte'} (${yoyFmtPts(_d4.deltaTauxMarge)}). ` : ''}
+       La priorité est ${kpi4Icon}&nbsp;${esc(kpi4Label).toLowerCase()}.`
+    : 'Données insuffisantes pour une conclusion.';
+
+  const concluHtml = `<div class="yoy-section" id="yoy-sec-conclusion">
+    <h3 class="yoy-section-title">Conclusion générale</h3>
+    <p style="font-size:13px;line-height:1.8;color:var(--tx);margin:12px 0">${_concluPara}</p>
   </div>`;
 
   return `<div style="max-width:960px;margin:0 auto;padding:24px 20px" class="yoy-result-root">
@@ -511,8 +637,8 @@ function renderYoYResult() {
         <div class="yoy-kpi-value ${kpi3Class}">${deltaTauxMarge}</div>
         <div class="yoy-kpi-sub">Δ taux marge</div>
       </div>
-      <div class="yoy-kpi-card pro-only-pending">
-        <div class="yoy-kpi-label">Diagnostic IA</div>
+      <div class="yoy-kpi-card">
+        <div class="yoy-kpi-label">Diagnostic</div>
         <div class="yoy-kpi-value" style="font-size:13px">${kpi4}</div>
         <div class="yoy-kpi-sub">cause principale</div>
       </div>
@@ -526,6 +652,8 @@ function renderYoYResult() {
     ${sec('s5', s5Title, s5Table, s5Lecture, s5Verdict)}
     ${sec('s6', s6Title, s6Table, s6Lecture, s6Verdict)}
 
+    ${s7Html}
+    ${s8Html}
     ${concluHtml}
 
     <!-- Footer print -->
@@ -1365,13 +1493,20 @@ function yoyComputeDimensions(rowsA, rowsRef, metaA, metaRef) {
   var gagnants = llList.slice().sort(function(a,b){ return b.deltaPerDay-a.deltaPerDay; }).slice(0,15);
 
   // ── Dim 12 — Anomalies catalogue ─────────────────────────────
+  // Normaliser la casse avant matching (P7 — Cogex vs COGEX)
   var allBrandNames = Object.keys(Object.assign({},bMapRef,bMapA)).filter(function(m){ return m&&m!=='Inconnue'; });
+  var allBrandNamesLow = allBrandNames.map(function(m){ return m.toLowerCase(); });
   var anomPairs = [];
   for (var bi=0; bi<allBrandNames.length; bi++) {
     for (var bj=bi+1; bj<allBrandNames.length; bj++) {
       var ma=allBrandNames[bi], mb=allBrandNames[bj];
+      var maL=allBrandNamesLow[bi], mbL=allBrandNamesLow[bj];
+      if (maL === mbL) { // même nom, casse différente → similarité max
+        anomPairs.push({ marque1:ma, marque2:mb, similarity:0.99, caTot:(bMapRef[ma]||0)+(bMapRef[mb]||0)+(bMapA[ma]||0)+(bMapA[mb]||0) });
+        continue;
+      }
       if (Math.abs(ma.length-mb.length)>6) continue;
-      var sim=yoySimilarity(ma,mb);
+      var sim=yoySimilarity(maL,mbL); // comparer en minuscules
       if (sim>0.75&&sim<1) anomPairs.push({ marque1:ma, marque2:mb, similarity:sim, caTot:(bMapRef[ma]||0)+(bMapRef[mb]||0)+(bMapA[ma]||0)+(bMapA[mb]||0) });
     }
   }
@@ -1383,7 +1518,7 @@ function yoyComputeDimensions(rowsA, rowsRef, metaA, metaRef) {
     dim3:  { pmvA, pmvRef, deltaPMV, deltaPMVPct },
     dim4:  { caExpA, caExpRef, cogsA, cogsRef, margeA, margeRef, tauxMargeA, tauxMargeRef, deltaTauxMarge },
     dim5:  { retoursA, retoursRef, tauxRetA, tauxRetRef, deltaTauxRet },
-    dim6:  { ratioCAA, ratioCARef, ratioUA, ratioURef },
+    dim6:  { ratioCAA, ratioCARef, ratioUA, ratioURef, uExpA, uExpRef },
     dim7:  { stables:bStables, enBaisse:bBaisse, enHausse:bHausse, disparus:bDisparus, apparus:bApparus,
              sumStablesRef:sumCARef(bStables), sumStablesA:sumCAA(bStables),
              sumBaisseRef:sumCARef(bBaisse),   sumBaisseA:sumCAA(bBaisse),
