@@ -253,38 +253,284 @@ function renderYoYResult() {
   const a = yoyState.currentAnalysis;
   if (!a) { yoyState.screen = 'import'; return renderYoYImport(); }
 
+  const d  = a.dimensions || {};
+  const t  = a.totals     || {};
   const pALabel   = a.periodA   && a.periodA.label   ? a.periodA.label   : '?';
   const pRefLabel = a.periodRef && a.periodRef.label ? a.periodRef.label : '?';
   const c = cl();
   const clientName = c ? c.name : '—';
 
-  return `<div style="max-width:900px;margin:0 auto;padding:24px 20px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:8px">
+  // ── Détermination du signe global (dim1.deltaCAPct)
+  const deltaCAPct = d.dim1 ? d.dim1.deltaCAPct : null;
+  const sign = yoyGetSign(deltaCAPct);
+  const signColor = yoySignColor(sign);
+  const vClass = sign === 'negative' ? 'neg' : sign === 'positive' ? 'pos' : '';
+
+  // ── Point de vigilance : durées différentes
+  const dA   = a.periodA   ? a.periodA.days   : null;
+  const dRef = a.periodRef ? a.periodRef.days : null;
+  const vigilanceBlock = (dA && dRef && Math.abs(dA - dRef) > 3)
+    ? `<div class="yoy-vigilance">
+        ⚠️ <strong>Vigilance :</strong> les deux périodes ont des durées différentes
+        (${dA} j vs ${dRef} j). L'analyse utilise les valeurs par jour pour comparer.
+       </div>`
+    : '';
+
+  // ── KPI 1 : CA delta annualisé
+  const dim1 = d.dim1 || {};
+  const deltaCAAnnu  = dim1.deltaCAAnnu  != null ? yoyFmtEurSigned(dim1.deltaCAAnnu)  : '—';
+  const deltaCAPctFmt = dim1.deltaCAPct  != null ? yoyFmtPct(dim1.deltaCAPct, true)   : '—';
+  const kpi1Class = dim1.deltaCAPct != null ? yoyDeltaClass(dim1.deltaCAPct) : 'muted';
+
+  // ── KPI 2 : Catalogue (disparus / apparus)
+  const dim7 = d.dim7 || {};
+  const disparusN = dim7.disparus ? dim7.disparus.length : 0;
+  const apparusN  = dim7.apparus  ? dim7.apparus.length  : 0;
+  const kpi2Val   = disparusN > 0 || apparusN > 0
+    ? `<span style="color:var(--r)">-${disparusN}</span> / <span style="color:var(--g)">+${apparusN}</span>`
+    : '—';
+
+  // ── KPI 3 : Marge Amazon Retail
+  const dim4 = d.dim4 || {};
+  const deltaTauxMarge = dim4.deltaTauxMarge != null ? yoyFmtPts(dim4.deltaTauxMarge) : '—';
+  const kpi3Class = dim4.deltaTauxMarge != null ? yoyDeltaClass(dim4.deltaTauxMarge) : 'muted';
+
+  // ── KPI 4 : Pro stub
+  const kpi4 = `<span style="opacity:.45;font-size:11px">disponible en mode Pro</span>`;
+
+  // ── Section 1 : Performance volume / prix (dim1-3)
+  const dim2 = d.dim2 || {};
+  const dim3 = d.dim3 || {};
+  const s1Title = YOY_TITLES.s1[sign];
+  const s1Table = `<table class="yoy-table">
+    <thead><tr><th>Indicateur</th><th>Période A</th><th>Réf</th><th>Variation</th></tr></thead>
+    <tbody>
+      <tr><td>CA cmd (annualisé)</td>
+          <td class="num">${dim1.caAProj != null ? yoyFmtEur(dim1.caAProj) : '—'}</td>
+          <td class="num">${dim1.caRef   != null ? yoyFmtEur(dim1.caRef * (365 / (dRef||365))) : '—'}</td>
+          <td class="num ${kpi1Class}">${deltaCAPctFmt}</td></tr>
+      <tr><td>Unités cmd (annualisées)</td>
+          <td class="num">${dim2.uAProj != null ? yoyFmtNum(dim2.uAProj) : '—'}</td>
+          <td class="num">${dim2.uRef   != null ? yoyFmtNum(dim2.uRef * (365 / (dRef||365))) : '—'}</td>
+          <td class="num ${dim2.deltaUPct != null ? yoyDeltaClass(dim2.deltaUPct) : 'muted'}">${dim2.deltaUPct != null ? yoyFmtPct(dim2.deltaUPct, true) : '—'}</td></tr>
+      <tr><td>Prix moyen de vente</td>
+          <td class="num">${dim3.pmvA   != null ? yoyFmtEur(dim3.pmvA)   : '—'}</td>
+          <td class="num">${dim3.pmvRef != null ? yoyFmtEur(dim3.pmvRef) : '—'}</td>
+          <td class="num ${dim3.deltaPMVPct != null ? yoyDeltaClass(dim3.deltaPMVPct) : 'muted'}">${dim3.deltaPMVPct != null ? yoyFmtPct(dim3.deltaPMVPct, true) : '—'}</td></tr>
+    </tbody>
+  </table>`;
+  const s1Lecture = `<div class="yoy-section-lecture">Lecture</div>${tplPerformance(d, sign)}`;
+  const s1Verdict = `<div class="verdict-block ${vClass}">
+    <strong>Conclusion section :</strong>
+    ${dim1.deltaCAPct != null
+      ? (sign === 'negative'
+          ? `Le chiffre d'affaires recule de <strong>${yoyFmtPct(dim1.deltaCAPct, true)}</strong> en rythme annualisé (${deltaCAAnnu}/an).`
+          : sign === 'positive'
+          ? `Le chiffre d'affaires progresse de <strong>${yoyFmtPct(dim1.deltaCAPct, true)}</strong> en rythme annualisé (${deltaCAAnnu}/an).`
+          : `Le chiffre d'affaires est stable sur la période (${yoyFmtPct(dim1.deltaCAPct, true)}).`)
+      : 'Données insuffisantes.'}
+  </div>`;
+
+  // ── Section 2 : Dynamique catalogue / buckets ASIN (dim7 + dim8)
+  const dim8 = d.dim8 || {};
+  const s2Title = YOY_TITLES.s2[sign];
+  const buckets = [
+    { label: 'Stables (±20%)',  n: dim7.stables  != null ? dim7.stables  : '—', cls: 'muted' },
+    { label: 'En hausse (>+20%)', n: dim7.enHausse != null ? dim7.enHausse : '—', cls: 'pos'  },
+    { label: 'En baisse (<-20%)', n: dim7.enBaisse != null ? dim7.enBaisse : '—', cls: 'neg'  },
+    { label: 'Apparus',          n: apparusN,  cls: 'pos'  },
+    { label: 'Disparus',         n: disparusN, cls: 'neg'  },
+  ];
+  const zombiesN = dim8.zombies ? dim8.zombies.length : 0;
+  const s2Table = `<table class="yoy-table">
+    <thead><tr><th>Bucket</th><th class="num">ASINs</th><th class="num">CA Réf / j</th></tr></thead>
+    <tbody>
+      ${buckets.map(b => `<tr><td>${b.label}</td><td class="num ${b.cls}">${typeof b.n === 'number' ? b.n : b.n}</td><td class="num muted">—</td></tr>`).join('')}
+      <tr style="border-top:1px solid var(--bd2)"><td>🧟 Zombies (1–3 ventes/an)</td><td class="num neg">${zombiesN}</td><td class="num neg">${dim8.caPerduTotal != null ? yoyFmtEur(dim8.caPerduTotal / Math.max(dRef||1,1)) : '—'}</td></tr>
+    </tbody>
+  </table>`;
+  const s2Lecture = `<div class="yoy-section-lecture">Lecture</div>${tplCatalogue(d, sign)}`;
+  const s2Verdict = `<div class="verdict-block ${vClass}">
+    <strong>Conclusion section :</strong>
+    ${disparusN > 0
+      ? `<strong>${disparusN} ASIN(s)</strong> présents en période Réf ont disparu en période A${dim8.caPerduTotal != null ? ', représentant ' + yoyFmtEur(dim8.caPerduTotal) + ' de CA Réf perdu' : ''}.`
+      : `Aucun ASIN disparu entre les deux périodes.`}
+  </div>`;
+
+  // ── Section 3 : Concentration portefeuille (dim9)
+  const dim9 = d.dim9 || {};
+  const s3Title = YOY_TITLES.s3[sign];
+  const concRows = [10, 20, 50, 100].map(n => {
+    const vA   = dim9.concA   && dim9.concA['top'+n]   != null ? yoyFmtPct(dim9.concA['top'+n])   : '—';
+    const vRef = dim9.concRef && dim9.concRef['top'+n] != null ? yoyFmtPct(dim9.concRef['top'+n]) : '—';
+    const delta = dim9.concA && dim9.concRef && dim9.concA['top'+n] != null && dim9.concRef['top'+n] != null
+      ? yoyFmtPts(dim9.concA['top'+n] - dim9.concRef['top'+n]) : '—';
+    const deltaClass = dim9.concA && dim9.concRef && dim9.concA['top'+n] != null
+      ? yoyDeltaClass(dim9.concA['top'+n] - dim9.concRef['top'+n]) : 'muted';
+    return `<tr><td>Top ${n} ASINs</td><td class="num">${vA}</td><td class="num">${vRef}</td><td class="num ${deltaClass}">${delta}</td></tr>`;
+  }).join('');
+  const s3Table = `<table class="yoy-table">
+    <thead><tr><th>Concentration</th><th>Période A</th><th>Réf</th><th>Évolution</th></tr></thead>
+    <tbody>${concRows}</tbody>
+  </table>`;
+  const s3Lecture = `<div class="yoy-section-lecture">Lecture</div>${tplConcentration(d, sign)}`;
+  const s3Verdict = `<div class="verdict-block ${vClass}">
+    <strong>Conclusion section :</strong>
+    ${dim9.concA && dim9.concRef && dim9.concA.top10 != null
+      ? `Les 10 premiers ASINs représentent <strong>${yoyFmtPct(dim9.concA.top10)}</strong> du CA en période A vs ${yoyFmtPct(dim9.concRef.top10)} en Réf.`
+      : 'Données insuffisantes.'}
+  </div>`;
+
+  // ── Section 4 : Dynamique marques (dim10)
+  const dim10 = d.dim10 || {};
+  const s4Title = YOY_TITLES.s4[sign];
+  const topBrands = dim10.topBrands || [];
+  const s4Rows = topBrands.slice(0, 10).map(b => {
+    const dClass = yoyDeltaClass(b.delta || 0);
+    return `<tr><td>${esc(b.marque || '—')}</td>
+      <td class="num">${b.caAPerDay != null ? yoyFmtEur(b.caAPerDay) : '—'}</td>
+      <td class="num">${b.caRefPerDay != null ? yoyFmtEur(b.caRefPerDay) : '—'}</td>
+      <td class="num ${dClass}">${b.delta != null ? yoyFmtPct(b.delta, true) : '—'}</td></tr>`;
+  }).join('') || `<tr><td colspan="4" class="muted" style="text-align:center">Données insuffisantes</td></tr>`;
+  const s4Table = `<table class="yoy-table">
+    <thead><tr><th>Marque</th><th>CA/j Période A</th><th>CA/j Réf</th><th>Δ</th></tr></thead>
+    <tbody>${s4Rows}</tbody>
+  </table>`;
+  const s4Lecture = `<div class="yoy-section-lecture">Lecture</div>${tplMarques(d, sign)}`;
+  const s4Verdict = `<div class="verdict-block ${vClass}">
+    <strong>Conclusion section :</strong>
+    ${topBrands.length > 0
+      ? `${topBrands.length} marque(s) analysée(s). La marque la plus importante est <strong>${esc(topBrands[0].marque || '—')}</strong>.`
+      : 'Données insuffisantes.'}
+  </div>`;
+
+  // ── Section 5 : Top mouvements ASIN (dim11)
+  const dim11 = d.dim11 || {};
+  const s5Title = YOY_TITLES.s5[sign];
+  const perdants  = dim11.perdants  || [];
+  const gagnants  = dim11.gagnants  || [];
+  const buildMvtRows = (list, cls) => list.slice(0, 8).map(r =>
+    `<tr><td style="font-family:monospace;font-size:11px">${esc(r.asin||'—')}</td>
+      <td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.titre||'—')}</td>
+      <td class="num">${r.caRefPerDay != null ? yoyFmtEur(r.caRefPerDay) : '—'}</td>
+      <td class="num">${r.caAPerDay  != null ? yoyFmtEur(r.caAPerDay)  : '—'}</td>
+      <td class="num ${cls}">${r.deltaCA != null ? yoyFmtEurSigned(r.deltaCA) : '—'}</td></tr>`
+  ).join('') || `<tr><td colspan="5" class="muted" style="text-align:center">—</td></tr>`;
+  const s5Table = `
+    <div style="font-size:11px;font-weight:600;color:var(--r);margin-bottom:4px">▼ Principaux perdants</div>
+    <table class="yoy-table" style="margin-bottom:16px">
+      <thead><tr><th>ASIN</th><th>Produit</th><th>CA Réf/j</th><th>CA A/j</th><th>Δ CA annualisé</th></tr></thead>
+      <tbody>${buildMvtRows(perdants, 'neg')}</tbody>
+    </table>
+    <div style="font-size:11px;font-weight:600;color:var(--g);margin-bottom:4px">▲ Principaux gagnants</div>
+    <table class="yoy-table">
+      <thead><tr><th>ASIN</th><th>Produit</th><th>CA Réf/j</th><th>CA A/j</th><th>Δ CA annualisé</th></tr></thead>
+      <tbody>${buildMvtRows(gagnants, 'pos')}</tbody>
+    </table>`;
+  const s5Lecture = `<div class="yoy-section-lecture">Lecture</div>${tplTopMouvements(d, sign)}`;
+  const s5Verdict = `<div class="verdict-block ${vClass}">
+    <strong>Conclusion section :</strong>
+    ${perdants.length > 0
+      ? `Les <strong>${Math.min(perdants.length, 15)}</strong> principaux perdants concentrent l'essentiel de la variation négative.`
+      : 'Pas de perdants significatifs identifiés.'}
+  </div>`;
+
+  // ── Section 6 : Anomalies catalogue (dim12)
+  const dim12 = d.dim12 || {};
+  const s6Title = YOY_TITLES.s6[sign];
+  const anomPairs = dim12.anomPairs || [];
+  const s6Rows = anomPairs.slice(0, 10).map(p =>
+    `<tr><td>${esc(p.marque1||'—')}</td><td>${esc(p.marque2||'—')}</td>
+      <td class="num">${p.similarity != null ? yoyFmtPct(p.similarity * 100) : '—'}</td>
+      <td class="num muted">${p.caTot != null ? yoyFmtEur(p.caTot) : '—'}</td></tr>`
+  ).join('') || `<tr><td colspan="4" class="muted" style="text-align:center">Aucune anomalie détectée</td></tr>`;
+  const s6Table = `<table class="yoy-table">
+    <thead><tr><th>Marque 1</th><th>Marque 2</th><th>Similarité</th><th>CA combiné</th></tr></thead>
+    <tbody>${s6Rows}</tbody>
+  </table>`;
+  const s6Lecture = `<div class="yoy-section-lecture">Lecture</div>${tplAnomalies(d, sign)}`;
+  const s6Verdict = `<div class="verdict-block ${vClass}">
+    <strong>Conclusion section :</strong>
+    ${anomPairs.length > 0
+      ? `<strong>${anomPairs.length}</strong> doublon(s) orthographique(s) potentiel(s) détecté(s) dans le catalogue.`
+      : 'Aucun doublon orthographique détecté dans le catalogue.'}
+  </div>`;
+
+  // ── Helper : build section HTML
+  function sec(id, title, tableHtml, lectureHtml, verdictHtml) {
+    return `<div class="yoy-section" id="yoy-sec-${id}">
+      <div class="yoy-section-header">
+        <h3 class="yoy-section-title">${title}</h3>
+      </div>
+      ${tableHtml}
+      ${lectureHtml}
+      ${verdictHtml}
+    </div>`;
+  }
+
+  // ── Conclusion
+  const concluHtml = `<div class="yoy-section" id="yoy-sec-conclusion" style="margin-top:8px">
+    <div class="yoy-section-header">
+      <h3 class="yoy-section-title">Conclusion générale</h3>
+    </div>
+    ${tplConclusion(d, sign)}
+  </div>`;
+
+  return `<div style="max-width:960px;margin:0 auto;padding:24px 20px" class="yoy-result-root">
+
+    <!-- En-tête -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
       <div>
         <h2 style="font-size:19px;font-weight:700;margin-bottom:4px">Analyse comparée — ${esc(clientName)}</h2>
         <div style="font-size:12px;color:var(--tx2)">${esc(pALabel)} <span style="color:var(--tx3)">vs</span> ${esc(pRefLabel)}</div>
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;flex-shrink:0">
         <button class="btn btn-sm" onclick="yoyBack()">← Modifier les imports</button>
         <button class="btn btn-sm" onclick="window.print()">🖨 Imprimer</button>
       </div>
     </div>
 
-    <div style="background:var(--s2);border:0.5px solid var(--bd2);border-radius:var(--rd);padding:32px;text-align:center">
-      <div style="font-size:28px;margin-bottom:12px">✅</div>
-      <div style="font-size:16px;font-weight:600;margin-bottom:8px">Analyse sauvegardée</div>
-      <div style="font-size:13px;color:var(--tx2);margin-bottom:20px">
-        Checkpoint 1 validé — parsing OK, sanity check OK, IndexedDB OK.<br>
-        Les 12 dimensions + sections analytiques arrivent en CP2/CP3.
+    ${vigilanceBlock}
+
+    <!-- 4 KPI cards -->
+    <div class="yoy-kpi-grid" style="margin-bottom:24px">
+      <div class="yoy-kpi-card">
+        <div class="yoy-kpi-label">CA annualisé</div>
+        <div class="yoy-kpi-value ${kpi1Class}">${deltaCAPctFmt}</div>
+        <div class="yoy-kpi-sub">${deltaCAAnnu} / an</div>
       </div>
-      <div style="display:inline-block;text-align:left;background:var(--s3);border-radius:8px;padding:16px 20px;font-size:12px;color:var(--tx2);font-family:monospace;line-height:1.8">
-        <div><strong style="color:var(--tx)">Période A :</strong> ${esc(pALabel)} · ${a.periodA ? a.periodA.days : '?'} j · ${a.periodA ? a.periodA.asinCount : '?'} ASINs · ${a.totals ? yoyFmtEur(a.totals.caA || 0) : '—'}</div>
-        <div><strong style="color:var(--tx)">Période Réf :</strong> ${esc(pRefLabel)} · ${a.periodRef ? a.periodRef.days : '?'} j · ${a.periodRef ? a.periodRef.asinCount : '?'} ASINs · ${a.totals ? yoyFmtEur(a.totals.caRef || 0) : '—'}</div>
-        <div><strong style="color:var(--tx)">Sanity check :</strong> ${a.metadata && a.metadata.sanityCheckOk ? '✅ OK' : '❌ KO'}</div>
-        <div><strong style="color:var(--tx)">Parser :</strong> ${a.metadata ? esc(a.metadata.parserVersion) : '—'}</div>
-        <div><strong style="color:var(--tx)">Analyse ID :</strong> ${esc(a.id)}</div>
+      <div class="yoy-kpi-card">
+        <div class="yoy-kpi-label">Mouvement catalogue</div>
+        <div class="yoy-kpi-value">${kpi2Val}</div>
+        <div class="yoy-kpi-sub">disparus / apparus</div>
+      </div>
+      <div class="yoy-kpi-card">
+        <div class="yoy-kpi-label">Marge Amazon Retail</div>
+        <div class="yoy-kpi-value ${kpi3Class}">${deltaTauxMarge}</div>
+        <div class="yoy-kpi-sub">Δ taux marge</div>
+      </div>
+      <div class="yoy-kpi-card pro-only-pending">
+        <div class="yoy-kpi-label">Diagnostic IA</div>
+        <div class="yoy-kpi-value" style="font-size:13px">${kpi4}</div>
+        <div class="yoy-kpi-sub">cause principale</div>
       </div>
     </div>
+
+    <!-- 6 sections analytiques -->
+    ${sec('s1', s1Title, s1Table, s1Lecture, s1Verdict)}
+    ${sec('s2', s2Title, s2Table, s2Lecture, s2Verdict)}
+    ${sec('s3', s3Title, s3Table, s3Lecture, s3Verdict)}
+    ${sec('s4', s4Title, s4Table, s4Lecture, s4Verdict)}
+    ${sec('s5', s5Title, s5Table, s5Lecture, s5Verdict)}
+    ${sec('s6', s6Title, s6Table, s6Lecture, s6Verdict)}
+
+    ${concluHtml}
+
+    <!-- Footer print -->
+    <div class="yoy-print-footer">
+      Analyse générée par Amazon Pilot · ${esc(clientName)} · ${esc(pALabel)} vs ${esc(pRefLabel)}
+    </div>
+
   </div>`;
 }
 
@@ -821,12 +1067,12 @@ async function yoyLaunchAnalysis() {
 
     const totals = yoyComputeTotals(pA.rows, pRef.rows, pA.meta, pRef.meta);
 
-    // Étape 2 : CP2+ calculera les 12 dimensions — placeholder pour l'instant
+    // Étape 2 : Calcul des 12 dimensions
     yoyState.progress = { phase: 'Calcul des 12 dimensions…', pct: 65 };
     render();
     await yoySleep(300);
 
-    const dimensions = {}; // CP2
+    const dimensions = yoyComputeDimensions(pA.rows, pRef.rows, pA.meta, pRef.meta);
 
     // Étape 3 : Sauvegarde IndexedDB
     yoyState.progress = { phase: 'Sauvegarde de l\'analyse…', pct: 85 };
@@ -856,7 +1102,7 @@ async function yoyLaunchAnalysis() {
       metadata: {
         sanityCheckOk: pA.meta.sanityCheckOk && pRef.meta.sanityCheckOk,
         sanityCheckDetail: pA.meta.sanityCheckDetail,
-        parserVersion: 'yoy-v3.6.5-cp1',
+        parserVersion: 'yoy-v3.6.5-cp2',
       },
     };
 
@@ -916,6 +1162,245 @@ function yoyComputeTotals(rowsA, rowsRef, metaA, metaRef) {
     deltaCAAnnu: (caA / daysA - caRef / daysRef) * 365,
   };
 }
+
+// ═══════════════════════════════════════════════════════════════
+// CP2 — HELPERS FORMAT / SIGNE
+// ═══════════════════════════════════════════════════════════════
+
+function yoyGetSign(deltaPct) {
+  if (deltaPct < -YOY_THRESHOLD_PCT) return 'negative';
+  if (deltaPct > +YOY_THRESHOLD_PCT) return 'positive';
+  return 'stable';
+}
+
+function yoyFmtPct(v, forceSign) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  var s = Math.abs(v).toFixed(1).replace('.', ',') + ' %';
+  if (forceSign || v !== 0) s = (v >= 0 ? '+' : '−') + s;
+  return s;
+}
+
+function yoyFmtPts(v) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  var s = Math.abs(v).toFixed(1).replace('.', ',') + ' pts';
+  return (v >= 0 ? '+' : '−') + s;
+}
+
+function yoyFmtEurSigned(v) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  return (v >= 0 ? '+' : '−') + yoyFmtEur(Math.abs(v));
+}
+
+function yoyFmtNum(v) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  return Math.round(Math.abs(v)).toLocaleString('fr-FR');
+}
+
+function yoyDeltaClass(v) { return v > 0.5 ? 'pos' : v < -0.5 ? 'neg' : 'muted'; }
+
+function yoySignColor(sign) {
+  return sign === 'negative' ? 'var(--r)' : sign === 'positive' ? 'var(--g)' : 'var(--tx2)';
+}
+
+// ─── Levenshtein pour dim 12 ────────────────────────────────────
+function yoyLevenshtein(a, b) {
+  a = a.toLowerCase(); b = b.toLowerCase();
+  if (a === b) return 0;
+  var m = a.length, n = b.length;
+  if (m === 0) return n; if (n === 0) return m;
+  var prev = [], cur = [];
+  for (var j = 0; j <= n; j++) prev[j] = j;
+  for (var i = 1; i <= m; i++) {
+    cur[0] = i;
+    for (var j2 = 1; j2 <= n; j2++) {
+      cur[j2] = a[i-1] === b[j2-1] ? prev[j2-1] : 1 + Math.min(prev[j2], cur[j2-1], prev[j2-1]);
+    }
+    prev = cur.slice();
+  }
+  return prev[n];
+}
+function yoySimilarity(a, b) {
+  var mx = Math.max(a.length, b.length);
+  return mx === 0 ? 1 : 1 - yoyLevenshtein(a, b) / mx;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CP2 — CALCUL 12 DIMENSIONS
+// ═══════════════════════════════════════════════════════════════
+
+function yoyComputeDimensions(rowsA, rowsRef, metaA, metaRef) {
+  var dA   = metaA.days  || 1;
+  var dRef = metaRef.days || 1;
+  var sum  = function(rows, key) { return rows.reduce(function(s,r) { return s + (r[key]||0); }, 0); };
+
+  // Maps ASIN → row
+  var mapA = {}, mapRef = {};
+  rowsA.forEach(function(r)   { if (r.asin) mapA[r.asin]   = r; });
+  rowsRef.forEach(function(r) { if (r.asin) mapRef[r.asin] = r; });
+  var allAsins = Object.keys(Object.assign({}, mapA, mapRef));
+
+  // ── Dim 1 — CA YoY ──────────────────────────────────────────
+  var caA         = sum(rowsA,   'ca_cmd');
+  var caRef       = sum(rowsRef, 'ca_cmd');
+  var caAPerDay   = caA   / dA;
+  var caRefPerDay = caRef / dRef;
+  var caAProj     = caAPerDay * dRef;
+  var deltaCA     = caAProj - caRef;
+  var deltaCAPct  = caRef > 0 ? deltaCA / caRef * 100 : 0;
+  var deltaCAAnnu = (caAPerDay - caRefPerDay) * 365;
+
+  // ── Dim 2 — Unités YoY ──────────────────────────────────────
+  var uA         = sum(rowsA,   'u_cmd');
+  var uRef       = sum(rowsRef, 'u_cmd');
+  var uAPerDay   = uA   / dA;
+  var uRefPerDay = uRef / dRef;
+  var uAProj     = uAPerDay * dRef;
+  var deltaU     = uAProj - uRef;
+  var deltaUPct  = uRef > 0 ? deltaU / uRef * 100 : 0;
+  var deltaUAnnu = (uAPerDay - uRefPerDay) * 365;
+
+  // ── Dim 3 — PMV ─────────────────────────────────────────────
+  var pmvA       = uA   > 0 ? caA   / uA   : 0;
+  var pmvRef     = uRef > 0 ? caRef / uRef : 0;
+  var deltaPMV   = pmvA - pmvRef;
+  var deltaPMVPct = pmvRef > 0 ? deltaPMV / pmvRef * 100 : 0;
+
+  // ── Dim 4 — Marge Amazon Retail ─────────────────────────────
+  var caExpA      = sum(rowsA,   'ca_exp');
+  var caExpRef    = sum(rowsRef, 'ca_exp');
+  var cogsA       = sum(rowsA,   'cogs');
+  var cogsRef     = sum(rowsRef, 'cogs');
+  var margeA      = caExpA   - cogsA;
+  var margeRef    = caExpRef - cogsRef;
+  var tauxMargeA  = caExpA   > 0 ? margeA   / caExpA   * 100 : 0;
+  var tauxMargeRef = caExpRef > 0 ? margeRef / caExpRef * 100 : 0;
+  var deltaTauxMarge = tauxMargeA - tauxMargeRef;
+
+  // ── Dim 5 — Taux retours ────────────────────────────────────
+  var retoursA    = sum(rowsA,   'retours');
+  var retoursRef  = sum(rowsRef, 'retours');
+  var tauxRetA    = uA   > 0 ? retoursA   / uA   * 100 : 0;
+  var tauxRetRef  = uRef > 0 ? retoursRef / uRef * 100 : 0;
+  var deltaTauxRet = tauxRetA - tauxRetRef;
+
+  // ── Dim 6 — Ratio exp/cmd ───────────────────────────────────
+  var uExpA       = sum(rowsA,   'u_exp');
+  var uExpRef     = sum(rowsRef, 'u_exp');
+  var ratioCAA    = caA   > 0 ? caExpA   / caA   * 100 : 0;
+  var ratioCARef  = caRef > 0 ? caExpRef / caRef * 100 : 0;
+  var ratioUA     = uA   > 0 ? uExpA   / uA   * 100 : 0;
+  var ratioURef   = uRef > 0 ? uExpRef / uRef * 100 : 0;
+
+  // ── Dim 7 — Croisement ASIN (5 buckets) ─────────────────────
+  var bStables = [], bBaisse = [], bHausse = [], bDisparus = [], bApparus = [];
+  allAsins.forEach(function(asin) {
+    var rA   = mapA[asin];
+    var rRef = mapRef[asin];
+    var caAd   = rA   ? (rA.ca_cmd   || 0) / dA   : 0;
+    var caRefd = rRef ? (rRef.ca_cmd || 0) / dRef : 0;
+    var inA    = rA   && (rA.ca_cmd   || 0) > 0;
+    var inRef  = rRef && (rRef.ca_cmd || 0) > 0;
+    var titre  = (rA || rRef || {}).titre  || '';
+    var marque = (rA || rRef || {}).marque || '';
+    var item = { asin: asin, titre: titre, marque: marque, caAPerDay: caAd, caRefPerDay: caRefd };
+    if (!inRef && inA)       { bApparus.push(item); }
+    else if (inRef && !inA)  { bDisparus.push(item); }
+    else if (inRef && inA)   {
+      var pct = caRefd > 0 ? (caAd - caRefd) / caRefd * 100 : 0;
+      item.deltaPct = pct;
+      if (pct < -10) bBaisse.push(item);
+      else if (pct > +10) bHausse.push(item);
+      else bStables.push(item);
+    }
+  });
+  var sumCARef = function(b) { return b.reduce(function(s,r){ return s+r.caRefPerDay; },0); };
+  var sumCAA   = function(b) { return b.reduce(function(s,r){ return s+r.caAPerDay;  },0); };
+  bDisparus.sort(function(a,b){ return b.caRefPerDay - a.caRefPerDay; });
+  bApparus.sort(function(a,b){  return b.caAPerDay   - a.caAPerDay;   });
+
+  // ── Dim 8 — Zombies ─────────────────────────────────────────
+  var zombies = allAsins.reduce(function(acc, asin) {
+    var rA = mapA[asin], rRef = mapRef[asin];
+    if (!rA || !rRef) return acc;
+    if ((rRef.ca_cmd||0) > 100 && (rA.ca_cmd||0) < 5)
+      acc.push({ asin: asin, titre: rRef.titre || '', marque: rRef.marque || '', caRef: rRef.ca_cmd||0, caA: rA.ca_cmd||0 });
+    return acc;
+  }, []);
+  zombies.sort(function(a,b){ return b.caRef - a.caRef; });
+
+  // ── Dim 9 — Concentration ────────────────────────────────────
+  var sortedA   = rowsA.slice().sort(function(a,b){ return (b.ca_cmd||0)-(a.ca_cmd||0); });
+  var sortedRef = rowsRef.slice().sort(function(a,b){ return (b.ca_cmd||0)-(a.ca_cmd||0); });
+  var topShare = function(sorted, n, total) {
+    if (total <= 0) return 0;
+    return sorted.slice(0,n).reduce(function(s,r){ return s+(r.ca_cmd||0); },0) / total * 100;
+  };
+
+  // ── Dim 10 — Marques ─────────────────────────────────────────
+  var bMapRef = {}, bMapA = {};
+  rowsRef.forEach(function(r){ var m=(r.marque||'Inconnue').trim(); bMapRef[m]=(bMapRef[m]||0)+(r.ca_cmd||0)/dRef; });
+  rowsA.forEach(function(r){   var m=(r.marque||'Inconnue').trim(); bMapA[m]  =(bMapA[m]  ||0)+(r.ca_cmd||0)/dA;  });
+  var topBrands = Object.keys(bMapRef)
+    .sort(function(a,b){ return bMapRef[b]-bMapRef[a]; }).slice(0,10)
+    .map(function(m){ return { marque:m, caRefPerDay:bMapRef[m]||0, caAPerDay:bMapA[m]||0, shareRef:caRefPerDay>0?bMapRef[m]/caRefPerDay*100:0, shareA:caAPerDay>0?(bMapA[m]||0)/caAPerDay*100:0, delta:(bMapA[m]||0)-(bMapRef[m]||0) }; });
+
+  // ── Dim 11 — Top gagnants / perdants ─────────────────────────
+  var llList = allAsins.filter(function(a){ return mapA[a]&&mapRef[a]&&(mapA[a].ca_cmd||0)>0&&(mapRef[a].ca_cmd||0)>0; })
+    .map(function(asin){
+      var rA=mapA[asin],rRef=mapRef[asin];
+      var caAd=(rA.ca_cmd||0)/dA, caRefd=(rRef.ca_cmd||0)/dRef;
+      var delta=caAd-caRefd, pct=caRefd>0?delta/caRefd*100:0;
+      return { asin:asin, titre:rA.titre||rRef.titre||'', marque:rRef.marque||'', caAPerDay:caAd, caRefPerDay:caRefd, deltaPerDay:delta, deltaPct:pct };
+    });
+  var perdants = llList.slice().sort(function(a,b){ return a.deltaPerDay-b.deltaPerDay; }).slice(0,15);
+  var gagnants = llList.slice().sort(function(a,b){ return b.deltaPerDay-a.deltaPerDay; }).slice(0,15);
+
+  // ── Dim 12 — Anomalies catalogue ─────────────────────────────
+  var allBrandNames = Object.keys(Object.assign({},bMapRef,bMapA)).filter(function(m){ return m&&m!=='Inconnue'; });
+  var anomPairs = [];
+  for (var bi=0; bi<allBrandNames.length; bi++) {
+    for (var bj=bi+1; bj<allBrandNames.length; bj++) {
+      var ma=allBrandNames[bi], mb=allBrandNames[bj];
+      if (Math.abs(ma.length-mb.length)>6) continue;
+      var sim=yoySimilarity(ma,mb);
+      if (sim>0.75&&sim<1) anomPairs.push({ marque1:ma, marque2:mb, similarity:sim, caTot:(bMapRef[ma]||0)+(bMapRef[mb]||0)+(bMapA[ma]||0)+(bMapA[mb]||0) });
+    }
+  }
+  anomPairs.sort(function(a,b){ return b.similarity-a.similarity; });
+
+  return {
+    dim1:  { caA, caRef, caAPerDay, caRefPerDay, caAProj, deltaCA, deltaCAPct, deltaCAAnnu, dA, dRef },
+    dim2:  { uA, uRef, uAPerDay, uRefPerDay, uAProj, deltaU, deltaUPct, deltaUAnnu },
+    dim3:  { pmvA, pmvRef, deltaPMV, deltaPMVPct },
+    dim4:  { caExpA, caExpRef, cogsA, cogsRef, margeA, margeRef, tauxMargeA, tauxMargeRef, deltaTauxMarge },
+    dim5:  { retoursA, retoursRef, tauxRetA, tauxRetRef, deltaTauxRet },
+    dim6:  { ratioCAA, ratioCARef, ratioUA, ratioURef },
+    dim7:  { stables:bStables, enBaisse:bBaisse, enHausse:bHausse, disparus:bDisparus, apparus:bApparus,
+             sumStablesRef:sumCARef(bStables), sumStablesA:sumCAA(bStables),
+             sumBaisseRef:sumCARef(bBaisse),   sumBaisseA:sumCAA(bBaisse),
+             sumHausseRef:sumCARef(bHausse),   sumHausseA:sumCAA(bHausse),
+             sumDisparusRef:sumCARef(bDisparus), sumApparusA:sumCAA(bApparus) },
+    dim8:  { zombies, count:zombies.length, caPerduTotal:zombies.reduce(function(s,z){return s+z.caRef;},0) },
+    dim9:  { concA:{ top10:topShare(sortedA,10,caA), top20:topShare(sortedA,20,caA), top50:topShare(sortedA,50,caA), top100:topShare(sortedA,100,caA) },
+             concRef:{ top10:topShare(sortedRef,10,caRef), top20:topShare(sortedRef,20,caRef), top50:topShare(sortedRef,50,caRef), top100:topShare(sortedRef,100,caRef) } },
+    dim10: { topBrands },
+    dim11: { perdants, gagnants },
+    dim12: { anomPairs },
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CP2 — TITRES ADAPTATIFS (§6.3)
+// ═══════════════════════════════════════════════════════════════
+
+var YOY_TITLES = {
+  s1: { negative:'Le recul est essentiellement un recul de volume, pas de prix', positive:'La progression vient surtout du volume, avec un prix moyen stable', stable:'Performance stable, mix prix légèrement modifié' },
+  s2: { negative:'La baisse vient du périmètre ASIN, pas des ASINs encore actifs', positive:'La progression est portée par les ASINs déjà présents qui accélèrent', stable:'Catalogue actif stable en volume et profondeur' },
+  s3: { negative:'Le portefeuille devient plus fragile : la concentration s\'accentue', positive:'La progression renforce la dépendance aux best-sellers', stable:'Concentration stable, queue longue préservée' },
+  s4: { negative:'Le recul est multi-marques, avec quelques exceptions à protéger', positive:'Plusieurs marques tirent la croissance', stable:'Mix marques équilibré, à surveiller marque par marque' },
+  s5: { negative:'Top mouvements ASIN — qui pèse vraiment dans la variation', positive:'Top mouvements ASIN — qui pèse vraiment dans la variation', stable:'Top mouvements ASIN — qui pèse vraiment dans la variation' },
+  s6: { negative:'Doublons orthographiques détectés dans le catalogue', positive:'Doublons orthographiques détectés dans le catalogue', stable:'Vérification des doublons orthographiques du catalogue' },
+};
 
 // ═══════════════════════════════════════════════════════════════
 // NAVIGATION BACK / HISTORIQUE
