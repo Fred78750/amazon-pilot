@@ -319,7 +319,7 @@ function renderYoYResult() {
           <td class="num ${dim3.deltaPMVPct != null ? yoyDeltaClass(dim3.deltaPMVPct) : 'muted'}">${dim3.deltaPMVPct != null ? yoyFmtPct(dim3.deltaPMVPct, true) : '—'}</td></tr>
     </tbody>
   </table>`;
-  const s1Lecture = `<div class="yoy-section-lecture">Lecture</div>${tplPerformance(d, sign)}`;
+  const s1Lecture = ``; // CP3
   const s1Verdict = `<div class="verdict-block ${vClass}">
     <strong>Conclusion section :</strong>
     ${dim1.deltaCAPct != null
@@ -335,11 +335,11 @@ function renderYoYResult() {
   const dim8 = d.dim8 || {};
   const s2Title = YOY_TITLES.s2[sign];
   const buckets = [
-    { label: 'Stables (±20%)',  n: dim7.stables  != null ? dim7.stables  : '—', cls: 'muted' },
-    { label: 'En hausse (>+20%)', n: dim7.enHausse != null ? dim7.enHausse : '—', cls: 'pos'  },
-    { label: 'En baisse (<-20%)', n: dim7.enBaisse != null ? dim7.enBaisse : '—', cls: 'neg'  },
-    { label: 'Apparus',          n: apparusN,  cls: 'pos'  },
-    { label: 'Disparus',         n: disparusN, cls: 'neg'  },
+    { label: 'Stables (±20%)',    n: dim7.stables  ? dim7.stables.length  : '—', cls: 'muted' },
+    { label: 'En hausse (>+20%)', n: dim7.enHausse ? dim7.enHausse.length : '—', cls: 'pos'  },
+    { label: 'En baisse (<-20%)', n: dim7.enBaisse ? dim7.enBaisse.length : '—', cls: 'neg'  },
+    { label: 'Apparus',           n: apparusN,  cls: 'pos'  },
+    { label: 'Disparus',          n: disparusN, cls: 'neg'  },
   ];
   const zombiesN = dim8.zombies ? dim8.zombies.length : 0;
   const s2Table = `<table class="yoy-table">
@@ -349,7 +349,7 @@ function renderYoYResult() {
       <tr style="border-top:1px solid var(--bd2)"><td>🧟 Zombies (1–3 ventes/an)</td><td class="num neg">${zombiesN}</td><td class="num neg">${dim8.caPerduTotal != null ? yoyFmtEur(dim8.caPerduTotal / Math.max(dRef||1,1)) : '—'}</td></tr>
     </tbody>
   </table>`;
-  const s2Lecture = `<div class="yoy-section-lecture">Lecture</div>${tplCatalogue(d, sign)}`;
+  const s2Lecture = ``; // CP3
   const s2Verdict = `<div class="verdict-block ${vClass}">
     <strong>Conclusion section :</strong>
     ${disparusN > 0
@@ -373,7 +373,7 @@ function renderYoYResult() {
     <thead><tr><th>Concentration</th><th>Période A</th><th>Réf</th><th>Évolution</th></tr></thead>
     <tbody>${concRows}</tbody>
   </table>`;
-  const s3Lecture = `<div class="yoy-section-lecture">Lecture</div>${tplConcentration(d, sign)}`;
+  const s3Lecture = ``; // CP3
   const s3Verdict = `<div class="verdict-block ${vClass}">
     <strong>Conclusion section :</strong>
     ${dim9.concA && dim9.concRef && dim9.concA.top10 != null
@@ -386,17 +386,17 @@ function renderYoYResult() {
   const s4Title = YOY_TITLES.s4[sign];
   const topBrands = dim10.topBrands || [];
   const s4Rows = topBrands.slice(0, 10).map(b => {
-    const dClass = yoyDeltaClass(b.delta || 0);
+    const dClass = b.deltaPct != null ? yoyDeltaClass(b.deltaPct) : 'muted';
     return `<tr><td>${esc(b.marque || '—')}</td>
       <td class="num">${b.caAPerDay != null ? yoyFmtEur(b.caAPerDay) : '—'}</td>
       <td class="num">${b.caRefPerDay != null ? yoyFmtEur(b.caRefPerDay) : '—'}</td>
-      <td class="num ${dClass}">${b.delta != null ? yoyFmtPct(b.delta, true) : '—'}</td></tr>`;
+      <td class="num ${dClass}">${b.deltaPct != null ? yoyFmtPct(b.deltaPct, true) : '—'}</td></tr>`;
   }).join('') || `<tr><td colspan="4" class="muted" style="text-align:center">Données insuffisantes</td></tr>`;
   const s4Table = `<table class="yoy-table">
     <thead><tr><th>Marque</th><th>CA/j Période A</th><th>CA/j Réf</th><th>Δ</th></tr></thead>
     <tbody>${s4Rows}</tbody>
   </table>`;
-  const s4Lecture = `<div class="yoy-section-lecture">Lecture</div>${tplMarques(d, sign)}`;
+  const s4Lecture = ``; // CP3
   const s4Verdict = `<div class="verdict-block ${vClass}">
     <strong>Conclusion section :</strong>
     ${topBrands.length > 0
@@ -409,13 +409,15 @@ function renderYoYResult() {
   const s5Title = YOY_TITLES.s5[sign];
   const perdants  = dim11.perdants  || [];
   const gagnants  = dim11.gagnants  || [];
-  const buildMvtRows = (list, cls) => list.slice(0, 8).map(r =>
-    `<tr><td style="font-family:monospace;font-size:11px">${esc(r.asin||'—')}</td>
+  const buildMvtRows = (list, cls) => list.slice(0, 8).map(r => {
+    const dCA = r.deltaPerDay != null ? yoyFmtEurSigned(r.deltaPerDay * 365) : '—';
+    const dClass = r.deltaPerDay != null ? yoyDeltaClass(r.deltaPerDay) : cls;
+    return `<tr><td style="font-family:monospace;font-size:11px">${esc(r.asin||'—')}</td>
       <td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.titre||'—')}</td>
       <td class="num">${r.caRefPerDay != null ? yoyFmtEur(r.caRefPerDay) : '—'}</td>
       <td class="num">${r.caAPerDay  != null ? yoyFmtEur(r.caAPerDay)  : '—'}</td>
-      <td class="num ${cls}">${r.deltaCA != null ? yoyFmtEurSigned(r.deltaCA) : '—'}</td></tr>`
-  ).join('') || `<tr><td colspan="5" class="muted" style="text-align:center">—</td></tr>`;
+      <td class="num ${dClass}">${dCA}</td></tr>`;
+  }).join('') || `<tr><td colspan="5" class="muted" style="text-align:center">—</td></tr>`;
   const s5Table = `
     <div style="font-size:11px;font-weight:600;color:var(--r);margin-bottom:4px">▼ Principaux perdants</div>
     <table class="yoy-table" style="margin-bottom:16px">
@@ -427,7 +429,7 @@ function renderYoYResult() {
       <thead><tr><th>ASIN</th><th>Produit</th><th>CA Réf/j</th><th>CA A/j</th><th>Δ CA annualisé</th></tr></thead>
       <tbody>${buildMvtRows(gagnants, 'pos')}</tbody>
     </table>`;
-  const s5Lecture = `<div class="yoy-section-lecture">Lecture</div>${tplTopMouvements(d, sign)}`;
+  const s5Lecture = ``; // CP3
   const s5Verdict = `<div class="verdict-block ${vClass}">
     <strong>Conclusion section :</strong>
     ${perdants.length > 0
@@ -448,7 +450,7 @@ function renderYoYResult() {
     <thead><tr><th>Marque 1</th><th>Marque 2</th><th>Similarité</th><th>CA combiné</th></tr></thead>
     <tbody>${s6Rows}</tbody>
   </table>`;
-  const s6Lecture = `<div class="yoy-section-lecture">Lecture</div>${tplAnomalies(d, sign)}`;
+  const s6Lecture = ``; // CP3
   const s6Verdict = `<div class="verdict-block ${vClass}">
     <strong>Conclusion section :</strong>
     ${anomPairs.length > 0
@@ -473,7 +475,7 @@ function renderYoYResult() {
     <div class="yoy-section-header">
       <h3 class="yoy-section-title">Conclusion générale</h3>
     </div>
-    ${tplConclusion(d, sign)}
+    <!-- CP3 -->
   </div>`;
 
   return `<div style="max-width:960px;margin:0 auto;padding:24px 20px" class="yoy-result-root">
@@ -1342,7 +1344,14 @@ function yoyComputeDimensions(rowsA, rowsRef, metaA, metaRef) {
   rowsA.forEach(function(r){   var m=(r.marque||'Inconnue').trim(); bMapA[m]  =(bMapA[m]  ||0)+(r.ca_cmd||0)/dA;  });
   var topBrands = Object.keys(bMapRef)
     .sort(function(a,b){ return bMapRef[b]-bMapRef[a]; }).slice(0,10)
-    .map(function(m){ return { marque:m, caRefPerDay:bMapRef[m]||0, caAPerDay:bMapA[m]||0, shareRef:caRefPerDay>0?bMapRef[m]/caRefPerDay*100:0, shareA:caAPerDay>0?(bMapA[m]||0)/caAPerDay*100:0, delta:(bMapA[m]||0)-(bMapRef[m]||0) }; });
+    .map(function(m){
+      var caRd = bMapRef[m]||0, caAd = bMapA[m]||0;
+      return { marque:m, caRefPerDay:caRd, caAPerDay:caAd,
+               shareRef:caRefPerDay>0?caRd/caRefPerDay*100:0,
+               shareA:caAPerDay>0?caAd/caAPerDay*100:0,
+               delta:caAd-caRd,
+               deltaPct:caRd>0?(caAd/caRd-1)*100:null };
+    });
 
   // ── Dim 11 — Top gagnants / perdants ─────────────────────────
   var llList = allAsins.filter(function(a){ return mapA[a]&&mapRef[a]&&(mapA[a].ca_cmd||0)>0&&(mapRef[a].ca_cmd||0)>0; })
