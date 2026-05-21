@@ -1,5 +1,5 @@
 # Claude_Orchestrateur_Context.md
-**Version :** V0.2 — 20 mai 2026
+**Version :** V0.3 — 21 mai 2026
 **Produit par :** Claude Orchestrateur (contenu)
 **Déposé sur le repo par :** Claude Code (commit + sync repo local) — Claude Code ne modifie pas le contenu
 **Transmission :** Fred fait le pont entre Orchestrateur (qui produit) et Claude Code (qui dépose)
@@ -8,7 +8,8 @@
 **Historique de versions :**
 - V0 (matin 19 mai) — création initiale, cadrage roadmap v3.6.2 → v3.11
 - V0.1 (soir 19 mai) — ajout patterns `oninput`/`render()`, CI vs `.gitignore`, `PYTHONIOENCODING` ; règle de maintenance ; statut prod v3.6.2 ; mise à jour roadmap
-- V0.2 (20 mai) — ajout sections **Personas et circuit d'achat**, **Démo commerciale cible**, **Cartographie fonctionnelle 80/20** ; arbitrage v3.6.3 tranché ; règles orchestrateur ajoutées sur le cadrage stratégique ; existence du fichier `CLAUDE_CODE_CONTEXT.md` parallèle documentée ; patterns d'erreur enrichis (forEach+await, cl() dans async callback, fonctions Buy Box dans `src/buybox.js`)
+- V0.2 (20 mai) — ajout sections **Personas et circuit d'achat**, **Démo commerciale cible**, **Cartographie fonctionnelle 80/20** ; arbitrage v3.6.3 tranché ; règles 11-13 ; patterns d'erreur enrichis
+- V0.3 (21 mai) — **scénario commercial réel** : onboarding dissimulé via YoY Étape 1 (V0.2 inversait erronément démo et onboarding) ; **segmentation marché 3 strates** ; **contrainte SEPA ETI** ; **modèle économique freemium structuré** (Free / Starter / Pro + forfaits Opus mensuels) ; **compteur IA réel page Configuration** (V0.2 ne le connaissait pas) ; règles 14-15 ; v3.6.3 fenêtre `recovered` arrêtée à 90j
 
 ---
 
@@ -42,6 +43,8 @@
 | 11 | **Avant tout cadrage de chantier**, vérifier 4 ancrages : (a) qui paie, (b) qui utilise, (c) sur quelle démo on signe, (d) quel est le livrable vendable. Si un manque, demander avant de proposer. | Cadrage en aveugle, révisions multiples en cours de session |
 | 12 | **Avant toute proposition de nouvelle fonctionnalité**, auditer l'existant (tris/filtres/exports/alertes/vues prédéfinies déjà disponibles). Le réflexe est d'inventer ; le bon réflexe est de vérifier. | Panne Zélé — fonctionnalité dupliquée |
 | 13 | **Fichier parallèle `CLAUDE_CODE_CONTEXT.md`** existe à la racine du repo, maintenu par Claude Code. Il contient TODOs hérités, checklists push, hashes versions stables, décisions archi. **Il peut diverger silencieusement** de cette mémoire orchestrateur. À chaque cadrage, vérifier si une priorité Claude Code héritée pourrait entrer en conflit avec un principe roadmap. Ne pas absorber son contenu ici. | Conflits roadmap silencieux |
+| 14 | **À la réception d'un livrable Claude Code**, vérifier l'exhaustivité contre le brief avant de considérer le livrable comme intégrable. Si une section demandée manque ou est traitée superficiellement, demander complément avant de capitaliser dans la mémoire orchestrateur. | Mémoire orchestrateur figée sur trous (cf. audit 20 mai : page Configuration et compteur IA oubliés) |
+| 15 | **Toute mécanique de paiement** doit être compatible **mandat SEPA / virement** (cycle 30 j fin de mois), pas carte bancaire. Les ETI cibles n'ont pas ou peu de cartes corporate disponibles ; leur service comptable refuse les engagements à plafond non défini. Forfaits prévisibles ≫ PAYG instantané. | Friction commerciale, échec d'acquisition sur la cible principale |
 
 ---
 
@@ -73,12 +76,14 @@ Patterns observés et corrigés à de multiples reprises. Si je détecte que je 
 - **Localisation fonctions Buy Box** : toutes les fonctions Buy Box sont dans `src/buybox.js`, **pas** dans `src/core.js` malgré ce que disent certaines INSTRUCTIONS Claude Code. Tout brief touchant Buy Box doit pointer `src/buybox.js`. (Discordance documentée v3.6.1+)
 - **Optimisation locale sur question globale** : quand Fred pose ce qui semble être un arbitrage binaire mais qui repose sur des fondations non discutées (acheteur, personas, démo cible), **remonter aux fondations avant d'arbitrer**. Pattern observé en session du 20 mai sur arbitrage v3.6.3 → 4 révisions au lieu d'une seule décision propre. (Panne Dériveur prolongée)
 - **Production en aveugle pour "avancer dans la session"** : envie de rédiger un brief, une roadmap, un livrable parce que la session avance sans production concrète. Symptôme : commencer à écrire avant d'avoir l'info nécessaire. Garde-fou : si je suis sur le point d'écrire un livrable sans avoir lu un fichier que Fred vient de m'envoyer, ou en interpolant des fonctionnalités existantes, **m'arrêter**. (Identifié 20 mai)
+- **Métaphore métier prise au pied de la lettre** : Fred utilise une métaphore ("démo live", "outil tournant") pour décrire un mécanisme commercial → je cadre l'outil produit sur la métaphore, sans questionner le scénario commercial complet. **Remède** : à chaque fois qu'un mot-clé métier apparaît (démo, présentation, onboarding, conversion, etc.), reformuler le scénario en 5 actes "qui fait quoi, où, quand" avant de cadrer. (Identifié 21 mai — V0.2 avait inversé démo et onboarding dissimulé).
+- **Audit de livrable Claude Code non vérifié contre brief** : à la réception d'un livrable Claude Code, je dois confronter les sections présentes vs sections demandées dans mon brief initial. Sinon je capitalise sur des trous (cf. audit fonctionnel 20 mai — page Configuration et compteur IA absents). C'est la règle 14 formalisée. (Identifié 21 mai)
 
 ---
 
-## PERSONAS ET CIRCUIT D'ACHAT (V0.2)
+## PERSONAS, CIBLE ET SCÉNARIO COMMERCIAL (V0.3 — refonte)
 
-**Cette section est la boussole stratégique. La relire à chaque session de cadrage produit/roadmap.**
+**Cette section est la boussole stratégique. La relire à chaque session de cadrage produit/roadmap/pricing.**
 
 ### Persona 1 — Le Directeur (cible commerciale, acheteur)
 - **Rôle** : Directeur Commercial / COO / CEO chez la marque vendeuse Amazon
@@ -92,22 +97,43 @@ Patterns observés et corrigés à de multiples reprises. Si je détecte que je 
 - **Ce qui lui manque** : Un mécanisme d'éveil aux dérives silencieuses du 80/20 (érosion lente sur la longue traîne, invisible à grande échelle).
 - **Ce qu'il utilise** : Buy Box opérationnelle (cas Phase 2), Appros, Analyse ASINs, Revue Hebdo.
 
-### Circuit d'achat
-- **Acheteur** : Directeur (Co/COO/CEO)
-- **Utilisateur quotidien** : KAM (utilisateur secondaire, non payeur)
-- **Cobayes actuels** : Cogex Outillage + Gers Équipement (que Fred garde de toute façon comme clients)
-- **Cible commerciale** : tous les autres prospects à partir de l'été 2026
-- **Urgence** : "Le plus vite possible" — pour signer + pour usage propre Fred sur Cogex/Gers
+### Segmentation marché — 3 strates (V0.3)
 
-### Démo commerciale cible — convergence YoY ↔ Buy Box
+| Strate | CA VC | Organisation | Account Manager Amazon | Cible Amazon Pilot |
+|---|---|---|---|---|
+| **Top tier** | > 10 M€ (ex. SEB) | Équipes web/marketing dédiées | Dédié | ❌ Hors cible — Amazon Pilot vient en frontal avec leur organisation interne |
+| **Mid tier** | 2,5 → 10 M€ | AM Amazon partagé (norme : 40 comptes/AM), pas d'expertise interne | Partagé | ✅ **Cible principale** — "ils pataugent" |
+| **Bas du milieu** | < 2,5 M€ | Aucun AM Amazon (seuil minimum 2,5 M€) | Aucun | ✅ **Cible secondaire** — les plus paniqués |
 
-Démo live structurée en 4 actes :
-1. On entre des données réelles YoY du prospect
-2. Le rapport 4 étapes se déroule sous ses yeux (Constat → Warning → Enquête → Rendu béotien)
-3. **Pendant ce temps**, la rubrique Buy Box converge automatiquement : les ASINs identifiés par YoY remontent en haut de la liste Buy Box
-4. Le directeur voit la chaîne complète : *"voici le problème → voici le détail → voici ce que mon KAM va traiter"*
+**Levier de conversion clé** : la **panique du directeur** + l'**incapacité à exploiter un constat sans expertise VC ou outil opérationnel**. Vendor Central est complexe : il faut des années pour maîtriser les arcanes (Suppression, Buy Box, défauts livraison, BOL Mismatch, etc.).
 
-**Implication roadmap** : la convergence n'est pas un nice-to-have, c'est la démonstration. Tous les chantiers se mesurent à l'aune de "ce que la démo a besoin pour fonctionner".
+**Verrou anti-concurrence cabinet conseil** : Amazon Pilot ne livre pas qu'un diagnostic (n'importe quel cabinet le fait à 5 k€ la prestation). Il livre **l'outil opérationnel récurrent post-diagnostic** (Buy Box, Appros, Revue Hebdo). C'est ce qui justifie l'abonnement mensuel.
+
+### Scénario commercial réel — onboarding dissimulé (V0.3 — correction V0.2)
+
+**⚠ V0.2 avait mal cadré ce scénario en "démo live"**. La vraie mécanique est : **le travail facturable et la démo sont la même chose**. La frontière "vente vs prestation" est volontairement floue.
+
+Scénario en 5 actes :
+
+| Acte | Action | Lieu |
+|---|---|---|
+| 1 | Prospect contacte Fred : *"je perds du CA, je ne comprends pas pourquoi"* | Téléphone/visio |
+| 2 | **NDA signé**. Fred récupère les CSV YoY du prospect (2 mois A-1 vs 2 mois A) | Mail/Drive |
+| 3 | Fred importe les données dans Amazon Pilot (compte dédié au prospect) | Amazon Pilot — Import |
+| 4 | Amazon Pilot **crache l'analyse brute YoY Étape 1** : tableau de constat factuel | Amazon Pilot — rubrique YoY (à construire) |
+| 5 | Pour aller plus loin (Étapes 2, 3, 4), il manque des données → Amazon Pilot **propose d'injecter ce qui manque** = onboarding dissimulé. Bascule prospect → client. | Amazon Pilot — interface |
+
+**Conséquences design** :
+- Amazon Pilot doit **fonctionner en mode "données partielles"** dès le premier import
+- Les imports complémentaires doivent être **proposés de manière fluide** au fil de l'analyse, pas centralisés dans un onboarding monolithique
+- Le prospect **ne réalise pas** qu'il est en train de devenir client — il remplit des trous dans son diagnostic
+- **L'anonymiseur Cogex / mode démo n'est pas nécessaire** — toutes les démos se font sur les données réelles du prospect sous NDA (sort de la roadmap, ne pas y revenir)
+
+### Implications confidentialité
+
+- Fred ne diffuse **jamais** les données réelles d'un client à un autre (Cogex en démo Gers, Gers en démo prospect, etc.)
+- Chaque prospect/client a son **compte isolé** dans Amazon Pilot (déjà le cas via le multi-clients)
+- Pour une démo "salon/conférence" sans NDA préalable : utiliser un compte Vitajardin/Fred propre ou un compte test générique. Cas marginal — pas de chantier dédié à ce jour.
 
 ### Stratégie YoY ↔ Buy Box
 YoY et Buy Box ne sont pas concurrents — **ils servent des personas différents et se complètent** :
@@ -117,7 +143,72 @@ YoY et Buy Box ne sont pas concurrents — **ils servent des personas différent
 | Directeur | YoY (Étapes 1 à 4) | Macro / agrégat / diagnostic |
 | KAM | Buy Box (Phase 1 + Phase 2) | Micro / opérationnel / traitement |
 
-**Le mécanisme d'éveil au 80/20** est le pont entre les deux : c'est ce qui force le KAM à regarder ce qu'il ignore par défaut, parce que le rapport l'a remonté au directeur.
+**Le mécanisme d'éveil au 80/20** est le pont entre les deux : c'est ce qui force le KAM à regarder ce qu'il ignore par défaut, parce que le rapport l'a remonté au directeur. À cadrer en v3.9 ou v3.10.
+
+---
+
+## MODÈLE ÉCONOMIQUE FREEMIUM (V0.3 — structuré)
+
+### Vue d'ensemble
+
+| Plan | Tarif mensuel | Contenu IA | Compatible mandat SEPA |
+|---|---|---|---|
+| **Free** | 0 € | Sonnet 4.6 — 2-3 analyses IA/mois max (rate-limit strict) | N/A |
+| **Starter** | 79 € | Sonnet 4.6 — quota raisonnable (à calibrer empiriquement, ~50-100 analyses/mois) | ✅ |
+| **Pro** | 149 € | Sonnet 4.6 — illimité raisonnable | ✅ |
+| **Add-on Opus S** | +19 €/mois | 50 analyses Opus 4.7 / mois | ✅ |
+| **Add-on Opus L** | +49 €/mois | 200 analyses Opus 4.7 / mois | ✅ |
+| Marché supplémentaire | +29 €/mois | (existant V0.2) | ✅ |
+| Utilisateur supplémentaire | +19 €/mois | À revoir (incohérence connue V0.2) | ✅ |
+
+**Tous les chiffres ci-dessus sont à confirmer empiriquement** après mesure réelle des coûts IA via le compteur Configuration (voir section ci-dessous).
+
+### Module Free YoY Étape 1 — calibrage validé (V0.3)
+
+| Élément Étape 1 | Free | Pro |
+|---|---|---|
+| Chiffre choc agrégé (X € perdus, Y ASINs touchés, % du CA) | ✅ | ✅ |
+| Liste ASINs avec CA, delta, marché | ✅ | ✅ |
+| Ventilation par segment (A/B/C) | ✅ | ✅ |
+| Ventilation par marché | ✅ | ✅ |
+| **Cause par ASIN** (Suppression, Buy Box, etc.) | ❌ | ✅ |
+| **Plan d'action priorisé** | ❌ | ✅ |
+| **Rendu béotien (rapport Word)** | ❌ | ✅ |
+| **Enquête détaillée (classification 4 catégories)** | ❌ | ✅ |
+
+**Logique** : le constat sans la suite n'est pas exploitable par la cible (mid-tier qui pataugent + bas-du-milieu paniqués). Le Free crée la conviction "j'ai un problème" ; le Pro donne "voici quoi faire".
+
+### Pricing Opus 4.7 — Piste "forfaits mensuels" validée (V0.3)
+
+**Pourquoi forfaits mensuels et pas PAYG instantané** :
+- Cible ETI = paiement par mandat SEPA, pas carte bancaire
+- Service comptable refuse les "ardoises illimitées" auto-rechargeables
+- Cycle de facturation prévisible = montant fixe mensuel = comptable client serein
+- Pas de gestion "solde de crédits" côté Amazon Pilot (simplification UI)
+
+**Avantage business** : la sous-utilisation génère de la marge (forfait payé même si non consommé).
+
+**Inconvénient** : moins flexible qu'un PAYG pur. Accepté en l'état.
+
+### Garde-fous coûts IA (V0.3)
+
+- **Free** : rate-limit strict (2-3 analyses/mois) + modèle **Sonnet 4.6 imposé** (jamais Opus 4.7 en Free)
+- **Starter/Pro** : Sonnet 4.6 illimité raisonnable, Opus uniquement via add-on payant
+- **Mesure réelle** : compteur IA présent page **Configuration** d'Amazon Pilot (voir section Compteur IA)
+
+### Pièges freemium analysés et bouclés (V0.3)
+
+| Piège | État | Mitigation |
+|---|---|---|
+| Free trop puissant mange le payant | ✅ Non bloquant | Calibrage : constat ✅ Free, causes/plan/enquête ❌ Pro |
+| Coût IA Free incontrôlable | ✅ Non bloquant | Rate-limit + Sonnet imposé. Coût mesuré ~0,03 €/appel. Sur 100 prospects Free/mois ≈ 5-20 € de coût IA total. |
+| Rétention Free → Payant fragile | ✅ Non bloquant | Couvert par Piège 1 : la cible pataugue, ne peut pas exploiter le constat seul |
+
+### Reste à arbitrer (V0.3 — backlog modèle économique)
+
+- Quotas exacts Starter/Pro (à calibrer après mesure réelle)
+- Mécanique facture pro-forma / Chorus Pro pour clients publics éventuels
+- Incohérence connue V0.2 sur "facturation par utilisateur ET par compte VC = factures 800 €+/mois trop vite" → à reprendre dans un cadrage modèle économique dédié
 
 ---
 
@@ -168,8 +259,8 @@ YoY et Buy Box ne sont pas concurrents — **ils servent des personas différent
 | Version | Étape | Statut / Délai | Contenu |
 |---|---|---|---|
 | **v3.6.2** | Préalable | ✅ **Livrée prod** 19 mai (merge `01656bc`) | Header avec moteur de recherche ASIN transversal + rebranchement Buy Box / Appros / Prévisionnel sur `getFilteredAsins` |
-| **v3.6.3** | Prérequis démo | ✅ **Tranché** 20 mai — items (c) + (d) uniquement, ~1.5 j Claude Code | (c) Causes en colonne Phase 1 Buy Box (champ `cause` déjà présent dans `calcBuyBoxAlerts`) + (d) statuts `fragile`/`recovered`. Items (a) croisement défauts × ASIN et (b) filtres cycle de vie reportés (bloqués techniquement). |
-| **v3.8** | YoY Étape 1 | 3 sem | Constat factuel — tableau de bord YoY brut |
+| **v3.6.3** | Prérequis | ✅ **Brief finalisé** 21 mai — fenêtre `recovered` = 90 j (cohérence KPI "Résolus 90 j"). ~1,5 j Claude Code | (c) Causes en colonne Phase 1 Buy Box + (d) statuts `fragile`/`recovered` avec fenêtre 90 j. Items (a) croisement défauts × ASIN et (b) filtres cycle de vie reportés v3.12 (bloqués techniquement). **NB** : ce chantier n'est plus un "prérequis démo" comme noté en V0.2 — il sert l'opérationnel KAM, la démo prospect passe par YoY pas par Buy Box. |
+| **v3.8** | YoY Étape 1 | 3 sem | Constat factuel — tableau de bord YoY brut. **Module hameçon freemium** : c'est cette étape qui est offerte en Free (calibrée pour donner envie de passer Pro). Voir section Modèle économique freemium. |
 | **v3.9** | YoY Étape 2 | 1 sem | Warnings — règles d'alerte visuelles. **Candidat naturel pour le mécanisme d'éveil 80/20** (alerte cumulative longue traîne, KPI agrégé "X ASINs longue traîne en érosion = Y €/mois"). |
 | **v3.10** | YoY Étape 3a | 4 sem | Enquête ASINs disparus — classification 4 catégories |
 | **v3.11** | YoY Étape 4 | 3 sem | Rendu béotien — export Word + narrative IA Claude. **Livrable commercialement vendable** au directeur. |
@@ -209,6 +300,17 @@ Cette cartographie évite le piège **Zélé** (proposer un mécanisme nouveau a
 - **Analyse IA** disponible sur : Revue Hebdo (Diagnostic / Opportunités / Risques), Diagnostic CA (`runAI('decline')`), Appros, fiche détail ASIN.
 - **Script VC publication** dans Agent SEO/VC — prompt prêt à coller dans Claude in Chrome.
 
+#### Page Configuration — compteur IA (V0.3 — découvert par capture Fred)
+**Distinct de "Fiche client"** dans la sidebar. Audit du 20 mai l'avait sauté (audit optionnel non livré). Contenu vu :
+- **Sélecteur de modèle IA** : Sonnet 4.6 (Standard ~0,01 €/appel) ou Opus 4.7 (Premium ~0,08 €/appel)
+- **Consommation session en cours** : appels, tokens in/out, coût €
+- **Détail par feature** : Revue, SEO, SEO enrich, etc. (toutes les features IA consommées)
+- **Historique cumulé (N derniers appels)** : tokens cumulés, coût total
+- **Smoke test** : 8/8 vitaux + 7/7 importants (validation santé app)
+- **Bouton "Lancer" smoke test**
+
+**Données mesurées Cogex (capture 21 mai)** : 90 appels cumulés = 2,93 € total. Coût moyen ~0,033 €/appel toutes features confondues. **Référence empirique fiable** pour calibrer le modèle économique.
+
 #### Bugs/incohérences UI repérés à l'audit (à creuser)
 - **Buy Box Phase 1** : filtre cycle de vie "Best / Permanent / Fin de vie" **visuellement présent mais sans effet fonctionnel** en v3.6.2 (`codeVie` non joint à `c.asins`).
 - **Tabs Buy Box Phase 1** : "Fragile" et "Récupérées" toujours vides en v3.6.2 — résolus par v3.6.3 (item d).
@@ -221,12 +323,10 @@ Cette cartographie évite le piège **Zélé** (proposer un mécanisme nouveau a
 - **Cogex Outillage** — marché FR — codes vendor `COGEX` et `3J6MN` — préfixe S3 `cogex/`
 - **Gers Équipement** — marchés FR+ES+NL+DE+BE+IT — préfixe S3 `gers/` — multi-comptes ("Bon de Commande" GERS FR + "Fournisseurs catalogue" un par marché)
 
-### Modèle économique (validé mais à revoir sur paramétrage)
-- **Free** 0 € : Dashboard + Revue Hebdo + Buy Box alertes — 500 ASINs FR
-- **Starter** 79 €/mois : + Appros complet + Buy Box plan d'action + Imports illimités — 2000 ASINs FR
-- **Pro** 149 €/mois : + SEO + SWOT + Multi-marchés — ASINs illimités FR+ES+DE+IT+NL+BE
-- **Pay as you go** : 2 €/analyse IA, 5 €/rapport PDF, 29 €/marché supp, 19 €/utilisateur supp
-- **Incohérence connue** : facturation par utilisateur ET par compte VC = factures 800 €+/mois trop vite. À ajuster.
+### Modèle économique
+**Voir section "MODÈLE ÉCONOMIQUE FREEMIUM (V0.3)" plus haut** pour la structure complète : Free / Starter / Pro + add-ons Opus + contraintes paiement SEPA.
+
+Repères courts : Free 0 € (Sonnet rate-limit), Starter 79 €/mois, Pro 149 €/mois, Add-ons Opus 19 € ou 49 €/mois. Tous chiffres à confirmer empiriquement via le compteur IA Configuration.
 
 ---
 

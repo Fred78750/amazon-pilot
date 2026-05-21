@@ -373,6 +373,24 @@ function computeBuyboxFacts(c, asin) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// BUY BOX v3.6.3 — Helpers affichage Phase 1
+// ═══════════════════════════════════════════════════════════════════
+
+function buyboxCauseLabel(cause) {
+  switch (cause) {
+    case 'suppression':    return { icon: '🚫', label: 'Suppression listing',   color: 'var(--r)'   };
+    case 'po_unconfirmed': return { icon: '📦', label: 'PO non confirmé',        color: 'var(--or)'  };
+    case 'stock':          return { icon: '📉', label: 'Stock insuffisant',      color: 'var(--or)'  };
+    case 'prix_3p':        return { icon: '💰', label: 'Concurrent 3P probable', color: 'var(--r)'   };
+    case 'surveillance':   return { icon: '👁️', label: 'À surveiller',           color: 'var(--tx3)' };
+    case 'ok':             return { icon: '✓',  label: '—',                     color: 'var(--tx3)' };
+    case 'fragile_trend':  return { icon: '⚠️', label: 'Dégradation 2 sem.',    color: 'var(--or)'  };
+    case 'recovered':      return { icon: '✅', label: 'Récupérée',             color: 'var(--g)'   };
+    default:               return { icon: '?',  label: cause || '—',            color: 'var(--tx3)' };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // BUY BOX v3.6.1 — renderBuyBox() Phase 1 : Identifier
 // ═══════════════════════════════════════════════════════════════════
 
@@ -398,22 +416,70 @@ function renderBuyBox() {
   var alerts = calcBuyBoxAlerts(cFiltered);
   var lost        = alerts.critical;
   var compromised = alerts.warning;
-  var fragile     = [];   // v3.6.1 : toujours vide (dérivation v3.6.2)
-  var recovered   = [];   // v3.6.1 : toujours vide (cas fermés success — dérivation v3.6.2)
+  // (d.1) fragile : rPct > 0 + delta négatif sur 2 semaines consécutives dans l'historique
+  var fragile = (function() {
+    var result = [];
+    var totalCA = (cFiltered.asins || []).reduce(function(s, x) { return s + (getRevenue(x, c) || 0); }, 0);
+    (cFiltered.asins || []).forEach(function(a) {
+      var rPct = parseNum(String(a.retailPct || '').replace(',', '.').replace(/[^0-9.]/g, ''));
+      if (!(rPct > 0)) return;                     // exclut les Perdus (rPct=0)
+      var hist = a.history || [];
+      if (hist.length < 3) return;                 // pas assez d'historique (< 3 semaines)
+      var s0 = parseNum(String((hist[hist.length - 1].retailPct || '').toString()).replace(',', '.').replace(/[^0-9.]/g, ''));
+      var s1 = parseNum(String((hist[hist.length - 2].retailPct || '').toString()).replace(',', '.').replace(/[^0-9.]/g, ''));
+      var s2 = parseNum(String((hist[hist.length - 3].retailPct || '').toString()).replace(',', '.').replace(/[^0-9.]/g, ''));
+      if ((s0 - s1) < 0 && (s1 - s2) < 0) {
+        var rev = getRevenue(a, c) || 0;
+        result.push({ asin: a.asin, title: a.title, brand: a.brand, market: a.market,
+          rPct: rPct, prevRetail: s1, delta: s0 - s1, cause: 'fragile_trend',
+          revenue: rev, caMonthEst: rev * 4.33, criticite: rev * 4.33 * Math.abs((s0 - s1) / 100),
+          segment: calcSegment(a, totalCA, c),
+          sellableUnits: a.sellableUnits, couvertureSem: null, joursAvantLimite: null, stockUrgent: false });
+      }
+    });
+    return result;
+  }());
+
+  // (d.2) recovered : cas Phase 2 fermés success dans les 90 derniers jours + rPct >= 95
+  var recovered = (function() {
+    var NOW = Date.now();
+    var WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
+    var totalCA = (cFiltered.asins || []).reduce(function(s, x) { return s + (getRevenue(x, c) || 0); }, 0);
+    var closedCases = buyboxGetCases(c).filter(function(cs) {
+      if (cs.status !== 'closed') return false;
+      if (!cs.conclusion || cs.conclusion.outcome !== 'success') return false;
+      if (!cs.closedAt) return false;
+      return (NOW - new Date(cs.closedAt).getTime()) <= WINDOW_MS;
+    });
+    return closedCases.map(function(cs) {
+      var a = (cFiltered.asins || []).find(function(x) { return x.asin === cs.asin; });
+      if (!a) return null;
+      var rPct = parseNum(String(a.retailPct || '').replace(',', '.').replace(/[^0-9.]/g, ''));
+      if (rPct < 95) return null;
+      var rev = getRevenue(a, c) || 0;
+      return { asin: a.asin, title: a.title, brand: a.brand, market: a.market,
+        rPct: rPct, prevRetail: null, delta: 0, cause: 'recovered',
+        revenue: rev, caMonthEst: rev * 4.33, criticite: 0,
+        segment: calcSegment(a, totalCA, c),
+        sellableUnits: a.sellableUnits, couvertureSem: null, joursAvantLimite: null, stockUrgent: false };
+    }).filter(Boolean);
+  }());
 
   // Filtrage marché
   var marketFilter = window._buyboxMarket || 'all';
   var byMarket = function(e) { return marketFilter === 'all' || e.market === marketFilter; };
   var lostF       = lost.filter(byMarket);
   var compromisedF= compromised.filter(byMarket);
+  var fragileF    = fragile.filter(byMarket);
+  var recoveredF  = recovered.filter(byMarket);
 
   // Tab actif
   var activeTab = window._buyboxTab || 'lost';
   var sortBy = window._buyboxSort || 'criticite';
   var displayList = (activeTab === 'lost'        ? lostF
                    : activeTab === 'compromised' ? compromisedF
-                   : activeTab === 'fragile'     ? fragile
-                   : recovered).slice();
+                   : activeTab === 'fragile'     ? fragileF
+                   : recoveredF).slice();
   displayList.sort(function(a, b) {
     if (sortBy === 'criticite') return (b.criticite || 0) - (a.criticite || 0);
     return (b.caMonthEst || 0) - (a.caMonthEst || 0);
@@ -500,8 +566,8 @@ function renderBuyBox() {
   var tabs = [
     { id: 'lost',        label: 'Perdue',       count: lostF.length },
     { id: 'compromised', label: 'Compromise',   count: compromisedF.length },
-    { id: 'fragile',     label: 'Fragile',      count: 0 },
-    { id: 'recovered',   label: 'Récupérées',   count: 0 }
+    { id: 'fragile',     label: 'Fragile',      count: fragileF.length },
+    { id: 'recovered',   label: 'Récupérées',   count: recoveredF.length }
   ];
   tabs.forEach(function(t) {
     var isActive = activeTab === t.id;
@@ -553,8 +619,9 @@ function renderBuyBox() {
       // Δ S-1
       h += '<div style="text-align:right;color:' + deltaColor + ';">' + deltaStr + '</div>';
 
-      // Cause suspectée (v3.6.1 : statique)
-      h += '<div><span style="color:var(--tx3);font-size:11px;">—</span></div>';
+      // Cause suspectée (v3.6.3 : dynamique)
+      var causeMeta = buyboxCauseLabel(entry.cause);
+      h += '<div><span style="color:' + causeMeta.color + ';font-size:11px;">' + causeMeta.icon + ' ' + causeMeta.label + '</span></div>';
 
       // CA/mois
       h += '<div style="text-align:right;color:var(--tx2);">' + fmtCA(rev) + '</div>';
