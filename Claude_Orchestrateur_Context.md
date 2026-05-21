@@ -1,5 +1,5 @@
 # Claude_Orchestrateur_Context.md
-**Version :** V0.3 — 21 mai 2026
+**Version :** V0.4 — 21 mai 2026 (fin de journée)
 **Produit par :** Claude Orchestrateur (contenu)
 **Déposé sur le repo par :** Claude Code (commit + sync repo local) — Claude Code ne modifie pas le contenu
 **Transmission :** Fred fait le pont entre Orchestrateur (qui produit) et Claude Code (qui dépose)
@@ -7,9 +7,10 @@
 
 **Historique de versions :**
 - V0 (matin 19 mai) — création initiale, cadrage roadmap v3.6.2 → v3.11
-- V0.1 (soir 19 mai) — ajout patterns `oninput`/`render()`, CI vs `.gitignore`, `PYTHONIOENCODING` ; règle de maintenance ; statut prod v3.6.2 ; mise à jour roadmap
-- V0.2 (20 mai) — ajout sections **Personas et circuit d'achat**, **Démo commerciale cible**, **Cartographie fonctionnelle 80/20** ; arbitrage v3.6.3 tranché ; règles 11-13 ; patterns d'erreur enrichis
-- V0.3 (21 mai) — **scénario commercial réel** : onboarding dissimulé via YoY Étape 1 (V0.2 inversait erronément démo et onboarding) ; **segmentation marché 3 strates** ; **contrainte SEPA ETI** ; **modèle économique freemium structuré** (Free / Starter / Pro + forfaits Opus mensuels) ; **compteur IA réel page Configuration** (V0.2 ne le connaissait pas) ; règles 14-15 ; v3.6.3 fenêtre `recovered` arrêtée à 90j
+- V0.1 (soir 19 mai) — patterns `oninput`/`render()`, CI vs `.gitignore`, `PYTHONIOENCODING` ; règle de maintenance ; statut prod v3.6.2 ; mise à jour roadmap
+- V0.2 (20 mai) — sections **Personas et circuit d'achat**, **Démo commerciale cible**, **Cartographie fonctionnelle 80/20** ; arbitrage v3.6.3 tranché ; règles 11-13 ; patterns d'erreur enrichis
+- V0.3 (21 mai matin) — **scénario commercial réel** (onboarding dissimulé) ; **segmentation marché 3 strates** ; **contrainte SEPA ETI** ; **modèle économique freemium structuré** ; **compteur IA page Configuration** ; règles 14-15 ; v3.6.3 fenêtre `recovered` arrêtée à 90j
+- V0.4 (21 mai fin de journée) — **refonte numérotation versions** (v3.6.x.y, v3.7 réservé archi) ; **merge prod opportuniste** ; **stratégie format ERP** (modèle fourni) ; **v3.6.4 = Parser ERP universel** (en attente Gers) ; **méthodologie YoY Étape 1** (grille 12 Free + 4 Pro, formalisée en skill séparé) ; **3 patterns d'erreur supplémentaires** identifiés en session 21 mai ; correction roadmap (suppression v3.8 → v3.13)
 
 ---
 
@@ -45,6 +46,9 @@
 | 13 | **Fichier parallèle `CLAUDE_CODE_CONTEXT.md`** existe à la racine du repo, maintenu par Claude Code. Il contient TODOs hérités, checklists push, hashes versions stables, décisions archi. **Il peut diverger silencieusement** de cette mémoire orchestrateur. À chaque cadrage, vérifier si une priorité Claude Code héritée pourrait entrer en conflit avec un principe roadmap. Ne pas absorber son contenu ici. | Conflits roadmap silencieux |
 | 14 | **À la réception d'un livrable Claude Code**, vérifier l'exhaustivité contre le brief avant de considérer le livrable comme intégrable. Si une section demandée manque ou est traitée superficiellement, demander complément avant de capitaliser dans la mémoire orchestrateur. | Mémoire orchestrateur figée sur trous (cf. audit 20 mai : page Configuration et compteur IA oubliés) |
 | 15 | **Toute mécanique de paiement** doit être compatible **mandat SEPA / virement** (cycle 30 j fin de mois), pas carte bancaire. Les ETI cibles n'ont pas ou peu de cartes corporate disponibles ; leur service comptable refuse les engagements à plafond non défini. Forfaits prévisibles ≫ PAYG instantané. | Friction commerciale, échec d'acquisition sur la cible principale |
+| 16 | **Numérotation versions** : `v3.6.x` = chantier fonctionnel majeur (x croissant), `v3.6.x.y` = patch/correction sur le chantier x (y croissant à partir de 1), `v3.7` réservé à la refacto archi modulaire. Pas de ripage : si bug en v3.6.7, le fix est v3.6.7.1, pas v3.6.8. Le mapping "chantier ↔ v3.6.x" est figé à l'ouverture du chantier dans la roadmap. | Confusion roadmap commerciale, perte de traçabilité chantier ↔ version |
+| 17 | **Merge prod opportuniste** : un chantier validé en preprod n'est pas mergé en prod automatiquement. Le merge prod se déclenche quand (a) le chantier seul justifie la friction (impact client, bug critique), ou (b) le chantier est groupé avec un chantier suivant qui justifie la friction. Pour les enrichissements mineurs, accumuler en preprod et merger en lot. À chaque cadrage de chantier, vérifier ce qui est "en attente preprod". | Friction inutile (invalidations CloudFront, communications), accumulation de risque résiduel non maîtrisée |
+| 18 | **Avant toute analyse de dataset** (CSV/Excel/JSON), lister explicitement toutes les colonnes disponibles ET justifier celles que je n'utilise pas. Sinon je présume que je sais où va l'analyse et je laisse les colonnes inutilisées invisibles. Anti-rail mental. (Identifié 21 mai par test à l'aveugle confronté à Opus 4.7 + ChatGPT 5.5) | Analyse appauvrie, dimensions ignorées par paresse, valeur perçue dégradée |
 
 ---
 
@@ -78,6 +82,10 @@ Patterns observés et corrigés à de multiples reprises. Si je détecte que je 
 - **Production en aveugle pour "avancer dans la session"** : envie de rédiger un brief, une roadmap, un livrable parce que la session avance sans production concrète. Symptôme : commencer à écrire avant d'avoir l'info nécessaire. Garde-fou : si je suis sur le point d'écrire un livrable sans avoir lu un fichier que Fred vient de m'envoyer, ou en interpolant des fonctionnalités existantes, **m'arrêter**. (Identifié 20 mai)
 - **Métaphore métier prise au pied de la lettre** : Fred utilise une métaphore ("démo live", "outil tournant") pour décrire un mécanisme commercial → je cadre l'outil produit sur la métaphore, sans questionner le scénario commercial complet. **Remède** : à chaque fois qu'un mot-clé métier apparaît (démo, présentation, onboarding, conversion, etc.), reformuler le scénario en 5 actes "qui fait quoi, où, quand" avant de cadrer. (Identifié 21 mai — V0.2 avait inversé démo et onboarding dissimulé).
 - **Audit de livrable Claude Code non vérifié contre brief** : à la réception d'un livrable Claude Code, je dois confronter les sections présentes vs sections demandées dans mon brief initial. Sinon je capitalise sur des trous (cf. audit fonctionnel 20 mai — page Configuration et compteur IA absents). C'est la règle 14 formalisée. (Identifié 21 mai)
+- **Bloc de questions au lieu de séquence** : je propose plusieurs questions en parallèle quand Fred peut traiter une par une. Coût : ergonomie de la réponse + cadrage en aveugle si Fred répond globalement. **Remède** : 1 question à la fois quand Fred est en mode "deepdive" ou quand le sujet est dense. Plusieurs questions OK uniquement pour des arbitrages mineurs et clairement séparés. (Identifié 21 mai — répété 2 fois dans la même session)
+- **Roadmap V0.x reconstruite sans relire les récaps de session antérieurs** : à chaque nouvelle version du contexte, **balayer les récaps antérieurs** dans `/mnt/project/` pour ne pas perdre les décisions actées hors V0.x. Cas concret : v3.7 archi cadré dans le récap du 18 mai, manqué dans V0.3, ressorti par Fred en session 21 mai. (Identifié 21 mai — pattern Silencieux)
+- **Rail mental dans analyse de données** : quand je crois savoir où l'analyse va atterrir, je me concentre sur les colonnes qui servent l'hypothèse et j'ignore les autres. Garde-fou : règle 18 (lister toutes colonnes, justifier celles non utilisées). Cas concret : analyse Cogex 21 mai, j'ai utilisé 2 colonnes sur 9 dans 3 itérations successives ; Opus 4.7 et ChatGPT 5.5 en aveugle ont balayé les 9 colonnes spontanément. (Identifié 21 mai)
+- **Demander à Fred d'arbitrer sur des hypothèses orchestrateur** : si je ne sais pas ce qu'une proposition Claude Code veut dire ou si une donnée technique me manque, ne pas extrapoler et demander à Fred. **La bonne escalade est de rédiger des questions à Claude Code et Fred fait le pont**. Fred n'est pas là pour combler mes trous d'info techniques. (Identifié sessions précédentes, ressorti 20 mai sur arbitrage v3.6.3)
 
 ---
 
@@ -254,26 +262,69 @@ YoY et Buy Box ne sont pas concurrents — **ils servent des personas différent
 | **Staging (CI)** | v3.6.2 (`665d4cb`) |
 | **Preprod** | v3.6.2 (`665d4cb`) |
 
-### Roadmap validée — cible commercialisation été 2026
+### Roadmap validée — cible commercialisation été 2026 (refonte V0.4)
 
-| Version | Étape | Statut / Délai | Contenu |
+**Convention de numérotation (règle 16)** : `v3.6.x` = chantiers fonctionnels jusqu'à la commercialisation ; `v3.6.x.y` = patches ; `v3.7` réservé refacto archi modulaire post-commercialisation.
+
+| Version | Libellé sémantique | Statut / Délai | Contenu |
 |---|---|---|---|
-| **v3.6.2** | Préalable | ✅ **Livrée prod** 19 mai (merge `01656bc`) | Header avec moteur de recherche ASIN transversal + rebranchement Buy Box / Appros / Prévisionnel sur `getFilteredAsins` |
-| **v3.6.3** | Prérequis | ✅ **Brief finalisé** 21 mai — fenêtre `recovered` = 90 j (cohérence KPI "Résolus 90 j"). ~1,5 j Claude Code | (c) Causes en colonne Phase 1 Buy Box + (d) statuts `fragile`/`recovered` avec fenêtre 90 j. Items (a) croisement défauts × ASIN et (b) filtres cycle de vie reportés v3.12 (bloqués techniquement). **NB** : ce chantier n'est plus un "prérequis démo" comme noté en V0.2 — il sert l'opérationnel KAM, la démo prospect passe par YoY pas par Buy Box. |
-| **v3.8** | YoY Étape 1 | 3 sem | Constat factuel — tableau de bord YoY brut. **Module hameçon freemium** : c'est cette étape qui est offerte en Free (calibrée pour donner envie de passer Pro). Voir section Modèle économique freemium. |
-| **v3.9** | YoY Étape 2 | 1 sem | Warnings — règles d'alerte visuelles. **Candidat naturel pour le mécanisme d'éveil 80/20** (alerte cumulative longue traîne, KPI agrégé "X ASINs longue traîne en érosion = Y €/mois"). |
-| **v3.10** | YoY Étape 3a | 4 sem | Enquête ASINs disparus — classification 4 catégories |
-| **v3.11** | YoY Étape 4 | 3 sem | Rendu béotien — export Word + narrative IA Claude. **Livrable commercialement vendable** au directeur. |
+| **v3.6.2** | Header + moteur de recherche ASIN transversal | ✅ **Livrée prod** 19 mai (merge `01656bc`) | Header avec moteur de recherche ASIN + rebranchement Buy Box / Appros / Prévisionnel sur `getFilteredAsins` |
+| **v3.6.3** | Buy Box causes + statuts fragile/recovered | ✅ **Preprod validée** (`665d4cb`) — merge prod **différé** (règle 17), à grouper avec un prochain chantier | (c) Causes en colonne Phase 1 Buy Box + (d) statuts `fragile`/`recovered` avec fenêtre 90 j (cohérence KPI "Résolus 90 j"). Items (a) croisement défauts × ASIN et (b) filtres cycle de vie reportés v3.6.9 (bloqués techniquement) |
+| **v3.6.4** | Parser ERP universel + modèle Amazon Pilot | ⏳ **En attente** fichier ERP simplifié de Gers (action Fred hors Amazon Pilot) | Parser agnostique au format ERP. Stratégie : Amazon Pilot fournit un MODÈLE Excel avec colonnes nommées attendues (SKU, Code Vie, Stock libre, Stock Amazon, Date arrivage, Qté arrivage). Client adapte son export. Tolérance synonymes courants. Pas de prévisionnel ERP (vélocité = ventes réelles Amazon). ~2-3 j Claude Code |
+| **v3.6.5** | YoY Étape 1 — Constat factuel + hameçon freemium | 🎯 **Prochain chantier à cadrer** | Tableau de bord YoY brut sur 2 mois A-1 vs 2 mois A. Suit la **grille 12 dimensions Free** (cf. skill `YOY_ETAPE_1_grille_constat.md`). Module hameçon freemium offert à 0 € pour onboarding dissimulé. ~3 sem |
+| **v3.6.6** | YoY Étape 2 — Warnings + éveil 80/20 | À cadrer | Règles d'alerte visuelles. **Candidat naturel pour le mécanisme d'éveil 80/20** (KPI agrégé "X ASINs longue traîne en érosion = Y €/mois", alerte cumulative longue traîne sur Dashboard et Revue Hebdo). ~1 sem |
+| **v3.6.7** | YoY Étape 3a — Enquête ASINs disparus | À cadrer | Classification 4 catégories des ASINs sortis (rupture vs abandon Amazon vs suppression vs autres). ~4 sem |
+| **v3.6.8** | YoY Étape 4 — Rendu béotien + export Word | À cadrer | Export Word + narrative IA Claude. **Livrable commercialement vendable** au directeur — clé de voûte de la conversion Free → Pro. ~3 sem |
 | | **── Commercialisation été 2026 ──** | | |
-| v3.12 | YoY Étape 3b | automne 2026 | Couche causale défauts livraison + BOL Mismatch — réintègre les items (a) Buy Box bloqués en v3.6.3 |
-| v3.13+ | Refacto archi modulaire | post-commercialisation | |
+| v3.6.9 | YoY Étape 3b — Couche causale défauts livraison | Automne 2026 | Réintègre les items (a) Buy Box reportés (croisement défauts × ASIN, BOL Mismatch). Nécessite import PO + jointure PO→ASIN, donc plus complexe. |
+| **v3.7** | **Refacto archi modulaire** | Post-commercialisation | 3 décisions tranchées le 18 mai : (1) `python build.py` conservé, (2) JS vanilla maintenu, (3) découpage progressif par domaine. Slot réservé — pas d'autre contenu autorisé en v3.7. |
 
-### Principes structurants roadmap
-- **4 étapes YoY traitées dans l'ordre** : Constat → Warning → Enquête → Rendu béotien. Pas de saut d'étape.
-- **Buy Box s'enrichit principalement en parasitage YoY** (item a "croisement défauts × ASIN" sortira en v3.12). **Exception** : des enrichissements UI à coût marginal (~1.5 j) avec données déjà disponibles peuvent vivre en v3.6.3 sans déranger la roadmap, **s'ils servent la démo commerciale convergence YoY ↔ Buy Box**. C'est le cas des items (c) et (d) de v3.6.3.
-- **Pas de refacto archi avant commercialisation** — acceptation de la dette technique pour tenir l'été 2026.
-- **Header moteur de recherche ASIN** = UI structurante, pas feature isolée.
-- **Tout chantier se mesure à la démo commerciale** : ce qui n'avance pas la convergence YoY ↔ Buy Box ou le rapport 4 étapes est secondaire.
+### Principes structurants roadmap (mis à jour V0.4)
+- **4 étapes YoY traitées dans l'ordre** : Constat (v3.6.5) → Warning (v3.6.6) → Enquête (v3.6.7) → Rendu béotien (v3.6.8). Pas de saut d'étape.
+- **YoY et Buy Box sont complémentaires, pas concurrents** : YoY sert le directeur (macro/diagnostic), Buy Box sert le KAM (micro/opérationnel). Le scénario commercial est l'**onboarding dissimulé via YoY Étape 1**, pas une "démo live" combinée.
+- **Buy Box s'enrichit principalement en parasitage YoY** (item a "croisement défauts × ASIN" sortira en v3.6.9 quand on aura la couche causale). Exception : enrichissements UI à coût marginal (~1,5 j) avec données déjà disponibles peuvent vivre en v3.6.x intercalaire, comme v3.6.3.
+- **Pas de refacto archi avant commercialisation** — acceptation de la dette technique pour tenir l'été 2026. v3.7 attend.
+- **v3.6.4 (Parser ERP) avant v3.6.5 (YoY Étape 1)** — ordre logique : on débloque Gers d'abord, on enchaîne YoY ensuite.
+- **Tout chantier se mesure à la conversion commerciale Free → Pro** : ce qui n'avance pas le rapport 4 étapes ou la pédagogie 80/20 du KAM est secondaire.
+- **Merge prod opportuniste (règle 17)** : v3.6.3 + v3.6.4 + v3.6.5 peuvent être groupés en un merge prod unique quand v3.6.5 sera prête, sauf urgence intercalaire.
+
+### Méthodologie YoY Étape 1 — référence skill
+
+La grille des 12 dimensions du constat YoY Étape 1 (figées suite à confrontation Opus 4.7 + ChatGPT 5.5 en session 21 mai) est formalisée dans un skill séparé pour réutilisation :
+
+**Skill** : `YOY_ETAPE_1_grille_constat.md` (à déposer dans le repo)
+
+Ce skill est lu par :
+- Claude Orchestrateur lors du cadrage du brief v3.6.5
+- Toute future session impliquant une analyse YoY (Cogex, Gers, prospect)
+
+**Principe** : ne pas re-découvrir ces dimensions à chaque chantier. Le skill fige le minimum à produire. Le brief v3.6.5 reprend la grille telle quelle et précise le rendu UI, les seuils, les tolérances.
+
+### Stratégie format ERP (V0.4)
+
+**Principe acté** : chaque client Amazon Pilot a son propre format ERP (Cogex, Gers, futurs clients = formats différents, souvent multi-feuilles, headers décalés, colonnes nommées différemment).
+
+**Solution retenue** : Amazon Pilot **fournit un modèle Excel** avec les colonnes nommées attendues. Le client adapte son export ERP à ce modèle. Cohérent avec la philosophie d'onboarding dissimulé (l'effort retombe sur le client, pas sur Fred ni sur Amazon Pilot).
+
+**Champs minimum attendus dans le modèle** :
+- **SKU** (référence article ERP — c'est le champ N° chez Gers, code SKU chez Cogex)
+- **Code Vie** (PERM, BEST, fin de vie, etc.)
+- **Stock libre** (disponible non réservé)
+- **Stock Amazon** (réservé pour Amazon — distinct du stock libre)
+- **Date prochain arrivage**
+- **Qté prochain arrivage**
+
+**Champs explicitement EXCLUS** :
+- ❌ **Prévisionnel mensuel ERP** : la vélocité doit venir des **ventes réelles Amazon**, pas des prévisions fournisseur (politique commerciale fournisseur biaise les prévisions, optimisme structurel)
+- ❌ **Configuration par client (mapping colonnes en UI)** : trop de friction à l'onboarding, le KAM ne connaît pas son format au moment de s'inscrire
+
+**Tolérance côté parser** :
+- Casse / accents
+- Synonymes courants (ex. "Stock libre" / "Stock dispo" / "Disponible")
+- Première ligne header sur ligne 1 ou ligne 2 (selon export ERP)
+- Une seule feuille active (le client doit nommer celle qu'il utilise selon le modèle)
+
+**Mini-chantier dédié** : v3.6.4 (en attente du nouveau fichier Gers simplifié — action Fred).
 
 ### Cartographie fonctionnelle Amazon Pilot v3.6.2 (audit 20 mai)
 
