@@ -1,9 +1,13 @@
 # SKILL — YoY Étape 1 : Grille de constat factuel
 **Type :** Skill méthodologique Scanderia
-**Statut :** Figé V1 — 21 mai 2026
+**Statut :** V2 — 21 mai 2026
 **Auteur :** Claude Orchestrateur (Fred Rochette / Vitajardin)
-**Source :** Confrontation à l'aveugle Claude Opus 4.7 + ChatGPT 5.5 sur dataset Cogex avril-mai 2025/2026
+**Source :** Confrontation à l'aveugle Claude Opus 4.7 + ChatGPT 5.5 sur dataset Cogex, puis enrichissement style à partir de 3 analyses ChatGPT supplémentaires (Cogex 2024 vs 2025, Cogex janv-fév vs mars-avril 2026, Gers S1 2025 vs Gers 2026 partiel)
 **Audience :** Claude Orchestrateur (cadrage brief v3.6.5) + Claude Code (implémentation) + Fred (référence méthodo)
+
+**Historique :**
+- V1 (21 mai matin) — création, grille 12 dimensions Free + 4 Pro
+- V2 (21 mai fin de journée) — ajout section "Style rédactionnel attendu" (15 patterns extraits de ChatGPT), précisions sur sanity checks parsing, clarification "Marge Amazon Retail" (pas marge industrielle)
 
 ---
 
@@ -92,14 +96,21 @@ Idem dimension 1 (brut, normalisé, projeté A-1, variation, projection annualis
 
 **Interprétation** : PMV stable → baisse pure de volume. PMV en hausse → mix prix favorable (ou retrait des SKUs bas de gamme). PMV en baisse → guerre des prix ou mix dégradé.
 
-### Dimension 4 — Marge brute YoY
+### Dimension 4 — Marge Amazon Retail YoY (PAS la marge industrielle de la marque)
 - CA expédié A-1 et A
-- COGS expédié A-1 et A
-- Marge brute A-1 et A
-- Taux de marge brute A-1 et A (en %)
+- COGS expédié A-1 et A (= prix d'achat brut payé par Amazon à la marque × unités expédiées)
+- Marge Amazon Retail A-1 et A (= CA expédié − COGS expédié)
+- Taux de marge Amazon Retail A-1 et A (en %)
 - Variation taux (en points de pourcentage)
 
-**Interprétation** : la marge peut tenir même quand le CA chute (ex. mix produit favorable). C'est un signal qualitatif important pour le directeur.
+**⚠ Précision méthodo critique (à afficher systématiquement dans le rendu)** : cette marge est la rentabilité **d'Amazon Retail sur le compte**, PAS la marge industrielle de la marque. La marge industrielle de la marque = (prix d'achat brut Amazon − coût industriel), donnée que la marque connaît seule (non disponible dans les exports VC). Confusion fréquente : ne pas écrire "marge brute" sans qualification.
+
+**Sanity check obligatoire** : sur 1 ligne du dataset (typiquement le top contributeur CA), vérifier que `COGS expédié / Unités expédiées` = prix d'achat brut connu. Exemple Cogex : COGS de la bâche B009G3EMDI / 3 651 unités = 1,92 € (prix d'achat brut Cogex → Amazon vérifié). Si le calcul ne tombe pas juste, le parser est cassé.
+
+**Interprétation** :
+- Marge stable → Amazon conserve son économie. Lecture indirecte : Amazon n'a pas promu agressivement le compte (pas de signal commercial Amazon positif sur le compte).
+- Marge en baisse → l'économie Amazon se dégrade sur le compte. Signal de risque : Amazon peut devenir plus sensible à la rentabilité, dégrader les PO, refacturer des CRaP.
+- Marge en hausse → mix produit favorable côté Amazon, ou meilleure tenue des prix retail.
 
 ### Dimension 5 — Taux de retours YoY
 - Retours A-1 et A
@@ -209,13 +220,221 @@ Format type :
 
 ---
 
+## STYLE RÉDACTIONNEL ATTENDU (V2 — apport central)
+
+**Cette section a été produite à partir de l'analyse de 3 livrables ChatGPT 5.5 sur datasets variés (Cogex 2024/2025, Cogex janv-fév vs mars-avril 2026, Gers S1 2025 vs 2026 partiel). Elle fige les patterns d'écriture qui distinguent un rapport analytique d'un dashboard sec.**
+
+### Principe central
+Le constat YoY Étape 1 doit se lire comme **un rapport analytique d'expert**, pas comme un dashboard de chiffres. Ta cible (directeur Co/COO/CEO mid-tier sans expertise VC) ne sait pas lire un tableau de bord seul — elle a besoin de **phrases qui guident la lecture**, de **verdicts en sortie de chaque section**, et d'un **plan d'action opérationnel précis**.
+
+### Pattern 1 — Précaution méthodo en ouverture (si périodes inégales)
+Si les durées des deux périodes diffèrent, **ouvrir le rapport par une section "Point de vigilance"** qui :
+- Affiche un tableau des durées
+- Explique que la comparaison brute est biaisée
+- Annonce la double lecture (brut + normalisé)
+
+Si les durées sont identiques (cas Y/Y annuel complet), sauter cette précaution et ouvrir directement sur la synthèse.
+
+### Pattern 2 — Section "Synthèse immédiate" en ouverture
+Toujours en premier (après la précaution méthodo si elle existe). Composée de :
+- **Tableau de synthèse** : ligne par indicateur (CA commandes, Unités, CA expédié, COGS, Unités exp, Retours), colonne par période + écart + variation %
+- **Chiffres en gras** dans le tableau
+- **Phrase verdict** en 1-2 lignes qui résume le sujet stratégique
+
+### Pattern 3 — Double lecture brut + normalisé (si périodes inégales)
+Quand les durées diffèrent : **deux tableaux successifs** :
+- Tableau 1 : valeurs brutes (peut être trompeur)
+- Tableau 2 : valeurs par jour (lecture juste)
+- Suivi d'une **projection à durée comparable** ("Si le rythme se prolongeait jusqu'à...")
+
+### Pattern 4 — Sections numérotées 1 à 12 max, titres = enseignement
+**Les titres de section disent l'enseignement, pas l'indicateur** :
+- ❌ "Dimension 3 — PMV" → trop technique, jargonneux
+- ❌ "Analyse du prix moyen" → descriptif neutre
+- ✅ **"Le prix moyen est stable : la baisse est surtout volume / assortiment"** → enseignement direct
+
+Autres exemples de bons titres :
+- "Le recul est essentiellement un recul volume"
+- "La baisse vient surtout du périmètre ASIN, pas des ASIN actifs"
+- "Le business 2026 est plus concentré"
+- "COGS / CA : amélioration de l'économie Amazon"
+
+### Pattern 5 — Structure systématique de chaque section
+1. **Tableau dense** avec chiffres en gras
+2. Sous-titre **"### Lecture"** ou **"### Interprétation"** systématique après le tableau
+3. **Paragraphe court (2-4 lignes)** qui donne le verdict de la section
+4. Optionnel : citation en bloc `>` pour les idées force
+
+### Pattern 6 — Citation en bloc `>` pour les verdicts forts
+Quand le verdict est central, l'isoler en bloc citation pour qu'il sorte du scroll :
+
+> **Exemple** : "moins d'unités vendues, moins d'ASIN actifs, et surtout un décrochage de plusieurs familles fortes."
+
+> **Exemple** : "2026 est en avance de +27 % en rythme quotidien par rapport au premier semestre 2025."
+
+Maximum 1 citation en bloc par section, sinon perte d'impact.
+
+### Pattern 7 — Section "Mon diagnostic" en fin de rapport
+Composée de 2 sous-sections systématiques :
+- **"Ce que les chiffres disent"** — verdict factuel hiérarchisé en 3 à 5 points
+- **"Ce que je ne vois PAS dans les chiffres"** — exclusion d'hypothèses, ce qui rassure le lecteur (ex. *"Je ne vois pas de problème massif de commandes non expédiées. Je ne vois pas non plus de baisse du prix moyen."*)
+
+Le second point est **autant aussi important que le premier** : il guide le lecteur vers où chercher en éliminant les fausses pistes.
+
+### Pattern 8 — Section "Ce que je ferais maintenant"
+Plan d'action priorisé en 3 à 5 priorités numérotées. Sous chaque priorité, **du contenu opérationnel** :
+- Liste d'ASINs précis à auditer (avec leurs codes)
+- Tableau de contrôles (Contrôle | Question)
+- Familles à traiter en priorité
+
+Format type :
+```
+## Priorité 1 — Audit des 30 ASIN qui expliquent 96 % de la baisse
+
+[Liste des ASINs B009G3EQ70, B009G3E6CU, ...]
+
+Pour chacun :
+| Contrôle | Question |
+|---|---|
+| Disponibilité Amazon.fr | L'article est-il achetable ? |
+| Stock Amazon | Amazon a-t-il du stock retail ? |
+| Buy Box | Amazon détient-il la Buy Box ? |
+...
+```
+
+### Pattern 9 — Conclusion finale courte
+Section "## Conclusion" en 2-3 paragraphes max, **avec une citation en bloc qui résume**.
+
+### Pattern 10 — Hiérarchisation des ASINs gagnants / perdants
+Toujours **deux tableaux successifs** :
+- Top 8-12 gagnants en €/jour gagnés
+- Top 8-12 perdants en €/jour perdus
+
+Avec **colonne "Lecture"** sur chaque ligne (1 phrase courte qui interprète) :
+- "Bâche 2x3m bleue, très gros moteur 2026"
+- "Présent en 2025, 0 en 2026"
+- "Cadenas laiton 25 mm, 0 en 2026"
+
+Et un **paragraphe de sortie** qui qualifie l'ensemble :
+- *"Les pertes sont beaucoup moins fortes que les gains. Les 10 plus gros gagnants pèsent +47,9 k€, alors que les 10 plus gros perdants pèsent -15,4 k€. Donc la croissance est robuste."*
+
+### Pattern 11 — Conclusion par marque/univers en 1 phrase
+Pour chaque marque du Top 10, **une narration en 1-2 phrases** qui dit ce qu'elle représente dans la lecture :
+- *"Sitram reste ultra-dominant"*
+- *"Crealys est le relais de croissance le plus visible"*
+- *"UPFIT baisse logiquement après un début d'année plus fort"*
+
+### Pattern 12 — Ratio COGS/CA toujours nuancé
+Section dédiée systématique. **Toujours avec disclaimer** :
+- *"À manier prudemment : dans Vendor Central, ce n'est pas une marge fournisseur directe, mais plutôt une lecture économique Retail côté Amazon."*
+- Jamais "marge brute" sans qualification — toujours "Marge Amazon Retail" ou "Rentabilité Amazon Retail"
+
+### Pattern 13 — Questions rhétoriques pour orienter l'action
+Mettre les questions du lecteur dans le texte :
+- *"Question clé : S'agit-il d'un recul normal par cannibalisation, ou d'une perte évitable de disponibilité ?"*
+- *"Est-ce une baisse normale liée à la fin de saison, ou une anomalie ?"*
+
+Cela transforme un constat passif en orientation active.
+
+### Pattern 14 — Vocabulaire opérationnel précis
+Mots à privilégier (vocabulaire VC) :
+- vélocité, disponibilité, Buy Box, PO (purchase order)
+- CRaP risk, ASN, BOL, Variation, Browse node
+- réception, refus, sourcing share, lost Buy Box
+- rentabilité Amazon, mix produit, cannibalisation
+
+Mots à éviter :
+- "Le compte va mal" → préférer "Le compte perd X € en projection annualisée sur Y ASINs"
+- "Catastrophe" / "hémorragie" → préférer "recul concentré sur N familles"
+- Adjectifs émotionnels gratuits (terrible, excellent, dramatique...)
+
+### Pattern 15 — Tableau "Top ASINs à sécuriser/auditer" en clôture
+Toujours en fin de plan d'action, un tableau avec colonnes :
+- Rang
+- ASIN
+- Marque
+- CA période A
+- CA / jour
+- Unités
+
+Pour montrer ce qui pèse vraiment dans le CA actuel et doit être protégé.
+
+---
+
+## RÈGLES D'ÉCRITURE COMPLÉMENTAIRES (V2)
+
+### Adaptation au signe du delta
+Le ton du rapport doit refléter la réalité du compte :
+- **Compte en chute** (Cogex 2024 vs 2025) → mots-clés "recul", "baisse", "perte", "concentré sur quelques ASINs"
+- **Compte en croissance** (Gers, ou Cogex janv-fév vs mars-avril) → mots-clés "accélération", "reprise", "vélocité", "moteur"
+- **Compte stable** → mots-clés "tient", "stable", "préservé", "à surveiller"
+
+**Pas de biais structurel négatif** dans le design. La maquette doit fonctionner aussi bien sur un compte en croissance que sur un compte en chute.
+
+### Adaptation au type de comparaison
+- **Y/Y annuel complet** (365j vs 365j) : analyse de tendance longue, pas de normalisation
+- **Période vs période successive** (ex. janv-fév vs mars-avril) : analyse de dynamique, importance des saisonnalités
+- **Périodes inégales** (ex. S1 2025 vs janv→18 mai 2026) : précaution méthodo en ouverture, double lecture brut + normalisé
+
+### Longueur cible
+- Rapport complet (sections 1 à 12 + diagnostic + plan d'action) : **2500 à 3500 mots**
+- Si plus court → manque d'interprétation
+- Si plus long → noie le lecteur
+
+
+
 ## RÈGLES ANTI-RAIL MENTAL (règle 18 du contexte orchestrateur)
 
 Au moment d'implémenter ce skill dans Amazon Pilot ou de l'appliquer à un nouveau dataset :
 
-1. **Lister explicitement les colonnes disponibles** dans le CSV input AVANT toute analyse
+1. **Lister explicitement les colonnes disponibles** dans le CSV/XLSX input AVANT toute analyse
 2. **Justifier celles que la grille n'utilise pas** (si Amazon ajoute de nouvelles colonnes au format VC, les intégrer ou expliciter pourquoi non)
 3. **Ne pas se limiter aux dimensions traditionnellement utilisées** (CA + Unités). Les 9 colonnes du format VC standard doivent être exploitées dans la grille (1 dimension par colonne minimum, plus les croisements)
+
+---
+
+## RÈGLES DE SANITY CHECK PARSING (V2 — apport critique session 21 mai)
+
+**Apprentissage** : un bug parser silencieux sur l'espace insécable `\u202f` a produit des chiffres faux par facteur ~2,7 pendant 3 itérations consécutives de la maquette. Le bug n'a été détecté que parce que Fred a posé une question de vérification sur 1 ligne précise.
+
+**Règles pour tout parsing CSV/XLSX en entrée du module YoY** :
+
+### Règle A — Caractères à neutraliser explicitement dans un parser CSV
+Liste minimale **à coder explicitement et à lister en commentaire** :
+- Espace standard ` `
+- `\xa0` (NO-BREAK SPACE)
+- `\u202f` (NARROW NO-BREAK SPACE) ← celui qui a piégé en session 21 mai
+- `\u2009` (THIN SPACE)
+- `\u2007` (FIGURE SPACE)
+- Séparateurs décimaux `,` et `.`
+- Signes `€`, `$`, etc.
+
+Si le code parser ne liste pas explicitement ces caractères, **ne pas faire confiance** aux totaux.
+
+### Règle B — Préférer XLSX natif quand disponible
+Format XLSX → pandas lit en `float64` natif, pas de parsing maison nécessaire.
+Format CSV → parsing maison obligatoire, risque résiduel.
+
+**Stratégie produit Amazon Pilot v3.6.5** : accepter les deux formats à l'import, **détecter le format**, basculer sur XLSX prioritairement si les deux sont disponibles.
+
+### Règle C — Sanity check obligatoire sur 1 ligne vérifiée
+Avant tout calcul agrégé sur le dataset, **comparer 1 valeur calculée à une donnée externe vérifiée** :
+- Sur Cogex : `COGS B009G3EMDI / Unités expédiées B009G3EMDI = 1,92 €` (prix d'achat brut Cogex → Amazon connu)
+- Pour un nouveau client : choisir 1 ASIN dont la marque connaît son prix d'achat brut, vérifier que le COGS divisé par les unités donne bien ce prix
+
+**Si le sanity check échoue, arrêter et alerter**. Ne pas continuer avec des chiffres potentiellement faux.
+
+### Règle D — Comparer les totaux à une source externe quand disponible
+Si une analyse antérieure existe (ChatGPT, autre Claude, analyse manuelle), **comparer les totaux** avant de produire le rapport final. Une divergence > 5 % = signal d'alerte sur le parsing.
+
+### Règle E — Afficher les totaux au KAM/prospect avant analyse
+Dans l'UI Amazon Pilot, **afficher une étape intermédiaire** :
+- "X lignes lues du fichier"
+- "Total CA commandé : Y €"
+- "Total unités : Z"
+- Bouton "Valider et lancer l'analyse" / "Recommencer l'import"
+
+Cette étape permet au KAM de détecter visuellement une anomalie de parsing avant que l'analyse ne soit produite. Équivalent humain du sanity check.
 
 ---
 
@@ -223,11 +442,18 @@ Au moment d'implémenter ce skill dans Amazon Pilot ou de l'appliquer à un nouv
 
 Quand le brief Claude Code v3.6.5 sera rédigé :
 
-1. **Reprendre cette grille telle quelle** (12 dimensions Free figées, V1)
+1. **Reprendre cette grille telle quelle** (12 dimensions Free figées en V2)
 2. **Préciser le rendu UI** par dimension (où afficher, format tableau ou texte, exports possibles)
 3. **Préciser les seuils** (±10 % pour stable, 100 €/5 € pour zombies, etc. — ces seuils sont indicatifs et peuvent être ajustés au moment du brief si justification métier)
 4. **Préciser les tolérances** (que faire si une colonne manque du CSV, si une période est trop courte, etc.)
 5. **Préciser le calibrage Free vs Pro dans l'UI** (que voit le Free, que voit le Pro)
+6. **Imposer le sanity check parsing** (règle C) comme garde-fou obligatoire en production
+7. **Encoder le style rédactionnel attendu** dans le prompt système Claude (Sonnet 4.6 ou Opus 4.7) qui génèrera les paragraphes interprétatifs Free et le narratif Pro :
+   - Titres = enseignement, pas indicateur (Pattern 4)
+   - Verdict en bloc citation `>` quand idée force (Pattern 6)
+   - Section "Ce que je ne vois PAS dans les chiffres" en diagnostic (Pattern 7)
+   - Plan d'action avec contrôles précis par ASIN (Pattern 8)
+   - Vocabulaire opérationnel VC (Pattern 14)
 
 ---
 
@@ -235,12 +461,13 @@ Quand le brief Claude Code v3.6.5 sera rédigé :
 
 | Version | Date | Évolution |
 |---|---|---|
-| V1 | 21 mai 2026 | Création — grille figée suite à confrontation Opus 4.7 + ChatGPT 5.5 sur dataset Cogex |
+| V1 | 21 mai 2026 matin | Création — grille figée 12 Free + 4 Pro suite confrontation Opus 4.7 + ChatGPT 5.5 |
+| V2 | 21 mai 2026 fin de journée | Ajout section **Style rédactionnel attendu** (15 patterns ChatGPT) + correction Dim 4 (Marge Amazon Retail, pas marge industrielle) + règles **Sanity check parsing** (apprentissage bug `\u202f`) |
 
-**Pour évolutions futures** : tout ajout/modification de dimension nécessite un retest sur dataset Cogex + Gers pour confirmer la pertinence métier. La grille V1 est figée pour v3.6.5 ; les évolutions iront en V2.
+**Pour évolutions futures** : tout ajout/modification de dimension nécessite un retest sur dataset Cogex + Gers pour confirmer la pertinence métier. Les patterns rédactionnels peuvent évoluer en fonction des retours qualité des livrables produits avec ce skill.
 
 ---
 
 **FIN DU SKILL**
 
-[Claude Orchestrateur — V1 figée 21 mai 2026]
+[Claude Orchestrateur — V2 — 21 mai 2026]
