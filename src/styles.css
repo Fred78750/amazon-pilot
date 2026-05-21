@@ -514,3 +514,108 @@ a:hover { text-decoration: underline; }
   .bb-thead > div:nth-child(5),
   .bb-trow  > div:nth-child(5) { display:none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   MODULE YoY — Analyse comparée v3.6.5
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Freemium — classes préparées mais inactives en v3.6.5 (Fred = full Pro) */
+/* Activation v3.6.6+ : retirer display:none sur .freemium-toggle-btn */
+.freemium-toggle-btn { display: none; }
+.pro-blur-pending    { /* v3.6.6+ : filter: blur(4px); pointer-events:none; user-select:none; */ }
+.pro-only-pending    { /* v3.6.6+ : display: none; */ }
+
+/* Zones de drop — hover et état */
+.yoy-drop-zone:hover { border-color: var(--or) !important; }
+
+/* Tableau analytique YoY */
+.yoy-table { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:12px; }
+.yoy-table th { text-align:left; padding:7px 10px; font-size:11px; font-weight:600; color:var(--tx3); text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--bd); }
+.yoy-table td { padding:7px 10px; border-bottom:0.5px solid var(--bd); vertical-align:middle; }
+.yoy-table td.num { text-align:right; font-weight:600; font-variant-numeric: tabular-nums; }
+.yoy-table td.neg { color:var(--r); font-weight:700; }
+.yoy-table td.pos { color:var(--g); font-weight:700; }
+.yoy-table td.muted { color:var(--tx2); }
+.yoy-table tbody tr:last-child td { border-bottom:none; }
+.yoy-table tbody tr:hover td { background:var(--s2); }
+
+/* KPI cards executive summary */
+.yoy-kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:24px; }
+.yoy-kpi-card { background:var(--s2); border:0.5px solid var(--bd2); border-radius:var(--rd); padding:16px 14px; }
+.yoy-kpi-label { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--tx3); margin-bottom:6px; font-weight:600; }
+.yoy-kpi-value { font-size:22px; font-weight:700; margin-bottom:4px; font-variant-numeric: tabular-nums; }
+.yoy-kpi-sub   { font-size:11px; color:var(--tx2); line-height:1.5; }
+.yoy-kpi-neg   { color:var(--r); }
+.yoy-kpi-pos   { color:var(--g); }
+.yoy-kpi-stable { color:var(--tx2); }
+
+/* Sections analytiques */
+.yoy-section { background:var(--s2); border:0.5px solid var(--bd2); border-radius:var(--rd); padding:20px; margin-bottom:16px; }
+.yoy-section-title { font-size:15px; font-weight:700; margin-bottom:4px; color:var(--tx); }
+.yoy-section-intro { font-size:12px; color:var(--tx2); margin-bottom:14px; line-height:1.6; }
+.yoy-section-lecture { font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; letter-spacing:.06em; margin:12px 0 6px; }
+.yoy-section-para { font-size:13px; color:var(--tx); line-height:1.7; margin-bottom:10px; }
+
+/* Verdict en bloc (blockquote) */
+.verdict-block {
+  border-left: 3px solid var(--or);
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  background: rgba(255,153,0,0.06);
+  border-radius: 0 6px 6px 0;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--tx);
+  line-height: 1.6;
+}
+.verdict-block.neg { border-left-color: var(--r); background: var(--r-bg); }
+.verdict-block.pos { border-left-color: var(--g); background: var(--g-bg); }
+
+/* Point de vigilance (si périodes inégales) */
+.yoy-vigilance {
+  background: rgba(245,158,11,0.08);
+  border: 0.5px solid var(--a-bd);
+  border-radius: var(--rd);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: var(--tx2);
+}
+.yoy-vigilance-title { font-weight:700; color:var(--a); margin-bottom:6px; font-size:13px; }
+
+/* Print CSS — @media print */
+@media print {
+  /* Masquer la sidebar, le topbar, les boutons d'action */
+  .sb, .topbar, #tb-actions, #tb-search-slot { display: none !important; }
+  /* Masquer les boutons CTA internes au module YoY */
+  .yoy-cta-btn, .yoy-back-btn, button[onclick*="yoyBack"],
+  button[onclick*="window.print"] { display: none !important; }
+  /* Couleurs préservées */
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  /* Zone de contenu pleine largeur */
+  .mn { margin-left: 0 !important; padding: 0 !important; }
+  .ct { padding: 0 !important; }
+  /* Sauts de page entre sections principales */
+  .yoy-section { page-break-inside: avoid; }
+  .yoy-section + .yoy-section { page-break-before: auto; }
+  .yoy-kpi-grid { page-break-inside: avoid; }
+  /* Pied de page : nom client + date */
+  .yoy-print-footer { display: block !important; }
+}
+/* Pied de page print — masqué hors impression */
+.yoy-print-footer {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-size: 10px;
+  color: #666;
+  border-top: 0.5px solid #ccc;
+  padding: 4px 16px;
+  text-align: right;
+}
+
+@media (max-width:900px) {
+  .yoy-kpi-grid { grid-template-columns: 1fr 1fr; }
+}
