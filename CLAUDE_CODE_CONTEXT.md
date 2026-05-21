@@ -1,6 +1,6 @@
 # CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 20 mai 2026 (Claude_Orchestrateur_Context.md V0.2 déposé — arbitrage v3.6.3 tranché)
+**Dernière mise à jour :** 21 mai 2026 (v3.6.3 livré en recette + preprod — merge main en attente décision Fred)
 
 ---
 
@@ -124,11 +124,14 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | **v3.6.2** (merge 01656bc — 19 mai 2026) | https://amazon.foliow.app |
-| Recette (staging) | **v3.6.2** (commit 665d4cb — 19 mai 2026) | https://d9xny9istvl53.cloudfront.net |
-| Preprod | **v3.6.2** (commit 665d4cb — 19 mai 2026) | https://preprod.amazon.foliow.app |
+| Recette (staging) | **v3.6.3** (commit 3e4c337 — 21 mai 2026) | https://d9xny9istvl53.cloudfront.net |
+| Preprod | **v3.6.3** (commit 949b9b3 — 21 mai 2026) | https://preprod.amazon.foliow.app |
 
 ✅ **MERGÉ EN PROD le 19 mai 2026** — merge 01656bc, tag v3.6.2, APP_VERSION 3.6.2 vérifié, CloudFront invalidé.
 Scope : moteur de recherche ASIN transversal topbar + rebranchement Buy Box / Appros / Prévisionnel.
+
+⏸ **v3.6.3 EN ATTENTE MERGE PROD** — validé recette + preprod (21 mai 2026). Décision Fred : merge différé, gain fonctionnel insuffisant pour déclencher un merge seul. À merger avec le prochain chantier (v3.8 YoY Étape 1 ou autre).
+Smoke tests : colonne cause ✅ | fragile=0 légitime (0 ASIN Cogex avec ≥3 sem. historique) | récupérées=0 attendu.
 
 ✅ **MERGÉ EN PROD le 18 mai 2026** — merge fae7d79, APP_VERSION 3.6.1.5 vérifié, CloudFront invalidé.
 Scope merge groupé : v3.6.0 + v3.6.1 + v3.6.1.1 + v3.6.1.2 + v3.6.1.3 + v3.6.1.4 + v3.6.1.5
@@ -425,8 +428,8 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 ## ÉTAT SESSION SUIVANTE PROBABLE
 
 - **v3.6.2 en prod** — barre recherche ASIN topbar. Fix CI deploy.yml + deploy-staging.yml (→ amazon-pilot-latest.html)
-- **Prochain scope : v3.6.3** — items (c) + (d) uniquement : colonne `cause` Phase 1 + logique `fragile`/`recovered`. ~1.5 sessions. Brief orchestrateur à venir.
-- **Ensuite : v3.8** — YoY Étape 1 (Constat factuel — tableau de bord YoY brut). 3 sem.
+- **v3.6.3 en recette + preprod** — merge prod différé (décision Fred 21 mai). Sera mergé en même temps que le prochain chantier.
+- **Prochain scope : v3.8** — YoY Étape 1 (Constat factuel — tableau de bord YoY brut). 3 sem. Brief orchestrateur à venir.
 - **Dans tous les cas** : Fred rouvre la session — Claude Code n'anticipe rien
 
 ---
@@ -444,4 +447,4 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 20 mai 2026 (Claude_Orchestrateur_Context.md V0.2 + arbitrage v3.6.3 items (c)+(d))**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 21 mai 2026 (v3.6.3 recette+preprod validé — merge prod différé)**
