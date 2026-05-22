@@ -556,10 +556,10 @@ a:hover { text-decoration: underline; }
 .yoy-section-lecture { font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; letter-spacing:.06em; margin:12px 0 6px; }
 .yoy-section-para { font-size:13px; color:var(--tx); line-height:1.7; margin-bottom:10px; }
 
-/* Verdict en bloc citation — C7a : bordure bleue 4px, fond bleu très pâle */
+/* Verdict en bloc citation — C7a+C3 : bordure bleue 4px, respiration 28px */
 .verdict-block {
   border-left: 4px solid #3B82F6;
-  margin: 16px 0 0;
+  margin: 28px 0 0;
   padding: 12px 16px;
   background: rgba(59,130,246,0.07);
   border-radius: 0 6px 6px 0;
@@ -571,12 +571,12 @@ a:hover { text-decoration: underline; }
 .verdict-block.neg { border-left-color: var(--r); background: var(--r-bg); }
 .verdict-block.pos { border-left-color: var(--g); background: var(--g-bg); }
 
-/* Note méthodo sous tableau Performance — C7b */
+/* Note méthodo sous tableau Performance — C7b : style gris, distinct du verdict bleu */
 .note-method {
   margin-top: 14px;
   padding: 10px 14px;
-  background: var(--s3, rgba(0,0,0,0.04));
-  border-left: 3px solid var(--bd3);
+  background: rgba(128,128,128,0.06);   /* gris neutre, distinct du bleu verdict */
+  border-left: 3px solid rgba(128,128,128,0.3);
   border-radius: 0 4px 4px 0;
   font-size: 12px;
   color: var(--tx2);

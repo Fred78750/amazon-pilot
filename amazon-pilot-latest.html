@@ -574,10 +574,10 @@ a:hover { text-decoration: underline; }
 .yoy-section-lecture { font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; letter-spacing:.06em; margin:12px 0 6px; }
 .yoy-section-para { font-size:13px; color:var(--tx); line-height:1.7; margin-bottom:10px; }
 
-/* Verdict en bloc citation — C7a : bordure bleue 4px, fond bleu très pâle */
+/* Verdict en bloc citation — C7a+C3 : bordure bleue 4px, respiration 28px */
 .verdict-block {
   border-left: 4px solid #3B82F6;
-  margin: 16px 0 0;
+  margin: 28px 0 0;
   padding: 12px 16px;
   background: rgba(59,130,246,0.07);
   border-radius: 0 6px 6px 0;
@@ -589,12 +589,12 @@ a:hover { text-decoration: underline; }
 .verdict-block.neg { border-left-color: var(--r); background: var(--r-bg); }
 .verdict-block.pos { border-left-color: var(--g); background: var(--g-bg); }
 
-/* Note méthodo sous tableau Performance — C7b */
+/* Note méthodo sous tableau Performance — C7b : style gris, distinct du verdict bleu */
 .note-method {
   margin-top: 14px;
   padding: 10px 14px;
-  background: var(--s3, rgba(0,0,0,0.04));
-  border-left: 3px solid var(--bd3);
+  background: rgba(128,128,128,0.06);   /* gris neutre, distinct du bleu verdict */
+  border-left: 3px solid rgba(128,128,128,0.3);
   border-radius: 0 4px 4px 0;
   font-size: 12px;
   color: var(--tx2);
@@ -694,7 +694,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.6.5.7';
+const APP_VERSION = '3.6.5.8';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -14287,7 +14287,7 @@ async function init() {
   }
 }
 
-// v3.6.5.7 — C1-C7 : Corrections signe diagnostic, KPI EUR en grand, hypothèse causale, note méthodo, tableau 4 colonnes, CSS
+// v3.6.5.8 — C1-C3 : KPI sous-textes enrichis, structure causale freemium, respiration verdict
 // CP1 : Fondations techniques (routing, import, parser, sanity check, IndexedDB)
 // CP2 : Calculs 12 dimensions + KPI cards
 // CP3 : Templates Free + rendu complet 6 sections
@@ -14565,47 +14565,76 @@ function renderYoYResult() {
        </div>`
     : '';
 
-  // ── KPI 1 : CA delta annualisé
+  // ── KPI 1 : CA delta annualisé (C1 v3.6.5.8 : sous-texte enrichi)
   const dim1 = d.dim1 || {};
-  const deltaCAAnnu  = dim1.deltaCAAnnu  != null ? yoyFmtEurSigned(dim1.deltaCAAnnu)  : '—';
-  const deltaCAPctFmt = dim1.deltaCAPct  != null ? yoyFmtPct(dim1.deltaCAPct, true)   : '—';
-  const kpi1Class = dim1.deltaCAPct != null ? yoyDeltaClass(dim1.deltaCAPct) : 'muted';
+  const deltaCAAnnu   = dim1.deltaCAAnnu != null ? yoyFmtEurSigned(dim1.deltaCAAnnu) : '—';
+  const deltaCAPctFmt = dim1.deltaCAPct  != null ? yoyFmtPct(dim1.deltaCAPct, true)  : '—';
+  const kpi1Class     = dim1.deltaCAPct  != null ? yoyDeltaClass(dim1.deltaCAPct)    : 'muted';
+  const _kpi1AProjFmt = dim1.caAProj != null ? yoyFmtEur(dim1.caAProj) : (dim1.caA != null && (dA||1) > 0 ? yoyFmtEur(dim1.caA * (dRef||1) / (dA||1)) : '—');
+  const _kpi1RefFmt   = dim1.caRef   != null ? yoyFmtEur(dim1.caRef)   : '—';
 
-  // ── KPI 2 : Catalogue (disparus / apparus)
+  // ── KPI 2 : Catalogue (disparus / apparus) (C1 v3.6.5.8 : sous-texte enrichi)
   const dim7 = d.dim7 || {};
-  const disparusN = dim7.disparus ? dim7.disparus.length : 0;
-  const apparusN  = dim7.apparus  ? dim7.apparus.length  : 0;
-  const kpi2Val   = disparusN > 0 || apparusN > 0
-    ? `<span style="color:var(--r)">-${disparusN}</span> / <span style="color:var(--g)">+${apparusN}</span>`
+  const disparusN  = dim7.disparus ? dim7.disparus.length : 0;
+  const apparusN   = dim7.apparus  ? dim7.apparus.length  : 0;
+  const kpi2Val    = disparusN > 0 || apparusN > 0
+    ? `<span style="color:var(--r)">−${disparusN}</span>&nbsp;<span style="color:var(--tx3);font-size:11px">/</span>&nbsp;<span style="color:var(--g)">+${apparusN}</span>`
     : '—';
+  const _kpi2NTot    = disparusN + (dim7.stables||[]).length + (dim7.enBaisse||[]).length + (dim7.enHausse||[]).length;
+  const _kpi2PctDisp = _kpi2NTot > 0 ? yoyFmtPct(disparusN / _kpi2NTot * 100) : '—';
+  const _kpi2Impact  = (dim7.sumDisparusRef || 0) > 0 ? ('−' + yoyFmtEur((dim7.sumDisparusRef||0) * 365) + '/an') : '—';
 
-  // ── KPI 3 : Marge Amazon Retail
+  // ── KPI 3 : Marge Amazon Retail (C1 v3.6.5.8 : big = tauxA, sous-texte enrichi)
   const dim4 = d.dim4 || {};
-  const deltaTauxMarge = dim4.deltaTauxMarge != null ? yoyFmtPts(dim4.deltaTauxMarge) : '—';
-  const kpi3Class = dim4.deltaTauxMarge != null ? yoyDeltaClass(dim4.deltaTauxMarge) : 'muted';
+  const deltaTauxMarge  = dim4.deltaTauxMarge != null ? yoyFmtPts(dim4.deltaTauxMarge) : '—';
+  const kpi3Class       = dim4.deltaTauxMarge != null ? yoyDeltaClass(dim4.deltaTauxMarge) : 'muted';
+  const _kpi3TauxAFmt   = dim4.tauxMargeA   != null ? yoyFmtPct(dim4.tauxMargeA)   : '—';
+  const _kpi3TauxRefFmt = dim4.tauxMargeRef != null ? yoyFmtPct(dim4.tauxMargeRef) : '—';
 
-  // ── KPI 4 : Diagnostic heuristique (règles dim 1-12, sans appel IA)
-  const _dim7kpi = d.dim7 || {};
+  // ── KPI 4 : Hypothèse causale (C2 v3.6.5.8 : structure freemium + %)
+  const _dim7kpi       = d.dim7 || {};
   const _disparusCAkpi  = (_dim7kpi.sumDisparusRef || 0) * (dRef || 1);
   const _disparusPctkpi = dim1.caRef > 0 ? _disparusCAkpi / dim1.caRef * 100 : 0;
-  const _deltaUkpi   = (d.dim2 || {}).deltaUPct  || 0;
-  const _deltaPMVkpi = (d.dim3 || {}).deltaPMVPct || 0;
-  // ── KPI 4 hypothèse causale (C3 v3.6.5.7) : cause, pas symptôme
-  let kpi4Icon, kpi4Label;
+  const _deltaUkpi      = (d.dim2 || {}).deltaUPct  || 0;
+  const _deltaPMVkpi    = (d.dim3 || {}).deltaPMVPct || 0;
+
+  let kpi4Label;
   if (deltaCAPct == null || Math.abs(deltaCAPct) < 3) {
-    kpi4Icon = '➡️'; kpi4Label = 'Pas de signal fort';
+    kpi4Label = 'Pas de signal fort';
   } else if (deltaCAPct < 0) {
-    if (_disparusPctkpi > 25)                          { kpi4Icon = '📦'; kpi4Label = 'Abandon Amazon (PO non renouvelées)'; }
-    else if (_disparusPctkpi > 10)                     { kpi4Icon = '📦'; kpi4Label = 'Périmètre réduit (PO raréfiées)'; }
-    else if (_deltaUkpi < -10 && Math.abs(_deltaPMVkpi) < 5) { kpi4Icon = '📉'; kpi4Label = 'Ruptures structurelles'; }
-    else if (_deltaPMVkpi < -5)                        { kpi4Icon = '💰'; kpi4Label = 'Pression prix / concurrence'; }
-    else                                               { kpi4Icon = '⚠️'; kpi4Label = 'Causes multiples à investiguer'; }
+    if (_disparusPctkpi > 25)                               { kpi4Label = 'Abandon Amazon (PO non renouvelées)'; }
+    else if (_disparusPctkpi > 10)                          { kpi4Label = 'Périmètre réduit (PO raréfiées)'; }
+    else if (_deltaUkpi < -10 && Math.abs(_deltaPMVkpi) < 5) { kpi4Label = 'Ruptures structurelles'; }
+    else if (_deltaPMVkpi < -5)                             { kpi4Label = 'Pression prix / concurrence'; }
+    else                                                    { kpi4Label = 'Causes multiples à investiguer'; }
   } else {
-    if (_deltaUkpi > 10)                               { kpi4Icon = '📈'; kpi4Label = 'Hausse demande organique'; }
-    else if (_deltaPMVkpi > 5)                         { kpi4Icon = '✨'; kpi4Label = 'Mix produit favorable'; }
-    else                                               { kpi4Icon = '📈'; kpi4Label = 'Accélération ventes'; }
+    if (_deltaUkpi > 10)       { kpi4Label = 'Hausse demande organique'; }
+    else if (_deltaPMVkpi > 5) { kpi4Label = 'Mix produit favorable'; }
+    else                       { kpi4Label = 'Accélération ventes'; }
   }
-  const kpi4 = `<span style="font-size:12px">${kpi4Icon}&nbsp;${esc(kpi4Label)}</span>`;
+
+  // % pondération heuristique pour la cause principale
+  const _causePct4 = (function() {
+    if (deltaCAPct == null || Math.abs(deltaCAPct) < 3) return null;
+    var deltaAbs = Math.abs(dim1.deltaCA || 0);
+    if (deltaCAPct < 0) {
+      if (_disparusPctkpi > 10 && deltaAbs > 0) { return Math.min(90, Math.max(38, Math.round(_disparusCAkpi / deltaAbs * 100))); }
+      if (_deltaUkpi < -10 && Math.abs(_deltaPMVkpi) < 5) return 55;
+      if (_deltaPMVkpi < -5) return 60;
+      return 42;
+    } else {
+      if (_deltaUkpi > 10) return 65;
+      if (_deltaPMVkpi > 5) return 55;
+      return 50;
+    }
+  })();
+
+  // N ASINs critiques (disparus + portion significative des déclinants)
+  const _nCritiques4 = sign === 'negative'
+    ? disparusN + Math.round((_dim7kpi.enBaisse ? _dim7kpi.enBaisse.length : 0) * 0.6)
+    : sign === 'positive'
+    ? apparusN + Math.round((_dim7kpi.enHausse ? _dim7kpi.enHausse.length : 0) * 0.4)
+    : disparusN;
 
   // ── Section 1 : Performance volume / prix / marge / retours (dim1-6)
   const dim2 = d.dim2 || {};
@@ -15059,28 +15088,57 @@ function renderYoYResult() {
 
     ${vigilanceBlock}
 
-    <!-- 4 KPI cards -->
-    <div class="yoy-kpi-grid" style="margin-bottom:24px">
+    <!-- 4 KPI cards — C1+C2 v3.6.5.8 : sous-textes enrichis + structure freemium KPI4 -->
+    <div class="yoy-kpi-grid" style="margin-bottom:28px">
+
+      <!-- KPI 1 : Évolution du CA -->
       <div class="yoy-kpi-card">
-        <div class="yoy-kpi-label">Évolution du CA</div>
+        <div class="yoy-kpi-label">Évolution du chiffre d'affaires</div>
         <div class="yoy-kpi-value ${kpi1Class}" style="font-size:20px">${deltaCAAnnu}</div>
-        <div class="yoy-kpi-sub">${deltaCAPctFmt} / an</div>
+        <div class="yoy-kpi-sub">
+          <strong>Projection annualisée du delta.</strong><br>
+          Période A projetée à ${dRef || '?'} j : ${_kpi1AProjFmt}<br>
+          Période de référence : ${_kpi1RefFmt} (${deltaCAPctFmt})
+        </div>
       </div>
+
+      <!-- KPI 2 : Mouvement catalogue -->
       <div class="yoy-kpi-card">
-        <div class="yoy-kpi-label">Mouvement catalogue</div>
+        <div class="yoy-kpi-label">Mouvement du catalogue</div>
         <div class="yoy-kpi-value">${kpi2Val}</div>
-        <div class="yoy-kpi-sub">disparus / apparus</div>
+        <div class="yoy-kpi-sub">
+          Soit ${_kpi2PctDisp} du catalogue de référence<br>
+          Apparus en période A : ${apparusN}<br>
+          Impact : ${_kpi2Impact}
+        </div>
       </div>
+
+      <!-- KPI 3 : Marge Amazon Retail -->
       <div class="yoy-kpi-card">
-        <div class="yoy-kpi-label">Marge Amazon Retail</div>
-        <div class="yoy-kpi-value ${kpi3Class}">${deltaTauxMarge}</div>
-        <div class="yoy-kpi-sub">Δ taux marge</div>
+        <div class="yoy-kpi-label">Rentabilité Amazon Retail</div>
+        <div class="yoy-kpi-value ${kpi3Class}">${_kpi3TauxAFmt}</div>
+        <div class="yoy-kpi-sub">
+          vs ${_kpi3TauxRefFmt} en référence (${deltaTauxMarge})<br>
+          <em style="color:var(--tx3)">Marge d'Amazon sur le compte — pas la marge industrielle de la marque.</em>
+        </div>
       </div>
+
+      <!-- KPI 4 : Analyse causale — structure freemium -->
       <div class="yoy-kpi-card">
-        <div class="yoy-kpi-label">Hypothèse causale</div>
-        <div class="yoy-kpi-value" style="font-size:12px;line-height:1.3">${kpi4}</div>
-        <div class="yoy-kpi-sub">heuristique (dims 1–7)</div>
+        <div class="yoy-kpi-label">Analyse causale</div>
+        <div style="font-size:12px;line-height:1.7;margin-top:6px">
+          <div style="margin-bottom:2px">
+            <span style="color:var(--or);font-weight:700">▶</span>&nbsp;<strong>${esc(kpi4Label)}${_causePct4 != null ? ' — ' + _causePct4 + ' %' : ''}</strong>
+          </div>
+          <div style="filter:blur(4px);user-select:none;pointer-events:none;opacity:0.6;font-size:11px;color:var(--tx2)">▶ Cause secondaire principale</div>
+          <div style="filter:blur(4px);user-select:none;pointer-events:none;opacity:0.6;font-size:11px;color:var(--tx2)">▶ Causes mineures</div>
+        </div>
+        <div class="yoy-kpi-sub" style="margin-top:6px">
+          <strong>${_nCritiques4}</strong> ASINs critiques identifiés<br>
+          <span style="filter:blur(4px);user-select:none;pointer-events:none;opacity:0.6;display:inline-block">Plan d'action en 5 priorités</span>
+        </div>
       </div>
+
     </div>
 
     <!-- 6 sections analytiques -->
