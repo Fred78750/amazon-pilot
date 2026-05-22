@@ -1,6 +1,6 @@
-# CLAUDE_CODE_CONTEXT.md
+﻿# CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 21 mai 2026 (v3.6.3 livré en recette + preprod — merge main en attente décision Fred)
+**Dernière mise à jour :** 22 mai 2026 (v3.6.5.11 staging — chantier YoY Étape 1 en cours)
 
 ---
 
@@ -95,6 +95,12 @@ Tout patch doit être minimal et ciblé :
 | v3.6.1.4 | ✅ Stable | c19969b |
 | v3.6.1.5 | ✅ **PROD** — mergé 18 mai 2026 | fae7d79 |
 | v3.6.2 | ✅ **PROD** — mergé 19 mai 2026 | 01656bc (merge) / tag v3.6.2 |
+| v3.6.3 | ✅ Stable recette+preprod — merge prod différé | 949b9b3 |
+| v3.6.5.7 | ✅ Stable staging | — |
+| v3.6.5.8 | ✅ Stable staging | 8de08c3 |
+| v3.6.5.9 | ✅ Stable staging | 2089e8c |
+| v3.6.5.10 | ✅ Stable staging | b5cd215 |
+| v3.6.5.11 | ✅ **Dernière recette** | ad8320f |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -328,6 +334,18 @@ Un ASIN peut avoir 2 VC (COGEX + 3J6MN), SKU différent par VC. Le SKU ne peut p
   - CSS : ~100 lignes Buy Box dans `src/styles.css`
   - smoke.js V5 : critère mis à jour "Carnet d'enquête" (ex "Plan d'action" supprimé)
 
+- [x] **v3.6.5 — YoY Étape 1 (chantier en cours — dernière version stable v3.6.5.11)**
+  - Parser CSV/XLSX Vendor Central FR (colonnes FR, apostrophe typographique U+2019, séparateur milliers U+202F)
+  - 12 dimensions Free + stubs 3 dimensions Pro (yoy_ai.js — CP4 placeholder)
+  - Skill V3 : 9 templates quasi-littéraux (tplPerformance, tplCatalogue, tplMarques, tplTopMouvements, tplConcentration, tplAnomalies, tplConclusion + helpers)
+  - Module: src/yoy.js + src/yoy_ai.js + src/templates/*.js (7 fichiers)
+  - Smoke: 
+px playwright test tests/smoke.spec.js --reporter=line (6 tests)
+  - **v3.6.5.7** : fix signe diagnostic (abs%), tableau 4 colonnes, section "Ce que je ne vois PAS", plan d'action T4 complet, CSS verdict 4px + note-method
+  - **v3.6.5.8** : KPI sous-textes enrichis 3-4 lignes, structure freemium KPI4, respiration visuelle
+  - **v3.6.5.9** : KPI big value 40px, couleurs #b91c1c/#15803d/#475569, signes indépendants par KPI, suppression blur freemium (3 causes heuristiques visibles)
+  - **v3.6.5.10** : charte visuelle par card (kpi-card--neg/pos/neutral/analytical), nowrap big value, big value sobre sur cards colorées
+  - **v3.6.5.11** : typographie défensive (NBSP + nowrap KPI sous-textes — 8 corrections)
 ---
 
 ## TÂCHES SUIVANTES
@@ -434,6 +452,68 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 
 ---
 
+---
+
+## ARCHITECTURE YoY MODULE (v3.6.5+)
+
+### Fichiers du module
+| Fichier | Rôle |
+|---|---|
+| src/yoy.js | Moteur principal : parser, dimensions 1-12, rendu HTML, KPI cards, sections, S7/S8 diagnostic, conclusion |
+| src/yoy_ai.js | Stubs IA dimensions 13 (causes), 15 (ASINs critiques), 16 (plan action) — CP4 placeholder |
+| src/templates/yoy_performance.js | Template section 1 (volume/prix/marge) |
+| src/templates/yoy_catalogue.js | Template section 2 (catalogue) |
+| src/templates/yoy_marques.js | Template section 3 (marques) |
+| src/templates/yoy_top_mouvements.js | Template section 4 (top mouvements) |
+| src/templates/yoy_concentration.js | Template section 5 (concentration) |
+| src/templates/yoy_anomalies.js | Template section 6 (anomalies) |
+| src/templates/yoy_conclusion.js | Template conclusion |
+
+### Règle d'or templates (skill V3)
+Templates quasi-littéraux : variables remplacées, structure conservée, texte reproduit fidèlement. Ne PAS réinventer le texte — reprendre les templates tels quels.
+
+### Calcul du signe global
+getCaseTone(deltaCAPct) → 'negative' (<−3%) / 'positive' (>+3%) / 'stable' — détermine les titres de sections et verdicts.
+
+### Signes indépendants par KPI (v3.6.5.9+)
+- KPI1 : deltaCAPct (seuil ±0.5%)
+- KPI2 : solde pparusN - disparusN
+- KPI3 : deltaTauxMarge (seuil ±1pt)
+- KPI4 : toujours neutre kpi-card--analytical (fond doré pâle #fefce8)
+
+### Classes CSS KPI cards (v3.6.5.10+)
+.kpi-card--neg (fond #fef2f2, bordure #b91c1c) | .kpi-card--pos (fond #f0fdf4, bordure #15803d) | .kpi-card--neutral (fond #f8fafc, bordure #475569) | .kpi-card--analytical (fond #fefce8, bordure #a16207)
+
+### Fonctions de format — NBSP intégré
+yoyFmtPct, yoyFmtPts, yoyFmtEur utilisent déjà   avant leurs unités (%, pts, €). Vérifié par inspection bytes.
+
+### Build commande
+`powershell
+="utf-8"; python build.py --version X.X.X.X
+`
+Le flag --version à 4 segments requiert que build.py accepte 4 segments (vérifié). Sans PYTHONIOENCODING=utf-8, les caractères Unicode dans build.py (▶ U+25B6) cassent sur terminal cp1252 Windows.
+
+### Smoke tests
+`powershell
+npx playwright test tests/smoke.spec.js --reporter=line
+`
+6 tests : diagnostic, previsionnel, yoy, Buy Box Phase 2, SMOKE_REF. Tous doivent être verts avant push.
+
+---
+
+## RÈGLES AJOUTÉES (session 22 mai 2026)
+
+### Règle BOM PowerShell (fichiers .md)
+Set-Content -Encoding UTF8 (PowerShell 5.1) ajoute un BOM (0xEF 0xBB 0xBF). Pour copier un fichier sans altérer l'encodage : [System.IO.File]::WriteAllBytes(dest, [System.IO.File]::ReadAllBytes(src)).
+
+### Règle git push rejeté
+Si git push origin staging est rejeté (remote ahead) : git pull origin staging --rebase puis git push origin staging.
+
+### Règle Edit tool + Unicode
+Le tool Edit échoue sur old_string contenant des caractères Unicode hors-ASCII (em dash —, flèche ▶, signe moins −) quand ils font partie du texte de remplacement. Solution : utiliser PowerShell [System.IO.File]::ReadAllText + .Replace() + [System.IO.File]::WriteAllText avec [System.Text.Encoding]::UTF8.
+
+### Règle typographie défensive — NBSP
+Dans les templates HTML générés par JS : utiliser   (NBSP) devant les unités, avant : et — en français, et <span style="white-space:nowrap"> autour des valeurs formatées pour éviter les coupures dans les cards étroites.
 ## RÉCAPS DE SESSION (dans le repo — racine)
 
 | Fichier | Contenu |
@@ -447,4 +527,4 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 21 mai 2026 (v3.6.3 recette+preprod validé — merge prod différé)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 22 mai 2026 (v3.6.5.11 recette — chantier YoY Étape 1 actif)**
