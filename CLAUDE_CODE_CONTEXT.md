@@ -1,6 +1,6 @@
 ﻿# CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 22 mai 2026 (v3.6.5.12 PROD — chantier YoY Étape 1 en cours)
+**Dernière mise à jour :** 22 mai 2026 (v3.6.6 recette — Parser ERP universel)
 
 ---
 
@@ -102,6 +102,7 @@ Tout patch doit être minimal et ciblé :
 | v3.6.5.10 | ✅ Stable staging | b5cd215 |
 | v3.6.5.11 | ✅ Stable staging | ad8320f |
 | v3.6.5.12 | ✅ **PROD** — mergé 22 mai 2026 / tag v3.6.5.12 | 93a9157 (merge) / tag v3.6.5.12 |
+| v3.6.6 | ✅ Stable recette — 12/12 smoke tests — en attente GO preprod/prod | 4cc6781 |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -131,7 +132,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | **v3.6.5.12** (merge 93a9157 — 22 mai 2026) | https://amazon.foliow.app |
-| Recette (staging) | **v3.6.5.12** (commit f8d4f6f — 22 mai 2026) | https://d9xny9istvl53.cloudfront.net |
+| Recette (staging) | **v3.6.6** (commit 4cc6781 — 22 mai 2026) | https://d9xny9istvl53.cloudfront.net |
 | Preprod | **v3.6.5.12** (deploy direct AWS CLI — 22 mai 2026) | https://preprod.amazon.foliow.app |
 
 ✅ **MERGÉ EN PROD le 19 mai 2026** — merge 01656bc, tag v3.6.2, APP_VERSION 3.6.2 vérifié, CloudFront invalidé.
