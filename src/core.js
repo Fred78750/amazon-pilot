@@ -10,7 +10,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.6.2';
+const APP_VERSION = '3.6.5.12';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -119,6 +119,7 @@ let filters = { market: 'all', brand: 'all', segment: 'all' };
 const NAV = [
   { id: 'weekly',    icon: '🗓️', label: 'Revue Hebdo', badge: true },
   { id: 'dashboard', icon: '📊', label: 'Tableau de bord' },
+  { id: 'yoy',       icon: '📈', label: 'Analyse comparée' },
   { id: 'import',    icon: '📥', label: 'Import données' },
   { id: 'agent',     icon: '🤖', label: 'Agent Import' },
   { id: 'asins',     icon: '📦', label: 'Analyse ASINs' },
@@ -683,7 +684,7 @@ let _db = null;
 function openDB() {
   return new Promise((resolve, reject) => {
     if (_db) return resolve(_db);
-    const req = indexedDB.open('AmazonPilot', 2);
+    const req = indexedDB.open('AmazonPilot', 3);
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('clients')) {
@@ -691,6 +692,11 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains('meta')) {
         db.createObjectStore('meta');
+      }
+      if (!db.objectStoreNames.contains('yoy_analyses')) {
+        const yoyStore = db.createObjectStore('yoy_analyses', { keyPath: 'id' });
+        yoyStore.createIndex('clientId', 'clientId', { unique: false });
+        yoyStore.createIndex('createdAt', 'createdAt', { unique: false });
       }
     };
     req.onsuccess = e => { _db = e.target.result; resolve(_db); };
@@ -3139,6 +3145,7 @@ function renderContent() {
     pompier: renderPompier, buybox: renderBuyBox, config: renderConfig, weekly: renderWeeklyReview,
     appros: renderAppros, forecast: renderApprosForecast, agent: renderAgent, potentiel: renderPotentiel,
     seo: renderSEOScreen,
+    yoy: renderYoY,
     agentvc: renderAgentVC,
     optimisationWizard: renderOptimisationWizard
   };
@@ -10496,5 +10503,7 @@ async function init() {
     console.error('Stack:', initErr.stack);
   }
 }
+
+// @yoy
 
 document.addEventListener('DOMContentLoaded', init);

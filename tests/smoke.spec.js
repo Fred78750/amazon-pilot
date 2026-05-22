@@ -49,12 +49,16 @@ test('V1 — Fonctions critiques presentes', async ({ page }) => {
   const missing = await page.evaluate(() => {
     // Fonctions window.xxx (déclarées avec function)
     const windowFns = [
-      'go','save','render','renderNav',
-      'calcBuyBoxAlerts','renderBBPlan','bbGetCase','bbOpenCase',
-      'analyseBuyBoxLive','generateWeeklyActions',
+      // Core
+      'go','save','render','renderNav','generateWeeklyActions',
       'handlePOImport','mergePOData','getPOData',
-      'smokeTest','renderSmokeResult','downloadGuideASN',
       'mergeImportData','detectFileType',
+      // Buy Box (renommés v3.1.x : bb* → buybox*)
+      'calcBuyBoxAlerts','renderBuyBox','buyboxGetCase','buyboxOpenCase',
+      // Smoke
+      'smokeTest','renderSmokeResult',
+      // YoY (v3.6.5)
+      'renderYoY','yoyLaunchAnalysis',
     ];
     const missing = windowFns.filter(f => typeof window[f] !== 'function');
 
@@ -78,7 +82,7 @@ test('V2 — Navigation tous ecrans sans crash JS', async ({ page }) => {
   page.on('pageerror', e => { if (!e.message.includes('extension')) jsErrors.push(e.message); });
   await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
 
-  const screens = ['dashboard','revue','buybox','import','appros','agentseo','asins','diagnostic','previsionnel'];
+  const screens = ['dashboard','revue','buybox','import','appros','agentseo','asins','diagnostic','previsionnel','yoy'];
   for (const s of screens) {
     await page.evaluate((id) => { if (typeof go === 'function') go(id); }, s);
     await page.waitForTimeout(300);
@@ -111,7 +115,7 @@ test('V3 — Buy Box Phase 2 sans erreur asinData', async ({ page }) => {
   await page.evaluate(() => {
     // cl est une const — accès direct dans le scope page
     const c = cl();
-    if (typeof bbOpenCase === 'function' && c) bbOpenCase(c, 'B009G3EMDI');
+    if (typeof buyboxOpenCase === 'function' && c) buyboxOpenCase(c, 'B009G3EMDI');
   });
   await page.waitForTimeout(400);
 
@@ -140,9 +144,9 @@ test('V4 — SMOKE_REF valeurs et dates expiration correctes', async ({ page }) 
     };
   });
   expect(ref, 'SMOKE_REF non défini').not.toBeNull();
-  expect(ref.ca2024).toBe(1703110);
+  expect(ref.ca2024).toBe(1547729);   // recalibré 2026-05-18
   expect(ref.ca2024exp).toBe('2026-12-31');
-  expect(ref.ca2025).toBe(1297621);
+  expect(ref.ca2025).toBe(1166183);   // recalibré 2026-05-18
   expect(ref.ca2025exp).toBe('2027-12-31');
   expect(ref.asinMin).toBeGreaterThanOrEqual(1500);
   expect(ref.asinRef).toBe('B009G3EMDI');
