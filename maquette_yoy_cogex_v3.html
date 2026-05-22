@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Analyse comparée — Cogex Outillage</title>
+<style>
+:root {
+  --bg: #fafaf9; --fg: #1a1a1a; --fg-soft: #4a4a4a; --fg-muted: #757575;
+  --border: #e5e5e0; --border-strong: #c8c8c2;
+  --neg: #b8420d; --pos: #2a6e3f; --neu: #757575;
+  --pro-bg: #f5f1eb; --pro-border: #c9a96e; --pro-fg: #6b5418;
+  --accent: #1a4d70; --quote-border: #c8c8c2;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--fg); font-size: 14px; line-height: 1.6; }
+.container { max-width: 1180px; margin: 0 auto; padding: 24px 32px 80px; }
+
+/* IMPORT */
+.import-screen { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 60px 24px 80px; }
+.import-container { max-width: 880px; width: 100%; }
+.import-title { font-size: 26px; font-weight: 600; margin: 0 0 12px; letter-spacing: -0.4px; }
+.import-intro { color: var(--fg-soft); font-size: 14px; line-height: 1.6; margin-bottom: 32px; max-width: 720px; }
+.dropzones { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 28px; }
+.dropzone { background: white; border: 1px solid var(--border-strong); border-radius: 8px; padding: 20px; }
+.dz-label { font-size: 13px; font-weight: 600; color: var(--fg); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.6px; }
+.dz-area { border: 2px dashed var(--border-strong); border-radius: 6px; padding: 32px 16px; text-align: center; background: #fafaf9; }
+.dz-icon { font-size: 28px; color: var(--fg-muted); margin-bottom: 8px; font-weight: 300; }
+.dz-main { font-size: 14px; font-weight: 500; color: var(--fg-soft); }
+.dz-sub { font-size: 12px; color: var(--fg-muted); margin-top: 4px; }
+.dz-meta { font-size: 11px; color: var(--fg-muted); margin-top: 8px; text-align: center; }
+.dz-status { margin-top: 12px; padding: 10px 12px; background: #f0f6f0; border: 1px solid #c5d9c5; border-radius: 4px; font-size: 12px; }
+.dz-check { color: var(--pos); font-weight: 700; margin-right: 6px; }
+.dz-detail { display: block; margin-top: 4px; color: var(--fg-muted); font-size: 11px; padding-left: 18px; }
+.import-help { font-size: 13px; color: var(--fg-soft); padding: 14px 18px; background: #f4f3f0; border-left: 3px solid var(--accent); margin-bottom: 28px; line-height: 1.6; }
+.import-cta { display: block; width: 100%; padding: 14px 24px; background: var(--fg); color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background 0.15s; }
+.import-cta:hover { background: #000; }
+
+/* RESULTS */
+#results-screen { display: none; }
+body.results-mode #import-screen { display: none; }
+body.results-mode #results-screen { display: block; }
+.report-header { border-bottom: 2px solid var(--fg); padding-bottom: 20px; margin-bottom: 32px; display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; }
+.report-title { font-size: 22px; font-weight: 600; margin: 0; letter-spacing: -0.3px; }
+.report-subtitle { font-size: 13px; color: var(--fg-muted); margin-top: 4px; }
+.header-actions { display: flex; gap: 12px; align-items: center; }
+.btn-restart { font-size: 12px; color: var(--fg-muted); background: none; border: 1px solid var(--border-strong); padding: 6px 10px; border-radius: 4px; cursor: pointer; font-family: inherit; }
+.btn-restart:hover { background: white; }
+.view-toggle { display: inline-flex; background: white; border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px; font-size: 13px; }
+.view-toggle button { border: none; background: transparent; padding: 6px 16px; cursor: pointer; border-radius: 4px; color: var(--fg-muted); font-weight: 500; transition: all 0.15s; font-family: inherit; font-size: inherit; }
+.view-toggle button.active { background: var(--fg); color: white; }
+
+/* KPI */
+.kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 48px; }
+.kpi-card { background: white; border: 1px solid var(--border-strong); border-radius: 6px; padding: 20px; min-height: 200px; display: flex; flex-direction: column; }
+.kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--fg-muted); font-weight: 600; margin-bottom: 12px; }
+.kpi-value { font-size: 26px; font-weight: 600; letter-spacing: -0.5px; line-height: 1.15; margin-bottom: 8px; }
+.kpi-value.neg { color: var(--neg); }
+.kpi-value.pos { color: var(--pos); }
+.kpi-sub { font-size: 12px; color: var(--fg-soft); margin-top: auto; line-height: 1.55; }
+.kpi-sub .muted { color: var(--fg-muted); font-style: italic; }
+.kpi-pro { background: var(--pro-bg); border-color: var(--pro-border); }
+.kpi-pro .kpi-label { display: flex; align-items: center; justify-content: space-between; color: var(--pro-fg); }
+.lock { font-size: 13px; margin-right: 4px; }
+.pro-tag { background: var(--pro-fg); color: white; padding: 2px 8px; border-radius: 3px; font-size: 10px; letter-spacing: 0.5px; font-weight: 700; }
+.kpi-value-pro { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.pro-visible { font-size: 13px; font-weight: 600; color: var(--pro-fg); display: flex; align-items: baseline; gap: 8px; }
+.pro-visible .bullet { color: var(--pro-border); }
+.pro-cause-label { flex: 1; }
+.cause-pct { font-size: 13px; font-weight: 600; color: var(--pro-fg); margin-left: auto; }
+.pro-blurred { display: flex; flex-direction: column; gap: 4px; }
+.blur-row { filter: blur(4.5px); user-select: none; font-size: 13px; color: var(--pro-fg); background: linear-gradient(90deg, rgba(201,169,110,0.2), rgba(201,169,110,0.05)); padding: 2px 6px; border-radius: 2px; }
+.pro-visible-sub { font-size: 12px; color: var(--pro-fg); margin-top: 8px; font-weight: 500; }
+.n-asins { font-weight: 700; }
+.pro-blurred-list { display: flex; flex-direction: column; gap: 3px; }
+.pro-cta { font-size: 11px; font-weight: 600; color: var(--pro-fg); margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--pro-border); }
+
+/* SECTIONS */
+.analytic-section { margin-bottom: 48px; padding-top: 24px; border-top: 1px solid var(--border); }
+.analytic-section h2 { font-size: 19px; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.2px; line-height: 1.3; }
+.analytic-section h3 { font-size: 12px; font-weight: 700; margin: 28px 0 12px; color: var(--fg-soft); text-transform: uppercase; letter-spacing: 0.6px; }
+.analytic-section h4 { font-size: 12px; font-weight: 600; margin: 20px 0 10px; color: var(--fg-soft); display: flex; align-items: center; gap: 8px; }
+.section-intro { color: var(--fg-soft); font-size: 13px; margin: 0 0 20px; max-width: 880px; }
+.analytic-section p { font-size: 13px; color: var(--fg-soft); margin: 0 0 16px; max-width: 880px; line-height: 1.65; }
+.analytic-section ol { font-size: 13px; color: var(--fg-soft); padding-left: 24px; line-height: 1.7; max-width: 880px; }
+.analytic-section ol li { margin-bottom: 6px; }
+
+/* VERDICT BLOCK */
+.verdict-block { border-left: 4px solid var(--accent); background: #f4f7fa; margin: 20px 0; padding: 14px 20px; font-size: 14px; color: var(--fg); font-style: italic; line-height: 1.55; max-width: 880px; }
+
+/* TABLES */
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; background: white; border: 1px solid var(--border); margin-bottom: 16px; }
+.data-table th { text-align: left; font-weight: 600; padding: 10px 12px; background: #f4f3f0; border-bottom: 2px solid var(--border-strong); color: var(--fg-soft); font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+.data-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover { background: #faf9f5; }
+.data-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.data-table .mono { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px; }
+.data-table .neg { color: var(--neg); font-weight: 500; }
+.data-table .pos { color: var(--pos); font-weight: 500; }
+.data-table .neu { color: var(--neu); }
+.row-disparus { background: #fdf6f1; }
+.row-disparus:hover { background: #fbeee4; }
+
+.note-method { margin-top: 16px; padding: 12px 16px; background: #f4f3f0; border-left: 3px solid var(--accent); font-size: 12px; color: var(--fg-soft); line-height: 1.6; max-width: 880px; }
+.note-method strong { color: var(--fg); }
+
+/* CTA */
+.cta-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+.cta-btn { display: inline-block; padding: 8px 14px; border-radius: 4px; font-size: 12px; font-weight: 600; text-decoration: none; transition: all 0.15s; }
+.cta-active { background: white; color: var(--accent); border: 1px solid var(--accent); }
+.cta-active:hover { background: var(--accent); color: white; }
+.cta-future { background: #f4f3f0; color: var(--fg-muted); border: 1px dashed var(--border-strong); cursor: not-allowed; }
+
+/* PLAN D'ACTION priorités */
+.priority-block { background: white; border: 1px solid var(--border); border-radius: 6px; padding: 20px 24px; margin-bottom: 20px; }
+.priority-title { font-size: 14px !important; font-weight: 700 !important; color: var(--fg) !important; text-transform: none !important; letter-spacing: normal !important; margin-top: 0 !important; }
+.priority-desc { font-size: 13px; color: var(--fg-soft); margin-bottom: 16px; line-height: 1.6; }
+.badge-visible { font-size: 10px; background: #e8f0e8; color: var(--pos); padding: 2px 8px; border-radius: 3px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+.pro-tag-sm { font-size: 10px; background: var(--pro-fg); color: white; padding: 2px 8px; border-radius: 3px; font-weight: 700; letter-spacing: 0.5px; }
+.pro-counter { font-size: 12px; color: var(--fg-muted); font-style: italic; margin-top: 12px; }
+.pro-counter strong { color: var(--pro-fg); font-style: normal; }
+
+/* PRO BLUR */
+.pro-blur-row td { filter: blur(5px); user-select: none; }
+.pro-blur-table thead th { filter: none; }
+.pro-cta-section { margin-top: 24px; padding: 16px 20px; background: var(--pro-bg); border: 1px solid var(--pro-border); border-radius: 4px; font-size: 13px; color: var(--pro-fg); text-align: center; }
+.pro-cta-section strong { display: inline-block; margin-top: 6px; font-size: 15px; }
+
+/* PRO MODE unlocked */
+body.pro-mode .blur-row, body.pro-mode .pro-blur-row td { filter: none; user-select: auto; background: transparent; }
+body.pro-mode .kpi-pro { background: white; border-color: var(--border-strong); }
+body.pro-mode .kpi-pro .kpi-label { color: var(--fg-muted); }
+body.pro-mode .lock { display: none; }
+body.pro-mode .pro-tag, body.pro-mode .pro-tag-sm { display: none; }
+body.pro-mode .pro-cta { display: none; }
+body.pro-mode .pro-cta-section { display: none; }
+body.pro-mode .pro-counter { display: none; }
+body.pro-mode .badge-visible { display: none; }
+
+/* FOOTER */
+.report-footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 11px; color: var(--fg-muted); line-height: 1.7; }
+</style>
+</head>
+<body>
+
+
+<section id="import-screen" class="import-screen">
+  <div class="import-container">
+    <h1 class="import-title">Analyse comparée — Vendor Central</h1>
+    <p class="import-intro">
+      Importez deux fenêtres de votre rapport Vendor Central pour comparer leur performance. La période à analyser peut être par exemple les 2 derniers mois ; la période de référence peut être les mêmes mois de l'année précédente, ou la période immédiatement antérieure.
+    </p>
+    <div class="dropzones">
+      <div class="dropzone">
+        <div class="dz-label">Période à analyser</div>
+        <div class="dz-area"><div class="dz-icon">↓</div><div class="dz-main">Glissez votre fichier ici</div><div class="dz-sub">ou cliquez pour parcourir</div></div>
+        <div class="dz-meta">Minimum 2 mois — formats CSV ou XLSX</div>
+        <div class="dz-status"><span class="dz-check">✓</span> Ventes_ASIN_Cogex_2026-04-01_2026-05-18.xlsx<span class="dz-detail">48 jours · 429 ASINs · 142 585 € de CA</span></div>
+      </div>
+      <div class="dropzone">
+        <div class="dz-label">Période de référence</div>
+        <div class="dz-area"><div class="dz-icon">↓</div><div class="dz-main">Glissez votre fichier ici</div><div class="dz-sub">ou cliquez pour parcourir</div></div>
+        <div class="dz-meta">Minimum 2 mois — formats CSV ou XLSX</div>
+        <div class="dz-status"><span class="dz-check">✓</span> Ventes_ASIN_Cogex_2025-04-01_2025-05-31.xlsx<span class="dz-detail">61 jours · 651 ASINs · 222 542 € de CA</span></div>
+      </div>
+    </div>
+    <div class="import-help">
+      <strong>Où trouver ces fichiers&nbsp;?</strong> Vendor Central → Rapports → Ventes par ASIN — Fabrication → sélectionnez la période → Exportez en CSV ou XLSX.
+    </div>
+    <button class="import-cta" onclick="showResults()">Lancer l'analyse comparée →</button>
+  </div>
+</section>
+
+
+<div id="results-screen">
+  <div class="container">
+    <header class="report-header">
+      <div>
+        <h1 class="report-title">Analyse comparée — Cogex Outillage</h1>
+        <div class="report-subtitle">Avril–mai 2025 vs avril–mai 2026 · marché FR · Vendor Central 1P</div>
+      </div>
+      <div class="header-actions">
+        <button class="btn-restart" onclick="showImport()">← Modifier les imports</button>
+        <div class="view-toggle">
+          <button class="active" data-mode="free" onclick="setView('free')">Vue Free</button>
+          <button data-mode="pro" onclick="setView('pro')">Vue Pro</button>
+        </div>
+      </div>
+    </header>
+
+    
+<section class="kpi-grid">
+  <div class="kpi-card">
+    <div class="kpi-label">Évolution du chiffre d'affaires</div>
+    <div class="kpi-value neg">-247 366 €</div>
+    <div class="kpi-sub"><strong>Projection annualisée du delta.</strong><br>Période A projetée à 61 j : 181 202 €<br>Période de référence : 222 542 € (-18,6 %)</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Mouvement du catalogue</div>
+    <div class="kpi-value neg">313 ASINs disparus</div>
+    <div class="kpi-sub">Soit 48,1 % du catalogue de référence<br>Apparus en période A : 90<br>Impact : -362 961 €/an</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Rentabilité Amazon Retail</div>
+    <div class="kpi-value pos">45,4 %</div>
+    <div class="kpi-sub">vs 46,8 % en référence (-1,4 pt)<br><span class="muted">Marge d'Amazon sur le compte — pas la marge industrielle de la marque.</span></div>
+  </div>
+  <div class="kpi-card kpi-pro">
+    <div class="kpi-label"><span class="lock">🔒</span>Analyse causale <span class="pro-tag">PRO</span></div>
+    <div class="kpi-value-pro">
+      <div class="pro-visible"><span class="bullet">▶</span><span class="pro-cause-label">Abandon Amazon (PO non renouvelées)</span><span class="cause-pct">65 %</span></div>
+      <div class="pro-blurred">
+        <div class="blur-row"><span class="bullet">▶</span> Cause secondaire principale</div>
+        <div class="blur-row"><span class="bullet">▶</span> Causes mineures</div>
+      </div>
+      <div class="pro-visible-sub"><span class="n-asins">149 ASINs critiques</span> identifiés</div>
+      <div class="pro-blurred-list"><div class="blur-row">Plan d'action en 5 priorités</div></div>
+    </div>
+    <div class="pro-cta">→ Débloquer l'analyse complète (Pro)</div>
+  </div>
+</section>
+
+    
+<section class="analytic-section">
+  <h2>Le recul est essentiellement un recul de volume, pas de prix</h2>
+  <p class="section-intro">
+    Indicateurs économiques à périmètre calendaire normalisé (extrapolation linéaire de la période A à 61 jours pour comparaison directe avec la période de référence).
+  </p>
+  <table class="data-table">
+    <thead><tr><th>Indicateur</th><th class="num">Référence (61 j)</th><th class="num">A observé (48 j)</th><th class="num">A projeté 61 j</th><th class="num">Variation</th></tr></thead>
+    <tbody>
+      <tr><td>CA commandes</td><td class="num">222 542 €</td><td class="num">142 585 €</td><td class="num">181 202 €</td><td class="num neg">-18,6 %</td></tr>
+      <tr><td>Unités commandées</td><td class="num">30 855</td><td class="num">19 857</td><td class="num">25 235</td><td class="num neg">-18,2 %</td></tr>
+      <tr><td>Prix moyen unitaire (PMV)</td><td class="num">7,21 €</td><td class="num" colspan="2">7,18 €</td><td class="num pos">-0,4 %</td></tr>
+      <tr><td>CA expédié</td><td class="num">222 771 €</td><td class="num" colspan="2">141 396 €</td><td class="num">—</td></tr>
+      <tr><td>COGS expédié (prix achat Amazon)</td><td class="num">118 454 €</td><td class="num" colspan="2">77 175 €</td><td class="num">—</td></tr>
+      <tr><td>Marge Amazon Retail (CA exp − COGS)</td><td class="num">104 318 €</td><td class="num" colspan="2">64 221 €</td><td class="num">—</td></tr>
+      <tr><td>Taux de marge Amazon Retail</td><td class="num">46,8 %</td><td class="num" colspan="2">45,4 %</td><td class="num pos">-1,4 pt</td></tr>
+      <tr><td>Retours client</td><td class="num">603</td><td class="num" colspan="2">338</td><td class="num">—</td></tr>
+      <tr><td>Taux de retours</td><td class="num">1,95 %</td><td class="num" colspan="2">1,70 %</td><td class="num pos">-0,25 pt</td></tr>
+      <tr><td>Ratio CA expédié / CA commandé</td><td class="num">100,1 %</td><td class="num" colspan="2">99,2 %</td><td class="num neu">—</td></tr>
+    </tbody>
+  </table>
+  
+  <h3>Lecture</h3>
+  <p>
+    La baisse en volume (-18,2 %) est plus marquée que la baisse en CA (-18,6 %). Le prix moyen unitaire progresse de -0,4 % : l'assortiment qui vend en période A est plus cher mais bouge moins. La marge Amazon Retail reste stable autour de 45 %, ce qui signifie qu'Amazon préserve son économie sur le compte — indirectement, c'est un signal d'absence de soutien promotionnel particulier de la part d'Amazon. Le ratio expédié/commandé proche de 100 % et la légère baisse du taux de retours excluent un décrochage logistique global ou un problème qualité diffus.
+  </p>
+  
+  <blockquote class="verdict-block">
+    Le problème n'est pas le prix, ni la logistique, ni la qualité produit. Il faut donc chercher ailleurs : assortiment, disponibilité, commandes Amazon.
+  </blockquote>
+
+  <div class="note-method">
+    <strong>Note méthodo.</strong> La marge affichée est la rentabilité Amazon Retail (CA expédié − COGS), pas la marge industrielle de la marque. Le COGS expédié est le prix d'achat brut payé par Amazon à la marque (× unités). CA commandes = volumes Amazon-side (PO), pas demande consommateur finale.
+  </div>
+
+  <div class="cta-row">
+    <a class="cta-btn cta-active" href="#" onclick="return false;">Examiner les ASINs en baisse dans Analyse ASINs →</a>
+    <a class="cta-btn cta-active" href="#" onclick="return false;">Voir le Diagnostic CA détaillé →</a>
+  </div>
+</section>
+
+    
+<section class="analytic-section">
+  <h2>La baisse vient du périmètre ASIN, pas des ASINs encore actifs</h2>
+  <p class="section-intro">
+    Croisement des ASINs entre les deux périodes. Le tableau ci-dessous segmente les ASINs en 5 buckets selon leur évolution.
+  </p>
+  <table class="data-table">
+    <thead><tr><th>Segment</th><th class="num">Nb ASINs</th><th class="num">CA / jour réf.</th><th class="num">CA / jour A</th><th class="num">Impact CA / jour</th></tr></thead>
+    <tbody>
+      <tr><td>Stables (±10 %)</td><td class="num">26</td><td class="num">423 €</td><td class="num">405 €</td><td class="num neu">-18 €</td></tr>
+      <tr><td>En baisse (&gt; 10 %)</td><td class="num">163</td><td class="num">1 665 €</td><td class="num">821 €</td><td class="num neg">-844 €</td></tr>
+      <tr><td>En hausse (&gt; 10 %)</td><td class="num">101</td><td class="num">565 €</td><td class="num">1 615 €</td><td class="num pos">+1 050 €</td></tr>
+      <tr class="row-disparus"><td><strong>Disparus</strong></td><td class="num"><strong>313</strong></td><td class="num">994 €</td><td class="num">—</td><td class="num neg"><strong>-994 €</strong></td></tr>
+      <tr><td>Apparus</td><td class="num">90</td><td class="num">—</td><td class="num">129 €</td><td class="num pos">+129 €</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Lecture</h3>
+  <p>
+    Sur les 651 ASINs actifs en référence, 313 ne vendent plus rien en période A — soit 48,1 % du catalogue effacé. Cette catégorie pèse à elle seule -362 961 € de CA annualisé. Les 90 ASINs apparus ne compensent que partiellement. Les ASINs encore actifs sont relativement stables en valeur agrégée — ce n'est pas la performance par ASIN qui décroche, c'est la largeur du catalogue.
+  </p>
+
+  <blockquote class="verdict-block">
+    313 ASINs disparus en un an. C'est le vrai sujet : Amazon a cessé de commander, ou les fiches sont devenues invisibles. À distinguer ASIN par ASIN — c'est l'objet du plan d'action.
+  </blockquote>
+
+  <h3>Sous-segment : ASINs zombies — présents mais effondrés</h3>
+  <p>
+    94 ASINs sont présents les deux périodes mais effondrés (CA de référence &gt; 100 €, CA A &lt; 5 €). Total perdu sur ce segment : 54 897 € de CA de référence. Typiquement Buy Box perdue à 100 %, suppression listing temporaire, désindexation ou variation cassée. Ces ASINs sont les plus rapidement récupérables — la fiche existe encore.
+  </p>
+  <table class="data-table">
+    <thead><tr><th>ASIN</th><th>Titre</th><th>Marque</th><th class="num">CA réf.</th><th class="num">CA A</th></tr></thead>
+    <tbody><tr><td class="mono">B00BBU4W5W</td><td>0</td><td>0</td><td class="num">3 903 €</td><td class="num">0 €</td></tr><tr><td class="mono">B009G3E6CU</td><td>0</td><td>0</td><td class="num">3 336 €</td><td class="num">0 €</td></tr><tr><td class="mono">B0CRHQCZ6W</td><td>0</td><td>0</td><td class="num">3 203 €</td><td class="num">0 €</td></tr><tr><td class="mono">B09XV6NR9G</td><td>0</td><td>0</td><td class="num">3 062 €</td><td class="num">0 €</td></tr><tr><td class="mono">B00XR9UR04</td><td>OROK 640271 Kit de Signalisation Porte-Vélo et Remorque – Plaque ABS 0,75 m avec</td><td>OROK</td><td class="num">2 390 €</td><td class="num">0 €</td></tr><tr><td class="mono">B0BKPVJZR8</td><td>0</td><td>0</td><td class="num">2 208 €</td><td class="num">0 €</td></tr><tr><td class="mono">B09XV7B3BH</td><td>0</td><td>0</td><td class="num">2 042 €</td><td class="num">0 €</td></tr><tr><td class="mono">B0CHWL613L</td><td>0</td><td>0</td><td class="num">1 525 €</td><td class="num">0 €</td></tr><tr><td class="mono">B009G3F5OI</td><td>Cogex 46577 Mètre à ruban Boîtier plastique , Gris, 5 m x 16 mm</td><td>Cogex</td><td class="num">1 519 €</td><td class="num">0 €</td></tr><tr><td class="mono">B009L0S3OU</td><td>0</td><td>0</td><td class="num">1 241 €</td><td class="num">0 €</td></tr></tbody>
+  </table>
+
+  <div class="cta-row">
+    <a class="cta-btn cta-active" href="#" onclick="return false;">Filtrer les 313 disparus dans Analyse ASINs →</a>
+    <a class="cta-btn cta-active" href="#" onclick="return false;">Ouvrir des cas Vendor Central depuis Buy Box →</a>
+  </div>
+</section>
+
+    
+<section class="analytic-section">
+  <h2>Le portefeuille devient plus fragile : la concentration s'accentue</h2>
+  <p class="section-intro">
+    Part dans le CA des Top N ASINs. Effet mécanique de la contraction du catalogue actif.
+  </p>
+  <table class="data-table">
+    <thead><tr><th>Part dans le CA</th><th class="num">Référence</th><th class="num">A</th><th class="num">Variation</th></tr></thead>
+    <tbody>
+      <tr><td>Top 10 ASINs</td><td class="num">27,6 %</td><td class="num">45,1 %</td><td class="num neg">+17,5 pt</td></tr>
+      <tr><td>Top 20 ASINs</td><td class="num">40,3 %</td><td class="num">59,4 %</td><td class="num neg">+19,1 pt</td></tr>
+      <tr><td>Top 50 ASINs</td><td class="num">61,9 %</td><td class="num">79,0 %</td><td class="num neg">+17,1 pt</td></tr>
+      <tr><td>Top 100 ASINs</td><td class="num">78,1 %</td><td class="num">90,4 %</td><td class="num neg">+12,4 pt</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Lecture</h3>
+  <p>
+    Le Top 10 représentait 27,6 % du CA en référence. Il pèse maintenant 45,1 %. La queue longue, qui amortissait les variations, s'est érodée. La perte d'un seul ASIN du Top en période A impacte mécaniquement plus le CA total qu'en référence. C'est un signal de risque opérationnel direct : si un best-seller A décroche pour rupture, Buy Box ou suppression, l'effet sera disproportionné.
+  </p>
+
+  <blockquote class="verdict-block">
+    La concentration est passée de 27,6 % à 45,1 % sur le Top 10. Sécuriser le Top 10 actuel devient une priorité opérationnelle.
+  </blockquote>
+
+  <div class="cta-row">
+    <a class="cta-btn cta-active" href="#" onclick="return false;">Sécuriser les best-sellers via Buy Box →</a>
+  </div>
+</section>
+
+    
+<section class="analytic-section">
+  <h2>Le recul est multi-marques, avec quelques exceptions à protéger</h2>
+  <p class="section-intro">
+    Top 10 marques en CA de référence, suivies en période A. Variation calculée en CA quotidien.
+  </p>
+  <table class="data-table">
+    <thead><tr><th>Marque</th><th class="num">CA / j réf.</th><th class="num">Part réf.</th><th class="num">CA / j A</th><th class="num">Part A</th><th class="num">Variation €/j</th></tr></thead>
+    <tbody><tr><td>Cogex</td><td class="num">734 €</td><td class="num">20,1 %</td><td class="num">447 €</td><td class="num">15,0 %</td><td class="num neg">-288 €</td></tr><tr><td>COGEX</td><td class="num">585 €</td><td class="num">16,0 %</td><td class="num">687 €</td><td class="num">23,1 %</td><td class="num pos">+102 €</td></tr><tr><td>Spotlight</td><td class="num">397 €</td><td class="num">10,9 %</td><td class="num">142 €</td><td class="num">4,8 %</td><td class="num neg">-255 €</td></tr><tr><td>OROK</td><td class="num">388 €</td><td class="num">10,6 %</td><td class="num">466 €</td><td class="num">15,7 %</td><td class="num pos">+78 €</td></tr><tr><td>RUECAB</td><td class="num">253 €</td><td class="num">6,9 %</td><td class="num">86 €</td><td class="num">2,9 %</td><td class="num neg">-167 €</td></tr><tr><td>I LOVE BBQ</td><td class="num">233 €</td><td class="num">6,4 %</td><td class="num">212 €</td><td class="num">7,1 %</td><td class="num neg">-21 €</td></tr><tr><td>ITENSE</td><td class="num">196 €</td><td class="num">5,4 %</td><td class="num">243 €</td><td class="num">8,2 %</td><td class="num pos">+47 €</td></tr><tr><td>upfit</td><td class="num">193 €</td><td class="num">5,3 %</td><td class="num">132 €</td><td class="num">4,4 %</td><td class="num neg">-61 €</td></tr><tr><td>RHINO</td><td class="num">148 €</td><td class="num">4,1 %</td><td class="num">129 €</td><td class="num">4,4 %</td><td class="num neg">-19 €</td></tr><tr><td>GREENGERS</td><td class="num">143 €</td><td class="num">3,9 %</td><td class="num">138 €</td><td class="num">4,6 %</td><td class="num neg">-5 €</td></tr></tbody>
+  </table>
+
+  <h3>Lecture</h3>
+  <p>
+    Le recul est concentré sur quelques familles. <strong>Cogex</strong> (-288 €/jour), <strong>Spotlight</strong> (-255 €/jour) et <strong>RUECAB</strong> (-167 €/jour) sont les 3 marques qui décrochent le plus en valeur quotidienne. À l'inverse, <strong>COGEX</strong> reste un point d'ancrage (+102 €/jour). La question opérationnelle : ces reculs sont-ils dus à un retrait Amazon (PO non renouvelées) ou à une perte de disponibilité (rupture, suppression) ?
+  </p>
+
+  <blockquote class="verdict-block">
+    Cogex, Spotlight, RUECAB : 3 familles à auditer en priorité — recul normal ou anomalie évitable ?
+  </blockquote>
+
+  <div class="cta-row">
+    <a class="cta-btn cta-active" href="#" onclick="return false;">Explorer les marques en chute dans Analyse ASINs →</a>
+  </div>
+</section>
+
+    
+<section class="analytic-section">
+  <h2>Top mouvements ASIN — qui pèse vraiment dans la variation</h2>
+  <p class="section-intro">
+    Top 10 perdants et gagnants en CA quotidien. Les pertes sont fortement concentrées sur peu d'ASINs.
+  </p>
+
+  <h3>10 plus fortes pertes en CA quotidien</h3>
+  <table class="data-table"><thead><tr><th>ASIN</th><th>Titre</th><th>Marque</th><th class="num">CA/j réf.</th><th class="num">CA/j A</th><th class="num">Variation</th></tr></thead><tbody><tr><td class="mono">B00BBU4W5W</td><td>0</td><td>0</td><td class="num">64 €</td><td class="num">0 €</td><td class="num neg">-64 €</td></tr><tr><td class="mono">B009G3EQ70</td><td>EXPERT LINE 486971 Multiprise 5 Prises avec Interrupteur – Bloc Multip</td><td>Expert Line</td><td class="num">90 €</td><td class="num">27 €</td><td class="num neg">-62 €</td></tr><tr><td class="mono">B009G3E6CU</td><td>0</td><td>0</td><td class="num">55 €</td><td class="num">0 €</td><td class="num neg">-55 €</td></tr><tr><td class="mono">B0CRHQCZ6W</td><td>0</td><td>0</td><td class="num">53 €</td><td class="num">0 €</td><td class="num neg">-53 €</td></tr><tr><td class="mono">B0CKXVJGXS</td><td>ITENSE 647862 Bloc Multiprise Étanche 3 Prises IP44 – 16A 3680W – avec</td><td>ITENSE</td><td class="num">69 €</td><td class="num">19 €</td><td class="num neg">-51 €</td></tr><tr><td class="mono">B09XV6NR9G</td><td>0</td><td>0</td><td class="num">50 €</td><td class="num">0 €</td><td class="num neg">-50 €</td></tr><tr><td class="mono">B007H8DQQ8</td><td>COGEX 82603 Tendeur Élastique pour Bâches 20 m – Corde Élastique Ø 6 m</td><td>COGEX</td><td class="num">104 €</td><td class="num">55 €</td><td class="num neg">-49 €</td></tr><tr><td class="mono">B0C1NS6Z1B</td><td>RUECAB - Grilles de Cuisson Barbecue et fumoir - Grille de Barbecue Si</td><td>RUECAB</td><td class="num">52 €</td><td class="num">4 €</td><td class="num neg">-47 €</td></tr><tr><td class="mono">B00XR9UR04</td><td>OROK 640271 Kit de Signalisation Porte-Vélo et Remorque – Plaque ABS 0</td><td>OROK</td><td class="num">39 €</td><td class="num">0 €</td><td class="num neg">-39 €</td></tr><tr><td class="mono">B0BKPVJZR8</td><td>0</td><td>0</td><td class="num">36 €</td><td class="num">0 €</td><td class="num neg">-36 €</td></tr></tbody></table>
+
+  <h3>10 plus fortes hausses en CA quotidien</h3>
+  <table class="data-table"><thead><tr><th>ASIN</th><th>Titre</th><th>Marque</th><th class="num">CA/j réf.</th><th class="num">CA/j A</th><th class="num">Variation</th></tr></thead><tbody><tr><td class="mono">B009G3EMDI</td><td>COGEX 82003 Bâche de Protection 2 x 3 m Bleu – Bâche Imperméable en Po</td><td>COGEX</td><td class="num">0 €</td><td class="num">255 €</td><td class="num pos">+255 €</td></tr><tr><td class="mono">B0CRHZCBV3</td><td>ITENSE 647886 – Rallonge Électrique/Prolongateur 2 m 16 A – 1 Prise 2P</td><td>ITENSE</td><td class="num">39 €</td><td class="num">198 €</td><td class="num pos">+159 €</td></tr><tr><td class="mono">B0DFCZ62FC</td><td>OROK 648162 Gyrophare Orange LED 12/24V Bi-Voltage – Gyroflash IP65 – </td><td>OROK</td><td class="num">11 €</td><td class="num">73 €</td><td class="num pos">+62 €</td></tr><tr><td class="mono">B00BBU4Z4K</td><td>OROK 641763 Antivol Remorque Universel – Antivol Tête d’Attelage Trian</td><td>OROK</td><td class="num">22 €</td><td class="num">72 €</td><td class="num pos">+51 €</td></tr><tr><td class="mono">B00PVPXVBE</td><td>COGEX 80017 Cadenas 30 mm avec 3 Clés – Cadenas de Sécurité en Acier p</td><td>COGEX</td><td class="num">38 €</td><td class="num">87 €</td><td class="num pos">+49 €</td></tr><tr><td class="mono">B008CPD2SM</td><td>COGEX - Bâches (Bricolage) - armée de protection 2x3m 160g/m² - Transl</td><td>COGEX</td><td class="num">46 €</td><td class="num">94 €</td><td class="num pos">+49 €</td></tr><tr><td class="mono">B01HTPGMKK</td><td>GREENGERS 90051 Kit Outils de Jardinage 4 Pièces – Ensemble Balcon et </td><td>GREENGERS</td><td class="num">38 €</td><td class="num">82 €</td><td class="num pos">+44 €</td></tr><tr><td class="mono">B002C3OIUQ</td><td>Greengeers 95526 Récupérateur d'eau de pluie (Diamètre - 80 mm)</td><td>Greengeers</td><td class="num">9 €</td><td class="num">50 €</td><td class="num pos">+41 €</td></tr><tr><td class="mono">B07DPCH7XC</td><td>OROK - Bac de vidange - Capacité: 8 litres - Compatible avec Tous Type</td><td>OROK</td><td class="num">0 €</td><td class="num">31 €</td><td class="num pos">+31 €</td></tr><tr><td class="mono">B00VQ8U64K</td><td>Expert Line 484331 Barrette connexion 6 pièces 12 plot, Noir</td><td>Expert Line</td><td class="num">1 €</td><td class="num">26 €</td><td class="num pos">+25 €</td></tr></tbody></table>
+
+  <h3>Lecture</h3>
+  <p>
+    Les 10 plus gros perdants pèsent -506 €/jour (soit -184 847 €/an). Les 10 plus gros gagnants pèsent 765 €/jour. Le solde est franchement déséquilibré côté perte. Le pattern dominant côté perdants : ASINs passés à 0 € (suppression/rupture), beaucoup sur cadenas, multiprises, BBQ et signalisation. Côté gagnants, on note l'émergence de quelques ASINs ITENSE et la résistance de bâches/cadenas COGEX clés.
+  </p>
+
+  <blockquote class="verdict-block">
+    Les 10 ASINs les plus en chute concentrent -506 €/jour de perte. C'est sur eux que doit porter l'audit prioritaire.
+  </blockquote>
+</section>
+
+    
+<section class="analytic-section">
+  <h2>Doublons orthographiques détectés dans le catalogue</h2>
+  <p class="section-intro">
+    6 paires de marques avec orthographe quasi-identique repérées par fuzzy matching. Effet probable : fragmentation du SEO Amazon et du reporting marque interne.
+  </p>
+  <table class="data-table">
+    <thead><tr><th>Variante 1</th><th>Variante 2</th><th class="num">Similarité</th><th class="num">CA cumulé V1</th><th class="num">CA cumulé V2</th></tr></thead>
+    <tbody><tr><td>COGEX</td><td>Cogex</td><td class="num">100 %</td><td class="num">68 664 €</td><td class="num">66 218 €</td></tr><tr><td>GREENGERS</td><td>Greengeers</td><td class="num">95 %</td><td class="num">15 375 €</td><td class="num">4 220 €</td></tr><tr><td>GREENGERS</td><td>Greengers</td><td class="num">100 %</td><td class="num">15 375 €</td><td class="num">3 504 €</td></tr><tr><td>Greengeers</td><td>Greengers</td><td class="num">95 %</td><td class="num">4 220 €</td><td class="num">3 504 €</td></tr><tr><td>RHINO</td><td>Rhino</td><td class="num">100 %</td><td class="num">15 225 €</td><td class="num">10 865 €</td></tr><tr><td>UPFIT</td><td>upfit</td><td class="num">100 %</td><td class="num">5 205 €</td><td class="num">18 096 €</td></tr></tbody>
+  </table>
+
+  <h3>Lecture</h3>
+  <p>
+    Ces doublons sont probablement des fiches à fusionner côté Vendor Central. Chaque variante orthographique sépare les avis, les recherches et les statistiques internes. À traiter via la fonction Cas Vendor Central pour demande de fusion catalogue.
+  </p>
+
+  <div class="cta-row">
+    <a class="cta-btn cta-active" href="#" onclick="return false;">Ouvrir un cas de fusion catalogue →</a>
+  </div>
+</section>
+
+    
+<section class="analytic-section">
+  <h2>Mon diagnostic</h2>
+
+  <h3>Ce que les chiffres disent</h3>
+  <p>
+    Le recul de 247 366 €/an n'est pas une baisse homogène de la demande, mais une <strong>contraction du catalogue actif</strong>. Trois constats convergent :
+  </p>
+  <ol>
+    <li><strong>313 ASINs disparus</strong> (48,1 % du catalogue de référence) qui pesaient -362 961 €/an</li>
+    <li><strong>Concentration accrue</strong> du Top 10 (27,6 % → 45,1 %) qui fragilise le compte</li>
+    <li><strong>Multi-marques en baisse</strong> (Cogex, Spotlight, RUECAB principalement)</li>
+  </ol>
+
+  <h3>Ce que je ne vois PAS dans les chiffres</h3>
+  <p>
+    Je ne vois pas de baisse du prix moyen (PMV en hausse de -0,4 %). Je ne vois pas de problème logistique global (ratio expédié/commandé proche de 100 %). Je ne vois pas de dégradation qualité (taux de retours en baisse). Je ne chercherais donc pas en priorité du côté du prix, de l'entrepôt ou des avis clients.
+  </p>
+  <p>
+    La cause la plus probable se situe en amont de la demande consommateur : <strong>commandes Amazon (PO) qui se sont raréfiées, perte de référencement actif, ruptures structurelles sur ASINs clés, suppressions de listings</strong>. C'est l'objet du plan d'action.
+  </p>
+</section>
+
+    
+<section class="analytic-section">
+  <h2>Ce que je ferais maintenant — plan d'action priorisé</h2>
+  <p class="section-intro">
+    Trois priorités opérationnelles. Le détail ASIN par ASIN, les grilles de contrôles et l'estimation du potentiel récupérable sont disponibles en formule Pro.
+  </p>
+
+  <div class="priority-block">
+    <h3 class="priority-title">Priorité 1 — Auditer les ASINs disparus de poids significatif</h3>
+    <p class="priority-desc">Les 313 ASINs disparus pèsent -362 961 €/an de CA non récupéré. Tous ne sont pas récupérables, mais la majorité l'est probablement.</p>
+    
+    <h4>3 plus gros disparus à auditer en priorité <span class="badge-visible">visible Free</span></h4>
+    <table class="data-table">
+      <thead><tr><th>ASIN</th><th>Titre</th><th>Marque</th><th class="num">CA réf. /j</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">B00BBU4W5W</td><td>0</td><td>0</td><td class="num">64 €</td></tr><tr><td class="mono">B009G3EQ70</td><td>EXPERT LINE 486971 Multiprise 5 Prises avec Interrupteur – B</td><td>Expert Line</td><td class="num">90 €</td></tr><tr><td class="mono">B009G3E6CU</td><td>0</td><td>0</td><td class="num">55 €</td></tr>
+      </tbody>
+    </table>
+
+    <h4>9 ASINs suivants à auditer <span class="pro-tag-sm">PRO</span></h4>
+    <table class="data-table pro-blur-table">
+      <thead><tr><th>ASIN</th><th>Titre</th><th>Marque</th><th class="num">CA réf. /j</th></tr></thead>
+      <tbody>
+        <tr class="pro-blur-row"><td class="mono">B0CRHQCZ6W</td><td>0</td><td>0</td><td class="num">53 €</td></tr><tr class="pro-blur-row"><td class="mono">B0CKXVJGXS</td><td>ITENSE 647862 Bloc Multiprise Étanche 3 Prises IP44 – 16A 36</td><td>ITENSE</td><td class="num">69 €</td></tr><tr class="pro-blur-row"><td class="mono">B09XV6NR9G</td><td>0</td><td>0</td><td class="num">50 €</td></tr><tr class="pro-blur-row"><td class="mono">B007H8DQQ8</td><td>COGEX 82603 Tendeur Élastique pour Bâches 20 m – Corde Élast</td><td>COGEX</td><td class="num">104 €</td></tr><tr class="pro-blur-row"><td class="mono">B0C1NS6Z1B</td><td>RUECAB - Grilles de Cuisson Barbecue et fumoir - Grille de B</td><td>RUECAB</td><td class="num">52 €</td></tr><tr class="pro-blur-row"><td class="mono">B00XR9UR04</td><td>OROK 640271 Kit de Signalisation Porte-Vélo et Remorque – Pl</td><td>OROK</td><td class="num">39 €</td></tr><tr class="pro-blur-row"><td class="mono">B0BKPVJZR8</td><td>0</td><td>0</td><td class="num">36 €</td></tr>
+      </tbody>
+    </table>
+
+    <h4>Grille de contrôles à appliquer ASIN par ASIN <span class="pro-tag-sm">PRO</span></h4>
+    <table class="data-table pro-blur-table">
+      <thead><tr><th>Contrôle</th><th>Question opérationnelle</th></tr></thead>
+      <tbody>
+        <tr class="pro-blur-row"><td>Disponibilité Amazon.fr</td><td>L'article est-il achetable par un client final ?</td></tr>
+        <tr class="pro-blur-row"><td>Stock Amazon Retail</td><td>Amazon a-t-il du stock ?</td></tr>
+        <tr class="pro-blur-row"><td>Buy Box</td><td>Amazon détient-il la Buy Box, ou un 3P ?</td></tr>
+        <tr class="pro-blur-row"><td>PO</td><td>Amazon a-t-il cessé d'émettre des commandes ?</td></tr>
+        <tr class="pro-blur-row"><td>Variation / fiche</td><td>Variation cassée, suppression, conformité ?</td></tr>
+        <tr class="pro-blur-row"><td>Prix retail / CRaP</td><td>Le prix est-il devenu non compétitif pour Amazon ?</td></tr>
+      </tbody>
+    </table>
+
+    <div class="cta-row">
+      <a class="cta-btn cta-active" href="#" onclick="return false;">Démarrer l'audit dans Analyse ASINs →</a>
+    </div>
+  </div>
+
+  <div class="priority-block">
+    <h3 class="priority-title">Priorité 2 — Sécuriser les best-sellers actuels (Top 10 période A)</h3>
+    <p class="priority-desc">Le Top 10 pèse 45,1 % du CA. Une perte sur l'un d'eux impacterait significativement le compte.</p>
+
+    <h4>Top 5 contributeurs CA en période A <span class="pro-tag-sm">PRO</span></h4>
+    <table class="data-table pro-blur-table">
+      <thead><tr><th>ASIN</th><th>Titre</th><th>Marque</th><th class="num">CA A</th><th class="num">Part du CA</th></tr></thead>
+      <tbody><tr><td class="mono">B009G3EMDI</td><td>COGEX 82003 Bâche de Protection 2 x 3 m Bleu – Bâche Impermé</td><td>COGEX</td><td class="num">12 261 €</td><td class="num">8,6 %</td></tr><tr><td class="mono">B0C94N9L6L</td><td>COGEX 62739 Lot de 3 Malles Métalliques Grises Cadenassables</td><td>Cogex</td><td class="num">10 000 €</td><td class="num">7,0 %</td></tr><tr><td class="mono">B0CRHZCBV3</td><td>ITENSE 647886 – Rallonge Électrique/Prolongateur 2 m 16 A – </td><td>ITENSE</td><td class="num">9 501 €</td><td class="num">6,7 %</td></tr><tr><td class="mono">B01M0D77JE</td><td>I LOVE BBQ - Grilles de Cuisson Barbecue et fumoir - Grille </td><td>I LOVE BBQ</td><td class="num">7 656 €</td><td class="num">5,4 %</td></tr><tr><td class="mono">B09235M4TD</td><td>OROK 654442 Tête d’Attelage Remorque 750kg – Tête d’Attelage</td><td>OROK</td><td class="num">5 066 €</td><td class="num">3,6 %</td></tr></tbody>
+    </table>
+    <p class="pro-counter">Les <strong>149 ASINs critiques</strong> identifiés (>100 € en période A) sont listés en formule Pro.</p>
+
+    <div class="cta-row">
+      <a class="cta-btn cta-active" href="#" onclick="return false;">Surveillance Buy Box des best-sellers →</a>
+    </div>
+  </div>
+
+  <div class="priority-block">
+    <h3 class="priority-title">Priorité 3 — Reconstituer les familles en recul</h3>
+    <p class="priority-desc">Trois marques décrochent en valeur quotidienne : Cogex, Spotlight, RUECAB. Pour chacune, distinguer recul normal (cannibalisation, saisonnalité) vs anomalie évitable (rupture, suppression).</p>
+
+    <h4>Analyse par famille — actions recommandées <span class="pro-tag-sm">PRO</span></h4>
+    <table class="data-table pro-blur-table">
+      <thead><tr><th>Famille</th><th>Action recommandée</th></tr></thead>
+      <tbody>
+        <tr class="pro-blur-row"><td>Cogex</td><td>Audit disponibilité + relance PO + révision fiches</td></tr>
+        <tr class="pro-blur-row"><td>Spotlight</td><td>Analyse cannibalisation / stratégie nouvelle gamme</td></tr>
+        <tr class="pro-blur-row"><td>RUECAB</td><td>Vérification stock saisonnier + timing des PO</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Estimation du potentiel récupérable <span class="pro-tag-sm">PRO</span></h3>
+  <table class="data-table">
+    <tbody>
+      <tr class="pro-blur-row"><td>Disparus dont la marque est encore active</td><td class="num">8 % des disparus</td><td class="num">62 586 € / an récupérable</td></tr>
+      <tr class="pro-blur-row"><td>Disparus dans marques inactives</td><td class="num">92 %</td><td class="num">— perte probablement structurelle</td></tr>
+    </tbody>
+  </table>
+
+  <div class="pro-cta-section">
+    Accès complet à l'analyse causale, aux 149 ASINs critiques, à la grille de contrôles opérationnelle et au plan d'action détaillé :<br>
+    <strong>Passer en formule Pro — 149 €/mois</strong>
+  </div>
+
+</section>
+
+    
+<section class="analytic-section">
+  <h2>Conclusion</h2>
+  <p>
+    Le compte Cogex Outillage France perd 247 366 €/an en projection annualisée par rapport à la période de référence. La baisse n'est pas due à un effondrement de la demande ou à un problème de prix, mais à <strong>une contraction de 48,1 % du catalogue actif</strong>, concentrée sur quelques marques et un nombre limité d'ASINs.
+  </p>
+  <blockquote class="verdict-block">
+    Le potentiel de récupération n'est pas négligeable, car la baisse est très concentrée. Si les ASINs les plus touchés sont récupérables — stock, Buy Box, disponibilité, PO, fiche — il y a probablement un levier significatif de regagne CA.
+  </blockquote>
+  <p>
+    L'enjeu opérationnel est dans l'audit ASIN par ASIN. C'est l'objet des outils de pilotage Amazon Pilot (Analyse ASINs, Buy Box, Diagnostic CA).
+  </p>
+</section>
+
+
+    <footer class="report-footer">
+      Maquette de validation V3 — Amazon Pilot Analyse comparée · données réelles Cogex Outillage<br>
+      Période de référence : 01/04/2025 → 31/05/2025 (61 j) — Période A : 01/04/2026 → 18/05/2026 (48 j observés, projetée à 61 j par extrapolation linéaire)<br>
+      Précautions méthodo : la marge affichée est la rentabilité Amazon Retail (CA expédié − COGS), pas la marge industrielle de la marque. CA commandes = volumes Amazon-side (PO). Sanity check passé : COGS B009G3EMDI = 3 651 × 1,92 € = 7 009,92 €.
+    </footer>
+  </div>
+</div>
+
+<script>
+function showResults() { document.body.classList.add('results-mode'); window.scrollTo(0,0); }
+function showImport() { document.body.classList.remove('results-mode'); window.scrollTo(0,0); }
+function setView(mode) {
+  document.body.classList.toggle('pro-mode', mode === 'pro');
+  document.querySelectorAll('.view-toggle button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+}
+</script>
+</body>
+</html>
