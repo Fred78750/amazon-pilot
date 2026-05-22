@@ -875,8 +875,8 @@ function renderYoYResult() {
         <div class="yoy-kpi-label">Mouvement du catalogue</div>
         <div class="yoy-kpi-value" style="color:${_kpi2BigColor}">${_kpi2SoldeStr}</div>
         <div class="yoy-kpi-sub">
-          <span style="color:#b91c1c;font-weight:600">−${disparusN} disparus</span> &nbsp;/&nbsp; <span style="color:#15803d;font-weight:600">+${apparusN} apparus</span><br>
-          Soit <span style="white-space:nowrap">${_kpi2PctDisp}</span> du catalogue de référence<br>
+          <span style="color:#b91c1c;font-weight:600;white-space:nowrap">−${disparusN} disparus</span> &nbsp;/&nbsp; <span style="color:#15803d;font-weight:600;white-space:nowrap">+${apparusN} apparus</span><br>
+          Soit <span style="white-space:nowrap">${_kpi2PctDisp}</span> <span style="white-space:nowrap">du catalogue de référence</span><br>
           Impact disparus : <span style="white-space:nowrap">${_kpi2Impact}</span>
         </div>
       </div>
@@ -886,7 +886,7 @@ function renderYoYResult() {
         <div class="yoy-kpi-label">Rentabilité Amazon Retail</div>
         <div class="yoy-kpi-value" style="color:${_kpi3BigColor}">${_kpi3TauxAFmt}</div>
         <div class="yoy-kpi-sub">
-          Référence : ${_kpi3TauxRefFmt} &nbsp;|&nbsp; ${deltaTauxMarge}<br>
+          Référence : <span style="white-space:nowrap">${_kpi3TauxRefFmt}</span> &nbsp;|&nbsp; <span style="white-space:nowrap">${deltaTauxMarge}</span><br>
           <em style="color:var(--tx3)">Marge d'Amazon sur le compte — pas la marge industrielle de la marque.</em>
         </div>
       </div>
@@ -906,7 +906,7 @@ function renderYoYResult() {
           </div>
         </div>
         <div class="yoy-kpi-sub">
-          <strong>${_nCritiques4}</strong> ASINs critiques identifiés
+          <strong>${_nCritiques4}</strong> ASINs critiques identifiés
         </div>
       </div>
 
