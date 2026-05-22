@@ -79,6 +79,9 @@ const aiUsage = {
 // @smoke
 
 // @guide
+
+// @parser_erp
+
 let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
 let activeId = null;
@@ -684,7 +687,7 @@ let _db = null;
 function openDB() {
   return new Promise((resolve, reject) => {
     if (_db) return resolve(_db);
-    const req = indexedDB.open('AmazonPilot', 3);
+    const req = indexedDB.open('AmazonPilot', 4);
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('clients')) {
@@ -697,6 +700,9 @@ function openDB() {
         const yoyStore = db.createObjectStore('yoy_analyses', { keyPath: 'id' });
         yoyStore.createIndex('clientId', 'clientId', { unique: false });
         yoyStore.createIndex('createdAt', 'createdAt', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('erp_stock')) {
+        db.createObjectStore('erp_stock', { keyPath: '_key' });
       }
     };
     req.onsuccess = e => { _db = e.target.result; resolve(_db); };
@@ -3944,6 +3950,26 @@ function renderImport() {
   h += '</div>';
 
   h += '</div>';  // fin .cd Buy Box
+
+  // ══════════════════════════════════════════════════════
+  // ÉTAPE 4 — Données stock ERP (modèle Amazon Pilot)
+  // ══════════════════════════════════════════════════════
+  var erpCount = c.erpStockCount || 0;
+  var erpLoaded = erpCount > 0;
+  h += '<div class="cd">';
+  h += '<div class="cd-t space">';
+  h += '<span>4 — Données stock ERP <span style="font-size:10px;font-weight:400;color:var(--tx3)">(modèle Amazon Pilot)</span></span>';
+  h += erpLoaded
+    ? '<span class="pill pill-g">✓ ' + erpCount.toLocaleString('fr-FR') + ' références</span>'
+    : '<span class="pill pill-gr">Non chargé</span>';
+  h += '</div>';
+  h += '<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Importez les stocks et arrivages ERP pour alimenter les modules Appros, Prévisionnel et Diagnostic CA. Téléchargez d\'abord le modèle, remplissez-le depuis votre ERP, puis importez-le ici.</p>';
+  h += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
+  h += '<button class="btn btn-sm" onclick="downloadERPTemplate()">\u{1F4E5} Télécharger le modèle (.xlsx)</button>';
+  h += '<label class="btn btn-sm" style="cursor:pointer">\u{1F4E4} ' + (erpLoaded ? 'Recharger les stocks ERP' : 'Importer les stocks ERP (.xlsx)') + '<input type="file" accept=".xlsx" style="display:none" onchange="handleERPImport(this.files)"/></label>';
+  h += '</div>';
+  h += '<div id="erp-import-preview" style="margin-top:10px"></div>';
+  h += '</div>';
 
   h += `</div>`;
   return h;
