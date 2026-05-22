@@ -1,6 +1,6 @@
 ﻿# CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 22 mai 2026 (v3.6.5.12 preprod — chantier YoY Étape 1 en cours)
+**Dernière mise à jour :** 22 mai 2026 (v3.6.5.12 PROD — chantier YoY Étape 1 en cours)
 
 ---
 
@@ -101,7 +101,7 @@ Tout patch doit être minimal et ciblé :
 | v3.6.5.9 | ✅ Stable staging | 2089e8c |
 | v3.6.5.10 | ✅ Stable staging | b5cd215 |
 | v3.6.5.11 | ✅ Stable staging | ad8320f |
-| v3.6.5.12 | ✅ **Dernière recette + preprod** — anti-régression complet 22 mai 2026 | f8d4f6f |
+| v3.6.5.12 | ✅ **PROD** — mergé 22 mai 2026 / tag v3.6.5.12 | 93a9157 (merge) / tag v3.6.5.12 |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -130,7 +130,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | **v3.6.2** (merge 01656bc — 19 mai 2026) | https://amazon.foliow.app |
+| Production (main) | **v3.6.5.12** (merge 93a9157 — 22 mai 2026) | https://amazon.foliow.app |
 | Recette (staging) | **v3.6.5.12** (commit f8d4f6f — 22 mai 2026) | https://d9xny9istvl53.cloudfront.net |
 | Preprod | **v3.6.5.12** (deploy direct AWS CLI — 22 mai 2026) | https://preprod.amazon.foliow.app |
 
@@ -140,7 +140,7 @@ Scope : moteur de recherche ASIN transversal topbar + rebranchement Buy Box / Ap
 ⏸ **v3.6.3 EN ATTENTE MERGE PROD** — validé recette + preprod (21 mai 2026). Décision Fred : merge différé, gain fonctionnel insuffisant pour déclencher un merge seul. À merger avec le prochain chantier.
 Smoke tests : colonne cause ✅ | fragile=0 légitime (0 ASIN Cogex avec ≥3 sem. historique) | récupérées=0 attendu.
 
-⏸ **v3.6.5.12 EN ATTENTE MERGE PROD** — validé recette + preprod (22 mai 2026). Anti-régression complet : 6/6 Playwright ✅, 10/10 écrans ✅, 0 erreur JS ✅, YoY KPI grid 4 cards ✅, 10 nowrap spans ✅. Décision merge : orchestrateur.
+✅ **v3.6.5.12 MERGÉ EN PROD le 22 mai 2026** — validé recette + preprod (22 mai 2026). Anti-régression complet : 6/6 Playwright ✅, 10/10 écrans ✅, 0 erreur JS ✅, YoY KPI grid 4 cards ✅, 10 nowrap spans ✅.
 
 ✅ **MERGÉ EN PROD le 18 mai 2026** — merge fae7d79, APP_VERSION 3.6.1.5 vérifié, CloudFront invalidé.
 Scope merge groupé : v3.6.0 + v3.6.1 + v3.6.1.1 + v3.6.1.2 + v3.6.1.3 + v3.6.1.4 + v3.6.1.5
@@ -450,7 +450,7 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 ## ÉTAT SESSION SUIVANTE PROBABLE
 
 - **v3.6.2 en prod** — barre recherche ASIN topbar
-- **v3.6.5.12 en recette + preprod** — anti-régression complet ✅ (22 mai 2026). Merge prod en attente GO orchestrateur.
+- **v3.6.5.12 en PROD** — mergé 22 mai 2026, tag v3.6.5.12, CloudFront invalide ✅. Scope : YoY module Etape 1 (KPI hero block typographie + charte visuelle).
 - **v3.6.3** — toujours en attente merge prod (sera groupé avec v3.6.5.x ou prochain chantier)
 - **Prochain scope** : YoY Étape 2 (suite chantier YoY — brief orchestrateur à venir)
 - **Dans tous les cas** : Fred rouvre la session — Claude Code n'anticipe rien
@@ -532,4 +532,4 @@ Dans les templates HTML générés par JS : utiliser   (NBSP) devant les unité
 
 ---
 
-**FIN CLAUDE_CODE_CONTEXT.md — màj : 22 mai 2026 (v3.6.5.12 recette+preprod — anti-régression ✅ — merge prod en attente orchestrateur)**
+**FIN CLAUDE_CODE_CONTEXT.md — màj : 22 mai 2026 (v3.6.5.12 PROD ✅ — merge 93a9157, tag v3.6.5.12, CloudFront invalide)**
