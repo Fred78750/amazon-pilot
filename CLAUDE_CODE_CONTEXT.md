@@ -102,7 +102,7 @@ Tout patch doit être minimal et ciblé :
 | v3.6.5.10 | ✅ Stable staging | b5cd215 |
 | v3.6.5.11 | ✅ Stable staging | ad8320f |
 | v3.6.5.12 | ✅ **PROD** — mergé 22 mai 2026 / tag v3.6.5.12 | 93a9157 (merge) / tag v3.6.5.12 |
-| v3.6.6 | ✅ Stable recette + preprod — 12/12 smoke tests — en attente GO prod | 750082b |
+| v3.6.6 | ✅ Stable recette + preprod — 12/12 smoke tests — en attente GO prod | 988add4 |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
