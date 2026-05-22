@@ -50,7 +50,8 @@ def build(ver=None, check=False):
     buybox = strip_header(r('buybox.js'))
     seo    = strip_header(r('seo.js'))
     smoke  = strip_header(r('smoke.js'))
-    guide  = strip_header(r('guide_asn.js'))
+    guide      = strip_header(r('guide_asn.js'))
+    parser_erp = strip_header(r('parser_erp.js'))
     yoy    = strip_header(r('yoy.js'))
     yoy_ai = strip_header(r('yoy_ai.js'))
     # Templates Free — tous les fichiers src/templates/yoy_*.js (ordre alphabétique stable)
@@ -66,6 +67,7 @@ def build(ver=None, check=False):
 
     for name, content in [('core.js',core),('buybox.js',buybox),('seo.js',seo),
                            ('smoke.js',smoke),('guide_asn.js',guide),
+                           ('parser_erp.js',parser_erp),
                            ('yoy.js',yoy),('yoy_ai.js',yoy_ai),('templates/*',yoy_templates)]:
         log(f"{name:<20} {len(content)//1024} Ko")
 
@@ -77,6 +79,7 @@ def build(ver=None, check=False):
     js = core
     # Injection avec \n pour éviter collision @smoke vs @smoke_manual
     js = js.replace('// @guide\n',        guide + '\n')
+    js = js.replace('// @parser_erp\n',  parser_erp + '\n')
     js = js.replace('// @smoke\n',        smoke_main + '\n')
     js = js.replace('// @buybox\n',       buybox + '\n')
     js = js.replace('// @seo\n',          seo + '\n')

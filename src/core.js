@@ -10,7 +10,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.6.5.12';
+const APP_VERSION = '3.6.6';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -79,6 +79,9 @@ const aiUsage = {
 // @smoke
 
 // @guide
+
+// @parser_erp
+
 let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
 let activeId = null;
@@ -684,7 +687,7 @@ let _db = null;
 function openDB() {
   return new Promise((resolve, reject) => {
     if (_db) return resolve(_db);
-    const req = indexedDB.open('AmazonPilot', 3);
+    const req = indexedDB.open('AmazonPilot', 4);
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('clients')) {
@@ -697,6 +700,9 @@ function openDB() {
         const yoyStore = db.createObjectStore('yoy_analyses', { keyPath: 'id' });
         yoyStore.createIndex('clientId', 'clientId', { unique: false });
         yoyStore.createIndex('createdAt', 'createdAt', { unique: false });
+      }
+      if (!db.objectStoreNames.contains('erp_stock')) {
+        db.createObjectStore('erp_stock', { keyPath: '_key' });
       }
     };
     req.onsuccess = e => { _db = e.target.result; resolve(_db); };
@@ -3944,6 +3950,26 @@ function renderImport() {
   h += '</div>';
 
   h += '</div>';  // fin .cd Buy Box
+
+  // ══════════════════════════════════════════════════════
+  // ÉTAPE 4 — Données stock ERP (modèle Amazon Pilot)
+  // ══════════════════════════════════════════════════════
+  var erpCount = c.erpStockCount || 0;
+  var erpLoaded = erpCount > 0;
+  h += '<div class="cd">';
+  h += '<div class="cd-t space">';
+  h += '<span>4 — Données stock ERP <span style="font-size:10px;font-weight:400;color:var(--tx3)">(modèle Amazon Pilot)</span></span>';
+  h += erpLoaded
+    ? '<span class="pill pill-g">✓ ' + erpCount.toLocaleString('fr-FR') + ' références</span>'
+    : '<span class="pill pill-gr">Non chargé</span>';
+  h += '</div>';
+  h += '<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Importez les stocks et arrivages ERP pour alimenter les modules Appros, Prévisionnel et Diagnostic CA. Téléchargez d\'abord le modèle, remplissez-le depuis votre ERP, puis importez-le ici.</p>';
+  h += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
+  h += '<button class="btn btn-sm" onclick="downloadERPTemplate()">\u{1F4E5} Télécharger le modèle (.xlsx)</button>';
+  h += '<label class="btn btn-sm" style="cursor:pointer">\u{1F4E4} ' + (erpLoaded ? 'Recharger les stocks ERP' : 'Importer les stocks ERP (.xlsx)') + '<input type="file" accept=".xlsx" style="display:none" onchange="handleERPImport(this.files)"/></label>';
+  h += '</div>';
+  h += '<div id="erp-import-preview" style="margin-top:10px"></div>';
+  h += '</div>';
 
   h += `</div>`;
   return h;
@@ -7738,66 +7764,63 @@ function handleMatriceTarif(input) {
   input.value = '';
 }
 
-// ── Import stock ERP (xlsx Cogex) ────────────────────────────
+// ── Import stock ERP (xlsx Cogex / universel v3.6.6) ─────────
 function handleErpStock(input) {
   const file = input.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      const wb = XLSX.read(e.target.result, { type: 'array' });
+  input.value = '';
 
-      // Chercher l'onglet pertinent (insensible à la casse/accents)
-      const sheetName = wb.SheetNames.find(function(n) {
-        return n.toLowerCase().replace(/\s/g,'').includes('stockdispo');
-      }) || wb.SheetNames[0];
-      const ws = wb.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
-      if (!rows.length) { alert('Onglet introuvable ou vide.'); return; }
-
-      // Détection du format :
-      // Format A (ancien) : colonnes "N° Article", "Stock dispo réel à date"...
-      // Format B (nouveau ERP Cogex) : colonnes "N°", "Stock physique", "Stock dispo sur 6 mois"...
-      const firstRow = rows[0];
-      const isFormatB = firstRow.hasOwnProperty('N°') && firstRow.hasOwnProperty('Stock physique');
-
+  // 1. Parser universel (v3.6.6) : reconnaît N°, Stock Physique non réservé,
+  //    header décalé, synonymes, config séparé/cumulé, etc.
+  parseFileERP(file).then(function(result) {
+    if (result.ok && result.rows.length > 0) {
+      const c = cl();
+      if (!c) return;
       const bysku = {};
+      result.rows.forEach(function(row) {
+        const sku = String(row.sku).padStart(6, '0');
+        const s0  = row.stock_disponible_amazon || 0;
+        bysku[sku] = {
+          ean:           row.ean  || '',
+          label:         row.designation || '',
+          codeVie:       row.code_vie    || '',
+          stockPhysique: s0,
+          stock6m:       s0,
+          s0:  s0,
+          s1m: s0,
+          s3m: s0,
+          dateArrivage:  row.date_prochain_arrivage || null,
+          qteArrivage:   row.qte_prochain_arrivage  || 0,
+        };
+      });
+      c.erpStock = bysku;
+      c.erpStockDate = new Date().toISOString().slice(0,10);
+      c.erpStockFormat = result.config === 'cumulated' ? 'B' : 'A';
+      save();
+      const count = Object.keys(bysku).length;
+      log('✓ Stock ERP importé : ' + count + ' références (parser universel)', 'ok');
+      render();
+      const toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:14px 18px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:999;display:flex;align-items:center;gap:12px';
+      toast.innerHTML = '<span style="font-size:20px">📦</span><div><strong>' + count + ' références</strong> chargées (stock ERP)<br><span style="font-size:11px;color:#6B7280">MAJ ' + (c.erpStockDate||'') + '</span></div>';
+      document.body.appendChild(toast);
+      setTimeout(function() { toast.remove(); }, 4000);
+      return;
+    }
 
-      if (isFormatB) {
-        // ── Format B — Export ERP Cogex ─────────────────────────────
-        // Colonnes : N°, Désignation, Code vie, Gencod,
-        //            Stock physique, Stock dispo sur 6 mois,
-        //            Date prochain arrivage, Qté prochain arrivage
-        rows.forEach(function(row) {
-          const skuRaw = row['N°'] != null ? String(row['N°']).trim() : null;
-          if (!skuRaw) return;
-          // Normaliser en 6 chiffres (080017 au lieu de 80017)
-          const sku = skuRaw.padStart(6, '0');
-          const stockPhys = parseFloat(row['Stock physique']) || 0;
-          const stock6m   = parseFloat(row['Stock dispo sur 6 mois']) || 0;
-          // Date arrivage : peut être une date JS ou une chaîne
-          let dateArrivage = null;
-          const rawDate = row['Date prochain arrivage'];
-          if (rawDate) {
-            const d = new Date(rawDate);
-            if (!isNaN(d.getTime())) dateArrivage = d.toISOString().slice(0,10);
-          }
-          bysku[sku] = {
-            ean:           row['Gencod'] != null ? String(row['Gencod']).trim() : '',
-            label:         row['Désignation'] || '',
-            codeVie:       row['Code vie'] || '',
-            stockPhysique: Math.max(0, stockPhys),  // ignorer les négatifs
-            stock6m:       Math.max(0, stock6m),
-            dateArrivage:  dateArrivage,
-            qteArrivage:   parseInt(row['Qté prochain arrivage']) || 0,
-            // Compatibilité avec Format A pour calcAppro
-            s0:  Math.max(0, stockPhys),
-            s1m: Math.max(0, stock6m),
-            s3m: Math.max(0, stock6m),
-          };
-        });
-      } else {
-        // ── Format A (ancien) — Stock dispo réel par horizons ───────
+    // 2. Fallback : parser legacy Format A (colonnes "N° Article", horizons dispo)
+    //    Conservé pour compatibilité ascendante avec anciens exports Cogex.
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array' });
+        const sheetName = wb.SheetNames.find(function(n) {
+          return n.toLowerCase().replace(/\s/g,'').includes('stockdispo');
+        }) || wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
+        if (!rows.length) { alert('Onglet introuvable ou vide.'); return; }
+
         const COL_SKU    = 'N° Article';
         const COL_EAN    = 'Art. Gencod Référence';
         const COL_LABEL  = 'Article';
@@ -7808,6 +7831,7 @@ function handleErpStock(input) {
         const COL_S2M    = 'Stock dispo réel à date +2 mois';
         const COL_S3M    = 'Stock dispo réel à date +3 mois';
 
+        const bysku = {};
         rows.forEach(function(row) {
           const sku = row[COL_SKU] != null ? String(row[COL_SKU]).trim() : null;
           if (!sku) return;
@@ -7818,7 +7842,7 @@ function handleErpStock(input) {
               ean:           row[COL_EAN] != null ? String(row[COL_EAN]).trim() : '',
               label:         row[COL_LABEL] || '',
               marque:        row[COL_MARQUE] || '',
-              stockPhysique: parseFloat(row[COL_S0]) || 0,
+              stockPhysique: parseFloat(row[COL_S0])  || 0,
               stock6m:       parseFloat(row[COL_S3M]) || 0,
               s0:            parseFloat(row[COL_S0])  || 0,
               s15:           parseFloat(row[COL_S15]) || 0,
@@ -7829,30 +7853,32 @@ function handleErpStock(input) {
           }
         });
         Object.keys(bysku).forEach(function(k) { delete bysku[k]._annee; });
-      }
 
-      const c = cl();
-      if (!c) return;
-      c.erpStock = bysku;
-      c.erpStockDate = new Date().toISOString().slice(0,10);
-      c.erpStockFormat = isFormatB ? 'B' : 'A';
-      save();
-      const count = Object.keys(bysku).length;
-      const fmt = isFormatB ? 'Format B (stock + arrivages)' : 'Format A (horizons dispo)';
-      log('✓ Stock ERP importé : ' + count + ' références — ' + fmt, 'ok');
-      render();
-      const toast = document.createElement('div');
-      toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:14px 18px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:999;display:flex;align-items:center;gap:12px';
-      toast.innerHTML = '<span style="font-size:20px">📦</span><div><strong>' + count + ' références</strong> chargées (stock ERP)<br><span style="font-size:11px;color:#6B7280">' + fmt + ' — MAJ ' + (c.erpStockDate||'') + '</span></div>';
-      document.body.appendChild(toast);
-      setTimeout(function() { toast.remove(); }, 4000);
-    } catch(err) {
-      alert('Erreur lecture fichier ERP : ' + err.message);
-      log('✗ Import ERP : ' + err.message, 'err');
-    }
-  };
-  reader.readAsArrayBuffer(file);
-  input.value = '';
+        const c = cl();
+        if (!c) return;
+        if (!Object.keys(bysku).length) {
+          alert('Aucune référence reconnue dans ce fichier.\nVérifiez que la colonne SKU s\'appelle "N° Article" (Format A) ou une variante reconnue (N°, SKU, Code article…).');
+          return;
+        }
+        c.erpStock = bysku;
+        c.erpStockDate = new Date().toISOString().slice(0,10);
+        c.erpStockFormat = 'A';
+        save();
+        const count = Object.keys(bysku).length;
+        log('✓ Stock ERP importé : ' + count + ' références (Format A legacy)', 'ok');
+        render();
+        const toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:14px 18px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:999;display:flex;align-items:center;gap:12px';
+        toast.innerHTML = '<span style="font-size:20px">📦</span><div><strong>' + count + ' références</strong> chargées (stock ERP)<br><span style="font-size:11px;color:#6B7280">Format A legacy — MAJ ' + (c.erpStockDate||'') + '</span></div>';
+        document.body.appendChild(toast);
+        setTimeout(function() { toast.remove(); }, 4000);
+      } catch(err) {
+        alert('Erreur lecture fichier ERP : ' + err.message);
+        log('✗ Import ERP : ' + err.message, 'err');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
 }
 
 // Export CSV plan de réappro
