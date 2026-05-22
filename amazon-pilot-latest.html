@@ -681,7 +681,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.6.5.5';
+const APP_VERSION = '3.6.5.6';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -14274,7 +14274,8 @@ async function init() {
   }
 }
 
-// v3.6.5 — CP1 : Fondations techniques (routing, import, parser, sanity check, IndexedDB)
+// v3.6.5.6 — T1-T7 : Bibliothèque de templates littéraux (Skill YoY V3)
+// CP1 : Fondations techniques (routing, import, parser, sanity check, IndexedDB)
 // CP2 : Calculs 12 dimensions + KPI cards
 // CP3 : Templates Free + rendu complet 6 sections
 // CP4 : Dimensions Pro IA + finitions print
@@ -14652,17 +14653,9 @@ function renderYoYResult() {
           <td class="num ${dim5.deltaTauxRet != null ? yoyDeltaClass(-dim5.deltaTauxRet) : 'muted'}">${dim5.deltaTauxRet != null ? yoyFmtPts(dim5.deltaTauxRet) : '—'}</td></tr>
     </tbody>
   </table>`;
-  const s1Lecture = ``; // CP3
-  const s1Verdict = `<div class="verdict-block ${vClass}">
-    <strong>Conclusion section :</strong>
-    ${dim1.deltaCAPct != null
-      ? (sign === 'negative'
-          ? `Le chiffre d'affaires recule de <strong>${yoyFmtPct(dim1.deltaCAPct, true)}</strong> en rythme annualisé (${deltaCAAnnu}/an).`
-          : sign === 'positive'
-          ? `Le chiffre d'affaires progresse de <strong>${yoyFmtPct(dim1.deltaCAPct, true)}</strong> en rythme annualisé (${deltaCAAnnu}/an).`
-          : `Le chiffre d'affaires est stable sur la période (${yoyFmtPct(dim1.deltaCAPct, true)}).`)
-      : 'Données insuffisantes.'}
-  </div>`;
+  const _tpl1     = tplPerformance(d, sign);
+  const s1Lecture = _tpl1.lecture ? '<div class="yoy-section-lecture">Lecture</div>' + _tpl1.lecture : '';
+  const s1Verdict = _tpl1.verdict;
 
   // ── Section 2 : Dynamique catalogue / buckets ASIN (dim7 + dim8)
   const dim8 = d.dim8 || {};
@@ -14682,13 +14675,9 @@ function renderYoYResult() {
       <tr style="border-top:1px solid var(--bd2)"><td>🧟 Zombies (1–3 ventes/an)</td><td class="num neg">${zombiesN}</td><td class="num neg">${dim8.caPerduTotal != null ? yoyFmtEur(dim8.caPerduTotal / Math.max(dRef||1,1)) : '—'}</td></tr>
     </tbody>
   </table>`;
-  const s2Lecture = ``; // CP3
-  const s2Verdict = `<div class="verdict-block ${vClass}">
-    <strong>Conclusion section :</strong>
-    ${disparusN > 0
-      ? `<strong>${disparusN} ASIN(s)</strong> présents en période Réf ont disparu en période A${dim8.caPerduTotal != null ? ', représentant ' + yoyFmtEur(dim8.caPerduTotal) + ' de CA Réf perdu' : ''}.`
-      : `Aucun ASIN disparu entre les deux périodes.`}
-  </div>`;
+  const _tpl2     = tplCatalogue(d, sign);
+  const s2Lecture = _tpl2.lecture ? '<div class="yoy-section-lecture">Lecture</div>' + _tpl2.lecture : '';
+  const s2Verdict = _tpl2.verdict;
 
   // ── Section 3 : Concentration portefeuille (dim9)
   const dim9 = d.dim9 || {};
@@ -14706,13 +14695,9 @@ function renderYoYResult() {
     <thead><tr><th>Concentration</th><th>Période A</th><th>Réf</th><th>Évolution</th></tr></thead>
     <tbody>${concRows}</tbody>
   </table>`;
-  const s3Lecture = ``; // CP3
-  const s3Verdict = `<div class="verdict-block ${vClass}">
-    <strong>Conclusion section :</strong>
-    ${dim9.concA && dim9.concRef && dim9.concA.top10 != null
-      ? `Les 10 premiers ASINs représentent <strong>${yoyFmtPct(dim9.concA.top10)}</strong> du CA en période A vs ${yoyFmtPct(dim9.concRef.top10)} en Réf.`
-      : 'Données insuffisantes.'}
-  </div>`;
+  const _tpl3     = tplConcentration(d, sign);
+  const s3Lecture = _tpl3.lecture ? '<div class="yoy-section-lecture">Lecture</div>' + _tpl3.lecture : '';
+  const s3Verdict = _tpl3.verdict;
 
   // ── Section 4 : Dynamique marques (dim10)
   const dim10 = d.dim10 || {};
@@ -14732,13 +14717,9 @@ function renderYoYResult() {
     <thead><tr><th>Marque</th><th>CA/j Période A</th><th>CA/j Réf</th><th>Δ</th></tr></thead>
     <tbody>${s4Rows}</tbody>
   </table>`;
-  const s4Lecture = ``; // CP3
-  const s4Verdict = `<div class="verdict-block ${vClass}">
-    <strong>Conclusion section :</strong>
-    ${topBrands.length > 0
-      ? `${topBrands.length} marque(s) analysée(s). La marque la plus importante est <strong>${esc(topBrands[0].marque || '—')}</strong>.`
-      : 'Données insuffisantes.'}
-  </div>`;
+  const _tpl4     = tplMarques(d, sign);
+  const s4Lecture = _tpl4.lecture ? '<div class="yoy-section-lecture">Lecture</div>' + _tpl4.lecture : '';
+  const s4Verdict = _tpl4.verdict;
 
   // ── Section 5 : Top mouvements ASIN (dim11)
   const dim11 = d.dim11 || {};
@@ -14765,13 +14746,9 @@ function renderYoYResult() {
       <thead><tr><th>ASIN</th><th>Produit</th><th>CA Réf/j</th><th>CA A/j</th><th>Δ CA annualisé</th></tr></thead>
       <tbody>${buildMvtRows(gagnants, 'pos')}</tbody>
     </table>`;
-  const s5Lecture = ``; // CP3
-  const s5Verdict = `<div class="verdict-block ${vClass}">
-    <strong>Conclusion section :</strong>
-    ${perdants.length > 0
-      ? `Les <strong>${Math.min(perdants.length, 15)}</strong> principaux perdants concentrent l'essentiel de la variation négative.`
-      : 'Pas de perdants significatifs identifiés.'}
-  </div>`;
+  const _tpl5     = tplTopMouvements(d, sign);
+  const s5Lecture = _tpl5.lecture ? '<div class="yoy-section-lecture">Lecture</div>' + _tpl5.lecture : '';
+  const s5Verdict = _tpl5.verdict;
 
   // ── Section 6 : Anomalies catalogue (dim12)
   const dim12 = d.dim12 || {};
@@ -14786,13 +14763,9 @@ function renderYoYResult() {
     <thead><tr><th>Marque 1</th><th>Marque 2</th><th>Similarité</th><th>CA combiné</th></tr></thead>
     <tbody>${s6Rows}</tbody>
   </table>`;
-  const s6Lecture = ``; // CP3
-  const s6Verdict = `<div class="verdict-block ${vClass}">
-    <strong>Conclusion section :</strong>
-    ${anomPairs.length > 0
-      ? `<strong>${anomPairs.length}</strong> doublon(s) orthographique(s) potentiel(s) détecté(s) dans le catalogue.`
-      : 'Aucun doublon orthographique détecté dans le catalogue.'}
-  </div>`;
+  const _tpl6     = tplAnomalies(d, sign);
+  const s6Lecture = _tpl6.lecture ? '<div class="yoy-section-lecture">Lecture</div>' + _tpl6.lecture : '';
+  const s6Verdict = _tpl6.verdict;
 
   // ── Helper : build section HTML
   function sec(id, title, tableHtml, lectureHtml, verdictHtml) {
@@ -14806,78 +14779,244 @@ function renderYoYResult() {
     </div>`;
   }
 
-  // ── Section 7 : Mon diagnostic (heuristique dim 1-12)
+  // ── Sections 7, 8, Conclusion — variables partagées ─────────────
   const _d1 = d.dim1 || {}, _d2 = d.dim2 || {}, _d3 = d.dim3 || {};
-  const _d4 = d.dim4 || {}, _d5 = d.dim5 || {}, _d7 = d.dim7 || {}, _d9 = d.dim9 || {};
-  const _disparusN7   = _d7.disparus ? _d7.disparus.length : 0;
-  const _disparusCA7  = (_d7.sumDisparusRef || 0) * (dRef || 1);
-  const _disparusPct7 = _d1.caRef > 0 ? _disparusCA7 / _d1.caRef * 100 : 0;
-  const _concDelta7   = _d9.concA && _d9.concRef ? (_d9.concA.top10 - _d9.concRef.top10) : null;
-  const _margeDir7    = _d4.deltaTauxMarge != null ? (_d4.deltaTauxMarge >= 0 ? 'progresse' : 'recule') : null;
-  const _retDir7      = _d5.deltaTauxRet   != null ? (_d5.deltaTauxRet  >= 0 ? 'en hausse' : 'en baisse') : null;
+  const _d4 = d.dim4 || {}, _d5 = d.dim5 || {}, _d7 = d.dim7 || {};
+  const _d9 = d.dim9 || {}, _d10 = d.dim10 || {}, _d11 = d.dim11 || {};
 
-  const s7Points = [];
-  if (_d1.deltaCAPct != null)
-    s7Points.push(`Le CA ${_d1.deltaCAPct < 0 ? 'recule' : 'progresse'} de <strong>${yoyFmtPct(Math.abs(_d1.deltaCAPct))}</strong> en annualisé (${yoyFmtEurSigned(_d1.deltaCAAnnu)} / an).`);
-  if (_d2.deltaUPct != null && _d3.deltaPMVPct != null) {
-    const volPart = Math.abs(_d2.deltaUPct) > 2 ? `volume <strong>${yoyFmtPct(_d2.deltaUPct, true)}</strong>` : 'volume stable';
-    const pmvPart = Math.abs(_d3.deltaPMVPct) > 1 ? `, PMV <strong>${yoyFmtPct(_d3.deltaPMVPct, true)}</strong>` : '';
-    s7Points.push(`Décomposition : ${volPart}${pmvPart}.`);
+  const _nDisp7  = (_d7.disparus || []).length;
+  const _nComm7  = (_d7.stables  || []).length + (_d7.enBaisse || []).length + (_d7.enHausse || []).length;
+  const _nA1Tot7 = _nDisp7 + _nComm7;
+  const _nApp7   = (_d7.apparus  || []).length;
+  const _pctDisp7 = _nA1Tot7 > 0 ? (Math.round(_nDisp7 / _nA1Tot7 * 1000) / 10) : 0;
+  const _dispCAAnn7 = (_d7.sumDisparusRef || 0) * 365;
+
+  // Top 3 marques perdantes / gagnantes
+  const _brandGetDp = function(b) {
+    return b.deltaPct != null ? b.deltaPct
+      : (b.caRefPerDay > 0 ? (b.caAPerDay / b.caRefPerDay - 1) * 100 : 0);
+  };
+  const _brandsSorted7 = (_d10.topBrands || []).slice(0, 10)
+    .map(function(b) { return { n: b.marque, dp: _brandGetDp(b), dj: (b.caAPerDay||0)-(b.caRefPerDay||0) }; })
+    .sort(function(a, b) { return a.dp - b.dp; });
+  const _perdBrands7 = _brandsSorted7.filter(function(b) { return b.dp < 0; }).slice(0, 3);
+  const _gainBrands7 = _brandsSorted7.filter(function(b) { return b.dp > 0; }).reverse();
+
+  // Top 8 disparus par CA réf
+  const _top8Disp7 = (_d7.disparus || []).slice().sort(function(a, b) {
+    return (b.caRefPerDay || 0) - (a.caRefPerDay || 0);
+  }).slice(0, 8);
+
+  // Top 5 ASINs période A (tous buckets actifs)
+  const _allActifsA7 = [].concat(
+    _d7.stables  || [],
+    _d7.enHausse || [],
+    _d7.enBaisse || [],
+    _d7.apparus  || []
+  ).filter(function(a) { return (a.caAPerDay || 0) > 0; })
+   .sort(function(a, b) { return (b.caAPerDay || 0) - (a.caAPerDay || 0); });
+  const _top5A7 = _allActifsA7.slice(0, 5);
+
+  // Grilles de contrôle
+  const _mkCtrlTable = function(rows) {
+    return '<table class="yoy-table" style="margin:10px 0 14px">'
+      + '<thead><tr><th>Contrôle</th><th>Question opérationnelle</th></tr></thead><tbody>'
+      + rows.map(function(r) { return '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td></tr>'; }).join('')
+      + '</tbody></table>';
+  };
+  const _gridAudit = [
+    ['Disponibilité Amazon.fr', "L'article est-il achetable par un client final ?"],
+    ['Stock Amazon Retail',     'Amazon a-t-il du stock ?'],
+    ['Buy Box',                 'Amazon détient-il la Buy Box, ou un 3P ?'],
+    ['PO Vendor',               "Amazon a-t-il cessé d'émettre des commandes ? Depuis quand ?"],
+    ['Variation / fiche',       'Variation cassée, suppression de listing, conformité contenu ?'],
+    ['Prix retail / CRaP',      'Le prix est-il devenu non compétitif pour Amazon ?'],
+  ];
+  const _gridBestSell = [
+    ['Stock Amazon',    'Combien de jours de couverture stock restent ?'],
+    ['Buy Box',         'Amazon a-t-il toujours la Buy Box à 100 % ?'],
+    ['Prix retail',     'Le prix est-il stable depuis 30 jours ? Pas de yo-yo ?'],
+    ['Fiche produit',   'Images, titre, bullets sont-ils complets et conformes ?'],
+    ['Avis clients',    "Note globale stable ? Pas de vague d'avis négatifs récents ?"],
+  ];
+  const _gridSecure = [
+    ['Stock Amazon', 'Couverture stock suffisante pour soutenir la cadence ?'],
+    ['PO Vendor',    'Les commandes Amazon suivent-elles le rythme accéléré ?'],
+    ['Prix retail',  'Le prix reste-t-il cohérent ? Pas de dérapage à la baisse ?'],
+    ['Buy Box',      'Amazon garde-t-il 100 % de la Buy Box ?'],
+  ];
+  const _gridContenu = [
+    ['Contenu fiche', 'Titre, bullets, images A+ complets ?'],
+    ['Variations',    'Toutes les variantes (taille, couleur) sont-elles listées ?'],
+    ['Mots-clés',     'Backend keywords renseignés ? Recherche organique ?'],
+    ['Reviews',       'Premiers avis collectés ? Vine activé ?'],
+  ];
+  const _cta7 = function(label, screen) {
+    return '<button class="btn btn-sm" onclick="go(\'' + screen + '\')" style="margin-right:8px;margin-top:8px">' + label + '</button>';
+  };
+
+  // ── Section 7 : Mon diagnostic (T3) ──────────────────────────────
+  const _concTop10A7  = _d9.concA   && _d9.concA.top10   != null ? yoyFmtPct(_d9.concA.top10)   : '—';
+  const _concTop10R7  = _d9.concRef && _d9.concRef.top10 != null ? yoyFmtPct(_d9.concRef.top10) : '—';
+  const _deltaAnnFmt7 = _d1.deltaCAAnnu != null ? yoyFmtEur(Math.abs(_d1.deltaCAAnnu)) : '—';
+  const _appAnn7      = (_d7.sumApparusA || 0) * 365;
+
+  let s7Html = '';
+  if (sign === 'negative') {
+    const _perdNames7 = _perdBrands7.length >= 2
+      ? _perdBrands7.map(function(b) { return '<strong>' + esc(b.n) + '</strong>'; }).join(', ')
+      : (_perdBrands7[0] ? '<strong>' + esc(_perdBrands7[0].n) + '</strong>' : 'plusieurs marques');
+    const _retDir7 = _d5.deltaTauxRet != null ? (_d5.deltaTauxRet <= 0 ? 'en baisse' : 'stable') : 'stable';
+    const _pmvUpDown7 = _d3.deltaPMVPct != null && _d3.deltaPMVPct >= 0 ? 'en hausse' : 'stable';
+    const _pmvAbs7 = _d3.deltaPMVPct != null ? yoyFmtPct(Math.abs(_d3.deltaPMVPct)) : '—';
+    s7Html = '<div class="yoy-section" id="yoy-sec-s7">'
+      + '<h3 class="yoy-section-title">Mon diagnostic</h3>'
+      + '<div class="yoy-section-lecture">Ce que les chiffres disent</div>'
+      + '<p class="yoy-section-para">Le recul de <strong>' + _deltaAnnFmt7 + '/an</strong> n\'est pas une baisse homogène de la demande, mais une <strong>contraction du catalogue actif</strong>. Trois constats convergent :</p>'
+      + '<ol style="font-size:13px;line-height:1.9;color:var(--tx);padding-left:22px;margin:8px 0 14px">'
+      + '<li><strong>' + _nDisp7 + ' ASINs disparus</strong> (' + _pctDisp7 + ' % du catalogue de référence) qui pesaient <strong>' + yoyFmtEur(_dispCAAnn7) + '/an</strong></li>'
+      + '<li><strong>Concentration accrue</strong> du Top 10 (' + _concTop10R7 + ' → ' + _concTop10A7 + ') qui fragilise le compte</li>'
+      + '<li><strong>Multi-marques en baisse</strong> (' + _perdNames7 + ' principalement)</li>'
+      + '</ol>'
+      + '<div class="yoy-section-lecture">Ce que je ne vois PAS dans les chiffres</div>'
+      + '<p class="yoy-section-para">Je ne vois pas de baisse du prix moyen (PMV ' + _pmvUpDown7 + ' de <strong>' + _pmvAbs7 + '</strong>). Je ne vois pas de problème logistique global (ratio expédié/commandé proche de 100 %). Je ne vois pas de dégradation qualité (taux de retours <strong>' + _retDir7 + '</strong>). Je ne chercherais donc pas en priorité du côté du prix, de l\'entrepôt ou des avis clients.</p>'
+      + '<p class="yoy-section-para">La cause la plus probable se situe en amont de la demande consommateur : <strong>commandes Amazon (PO) qui se sont raréfiées, perte de référencement actif, ruptures structurelles sur ASINs clés, suppressions de listings</strong>. C\'est l\'objet du plan d\'action.</p>'
+      + '</div>';
+  } else if (sign === 'positive') {
+    const _gainNames7 = _gainBrands7.slice(0, 3).map(function(b) { return '<strong>' + esc(b.n) + '</strong>'; }).join(', ') || 'plusieurs marques';
+    s7Html = '<div class="yoy-section" id="yoy-sec-s7">'
+      + '<h3 class="yoy-section-title">Mon diagnostic</h3>'
+      + '<div class="yoy-section-lecture">Ce que les chiffres disent</div>'
+      + '<p class="yoy-section-para">La progression de <strong>' + _deltaAnnFmt7 + '/an</strong> se construit sur une base saine. Trois constats convergent :</p>'
+      + '<ol style="font-size:13px;line-height:1.9;color:var(--tx);padding-left:22px;margin:8px 0 14px">'
+      + '<li><strong>' + _nComm7 + ' ASINs déjà présents</strong> qui accélèrent en valeur agrégée</li>'
+      + '<li><strong>' + _nApp7 + ' nouveaux ASINs</strong> qui apportent <strong>' + yoyFmtEur(_appAnn7) + '/an</strong> additionnels</li>'
+      + '<li><strong>Croissance multi-marques</strong> portée principalement par ' + _gainNames7 + '</li>'
+      + '</ol>'
+      + '<div class="yoy-section-lecture">Ce que je ne vois PAS dans les chiffres</div>'
+      + '<p class="yoy-section-para">Je ne vois pas de hausse de prix qui expliquerait mécaniquement la progression. Je ne vois pas non plus de saisonnalité particulière qui exploserait sur cette période. Je ne vois pas de signal de tension côté retours.</p>'
+      + '<p class="yoy-section-para">La progression vient probablement d\'une combinaison : <strong>meilleure disponibilité côté Amazon (PO plus régulières), montée de référencement organique, ou effort commercial spécifique de la marque sur quelques ASINs clés</strong>. Le plan d\'action se focalise sur la sécurisation de cette dynamique.</p>'
+      + '</div>';
+  } else {
+    const _deltaSignedFmt7 = _d1.deltaCAAnnu  != null ? yoyFmtEurSigned(_d1.deltaCAAnnu)  : '—';
+    const _deltaPctFmt7    = _d1.deltaCAPct   != null ? yoyFmtPct(_d1.deltaCAPct, true)   : '—';
+    s7Html = '<div class="yoy-section" id="yoy-sec-s7">'
+      + '<h3 class="yoy-section-title">Mon diagnostic</h3>'
+      + '<div class="yoy-section-lecture">Ce que les chiffres disent</div>'
+      + '<p class="yoy-section-para">Le CA évolue de <strong>' + _deltaSignedFmt7 + '/an</strong>, soit <strong>' + _deltaPctFmt7 + '</strong> : performance proche de la référence. Mais cette stabilité agrégée peut masquer des mouvements internes — ' + _nDisp7 + ' disparitions compensées par ' + _nApp7 + ' apparitions, et des rotations marque par marque visibles dans les sections précédentes.</p>'
+      + '<div class="yoy-section-lecture">Ce que je ne vois PAS dans les chiffres</div>'
+      + '<p class="yoy-section-para">Je ne vois pas de signal de risque imminent. Je ne vois pas non plus de moteur de croissance évident à activer.</p>'
+      + '<p class="yoy-section-para">Le plan d\'action porte sur les opportunités identifiées au niveau ASIN ou marque (cf. sections précédentes), pas sur un sujet global.</p>'
+      + '</div>';
   }
-  if (_disparusN7 > 0)
-    s7Points.push(`<strong>${_disparusN7} ASIN(s) disparus</strong> représentent ${yoyFmtPct(_disparusPct7)} du CA Réf (${yoyFmtEur(_disparusCA7)}).`);
-  if (_concDelta7 != null)
-    s7Points.push(`La concentration Top 10 ${_concDelta7 > 0 ? 's\'est accentuée' : 's\'est allégée'} (${yoyFmtPts(_concDelta7)}).`);
-  if (_margeDir7 && _d4.deltaTauxMarge != null)
-    s7Points.push(`La marge brute Amazon ${_margeDir7} de <strong>${yoyFmtPts(_d4.deltaTauxMarge)}</strong>.`);
-  if (_retDir7 && _d5.deltaTauxRet != null && Math.abs(_d5.deltaTauxRet) > 0.3)
-    s7Points.push(`Taux de retour ${_retDir7} (${yoyFmtPts(_d5.deltaTauxRet)}).`);
 
-  const s7Html = `<div class="yoy-section" id="yoy-sec-s7">
-    <h3 class="yoy-section-title">Mon diagnostic</h3>
-    <ul style="margin:12px 0;padding-left:20px;font-size:13px;line-height:1.8;color:var(--tx)">
-      ${s7Points.map(p => `<li>${p}</li>`).join('') || '<li style="color:var(--tx2)">Données insuffisantes pour le diagnostic.</li>'}
-    </ul>
-    <div class="verdict-block ${vClass}" style="font-style:normal">
-      <strong>Cause principale identifiée :</strong> ${kpi4Icon}&nbsp;${esc(kpi4Label)}
-      ${_disparusPct7 > 25 ? ` — ${Math.round(_disparusPct7)}% du CA Réf perdu sur ASINs disparus` : ''}
-    </div>
-  </div>`;
+  // ── Section 8 : Plan d'action priorisé (T4) ──────────────────────
+  const _top10APct8  = _d9.concA && _d9.concA.top10 != null ? yoyFmtPct(_d9.concA.top10) : '—';
+  const _perdants11  = _d11.perdants || [];
+  const _gagnants11  = _d11.gagnants || [];
 
-  // ── Section 8 : Plan d'action priorisé (heuristique, CP4 = IA)
-  const s8Actions = [];
-  if (_disparusN7 > 0 && _disparusPct7 > 10)
-    s8Actions.push({ prio: 1, titre: 'Auditer les ASINs disparus', desc: `${_disparusN7} ASINs ont disparu. Identifier lesquels sont récupérables (rupture stock, déréférencement) vs structurels.` });
-  if (_d4.deltaTauxMarge != null && _d4.deltaTauxMarge < -2)
-    s8Actions.push({ prio: 2, titre: 'Revoir les conditions COGS', desc: `La marge a baissé de ${yoyFmtPts(_d4.deltaTauxMarge)}. Vérifier les prix de cession et la structure de coûts.` });
-  if (_d2.deltaUPct != null && _d2.deltaUPct < -10)
-    s8Actions.push({ prio: 3, titre: 'Relancer les volumes', desc: `Les unités commandées reculent de ${yoyFmtPct(_d2.deltaUPct, true)}. Actions promotionnelles ou revue du catalogue actif.` });
-  if (anomPairs.length > 0)
-    s8Actions.push({ prio: 4, titre: 'Nettoyer les doublons catalogue', desc: `${anomPairs.length} doublon(s) de marque détecté(s). Harmoniser les libellés pour consolider les données.` });
-  if (s8Actions.length === 0)
-    s8Actions.push({ prio: 1, titre: 'Maintenir la dynamique', desc: 'Aucune action corrective urgente identifiée. Surveiller les indicateurs de volume et de marge.' });
+  const _mkAsinList = function(list) {
+    if (!list || !list.length) return '';
+    return '<ul style="font-size:12px;font-family:monospace;margin:8px 0 12px;padding-left:16px;line-height:1.8">'
+      + list.map(function(a) {
+          const caFmt = a.caRefPerDay != null ? yoyFmtEur((a.caRefPerDay||0) * (_d1.dRef||365))
+            : a.caAPerDay != null ? yoyFmtEur((a.caAPerDay||0) * (_d1.dA||365)) : '—';
+          const deltFmt = a.deltaPerDay != null ? ' — <strong>' + yoyFmtEurSigned(a.deltaPerDay * 365) + '/an</strong>' : '';
+          return '<li><strong>' + esc(a.asin||'—') + '</strong> — ' + esc(a.titre||'—') + ' (' + esc(a.marque||'—') + ') — ' + caFmt + deltFmt + '</li>';
+        }).join('')
+      + '</ul>';
+  };
 
-  const s8Html = `<div class="yoy-section" id="yoy-sec-s8">
-    <h3 class="yoy-section-title">Ce que je ferais maintenant — plan d'action priorisé</h3>
-    <ol style="margin:12px 0;padding-left:20px;font-size:13px;line-height:1.9;color:var(--tx)">
-      ${s8Actions.map(a => `<li><strong>${esc(a.titre)}</strong> — ${a.desc}</li>`).join('')}
-    </ol>
-  </div>`;
+  let s8Html = '';
+  if (sign === 'negative') {
+    const _disparusAnn8 = _dispCAAnn7;
+    s8Html = '<div class="yoy-section" id="yoy-sec-s8">'
+      + '<h3 class="yoy-section-title">Ce que je ferais maintenant — plan d\'action priorisé</h3>'
 
-  // ── Conclusion générale
-  const _caDir = _d1.deltaCAPct != null ? (_d1.deltaCAPct < -3 ? 'en recul' : _d1.deltaCAPct > 3 ? 'en progression' : 'stable') : '—';
-  const _concluPara = _d1.deltaCAPct != null
-    ? `Sur la période analysée, le CA est <strong>${_caDir}</strong> de <strong>${yoyFmtPct(Math.abs(_d1.deltaCAPct))}</strong>
-       en rythme annualisé (${yoyFmtEurSigned(_d1.deltaCAAnnu)}/an).
-       ${_disparusN7 > 0 ? `La perte de ${_disparusN7} ASIN(s) explique une part significative de cette évolution. ` : ''}
-       ${_d4.deltaTauxMarge != null ? `La marge brute Amazon ${_d4.deltaTauxMarge >= 0 ? 'se maintient' : 'se contracte'} (${yoyFmtPts(_d4.deltaTauxMarge)}). ` : ''}
-       La priorité est ${kpi4Icon}&nbsp;${esc(kpi4Label).toLowerCase()}.`
-    : 'Données insuffisantes pour une conclusion.';
+      + '<div style="margin-bottom:22px">'
+      + '<div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:8px">Priorité 1 — Auditer les ASINs disparus de poids significatif</div>'
+      + '<p class="yoy-section-para">Les <strong>' + _nDisp7 + ' ASINs disparus</strong> pèsent <strong>' + yoyFmtEur(_disparusAnn8) + '/an</strong> de CA non récupéré. Tous ne sont pas récupérables, mais la majorité l\'est probablement. Commencer par les plus gros contributeurs CA en référence.</p>'
+      + _mkAsinList(_top8Disp7)
+      + _mkCtrlTable(_gridAudit)
+      + '<div style="margin-top:8px">' + _cta7('→ Analyse ASINs', 'asins') + _cta7('→ Buy Box', 'buybox') + '</div>'
+      + '</div>'
 
-  const concluHtml = `<div class="yoy-section" id="yoy-sec-conclusion">
-    <h3 class="yoy-section-title">Conclusion générale</h3>
-    <p style="font-size:13px;line-height:1.8;color:var(--tx);margin:12px 0">${_concluPara}</p>
-  </div>`;
+      + '<div style="margin-bottom:22px">'
+      + '<div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:8px">Priorité 2 — Sécuriser les best-sellers actuels (Top 10 période A)</div>'
+      + '<p class="yoy-section-para">Le Top 10 pèse <strong>' + _top10APct8 + '</strong> du CA. Une perte sur l\'un d\'eux impacterait significativement le compte. C\'est la défense la plus rentable du portefeuille.</p>'
+      + _mkAsinList(_top5A7)
+      + _mkCtrlTable(_gridBestSell)
+      + '<div style="margin-top:8px">' + _cta7('→ Buy Box best-sellers', 'buybox') + _cta7('→ Analyse ASINs', 'asins') + '</div>'
+      + '</div>'
+
+      + '<div style="margin-bottom:8px">'
+      + '<div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:8px">Priorité 3 — Reconstituer les familles en recul</div>'
+      + '<p class="yoy-section-para">Les marques qui décrochent en valeur quotidienne méritent une analyse individuelle. Pour chacune, distinguer recul normal (cannibalisation, saisonnalité) vs anomalie évitable (rupture, suppression).</p>'
+      + (function() {
+          if (!_perdBrands7.length) return '';
+          return '<table class="yoy-table" style="margin:10px 0 14px"><thead><tr><th>Famille</th><th>Action recommandée</th></tr></thead><tbody>'
+            + _perdBrands7.map(function(b) {
+                const act = b.dp < -20 ? 'Audit disponibilité + relance PO + révision fiches' : 'Analyse cannibalisation / vérification disponibilité';
+                return '<tr><td>' + esc(b.n) + '</td><td>' + act + '</td></tr>';
+              }).join('')
+            + '</tbody></table>';
+        })()
+      + '<div style="margin-top:8px">' + _cta7('→ Analyse ASINs', 'asins') + _cta7('→ Appros', 'appros') + '</div>'
+      + '</div>'
+      + '</div>';
+
+  } else if (sign === 'positive') {
+    const _gainAnn8 = _gagnants11.slice(0, 10).reduce(function(s, r) { return s + (r.deltaPerDay || 0); }, 0) * 365;
+    const _appAnn8  = (_d7.sumApparusA || 0) * 365;
+    const _top5App8 = (_d7.apparus || []).slice().sort(function(a, b) { return (b.caAPerDay||0) - (a.caAPerDay||0); }).slice(0, 5);
+
+    s8Html = '<div class="yoy-section" id="yoy-sec-s8">'
+      + '<h3 class="yoy-section-title">Ce que je ferais maintenant — plan d\'action priorisé</h3>'
+
+      + '<div style="margin-bottom:22px">'
+      + '<div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:8px">Priorité 1 — Sécuriser les accélérateurs</div>'
+      + '<p class="yoy-section-para">Les ASINs en plus forte progression représentent <strong>' + yoyFmtEur(_gainAnn8) + '/an</strong> de gain. Ils sont moteurs de la dynamique actuelle — à protéger en priorité.</p>'
+      + _mkAsinList(_gagnants11.slice(0, 5))
+      + _mkCtrlTable(_gridSecure)
+      + '<div style="margin-top:8px">' + _cta7('→ Buy Box accélérateurs', 'buybox') + _cta7('→ Appros', 'appros') + '</div>'
+      + '</div>'
+
+      + '<div style="margin-bottom:22px">'
+      + '<div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:8px">Priorité 2 — Investiguer les ASINs qui décrochent malgré la croissance</div>'
+      + '<p class="yoy-section-para">Bien que la dynamique globale soit positive, certains ASINs reculent. Comprendre pourquoi évite de laisser filer un potentiel de récupération.</p>'
+      + _mkAsinList(_perdants11.slice(0, 5))
+      + _mkCtrlTable(_gridAudit)
+      + '<div style="margin-top:8px">' + _cta7('→ Analyse ASINs', 'asins') + '</div>'
+      + '</div>'
+
+      + '<div style="margin-bottom:8px">'
+      + '<div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:8px">Priorité 3 — Pousser les nouveaux ASINs prometteurs</div>'
+      + '<p class="yoy-section-para">Les <strong>' + _nApp7 + '</strong> ASINs apparus en période A apportent déjà <strong>' + yoyFmtEur(_appAnn8) + '/an</strong>. Certains pourraient devenir des best-sellers durables avec un peu de soutien commercial ou contenu.</p>'
+      + _mkAsinList(_top5App8)
+      + _mkCtrlTable(_gridContenu)
+      + '<div style="margin-top:8px">' + _cta7('→ Analyse ASINs', 'asins') + '</div>'
+      + '</div>'
+      + '</div>';
+
+  } else {
+    // STABLE
+    s8Html = '<div class="yoy-section" id="yoy-sec-s8">'
+      + '<h3 class="yoy-section-title">Ce que je ferais maintenant — plan d\'action priorisé</h3>'
+      + '<p class="yoy-section-para" style="margin-bottom:12px">En performance stable, le plan d\'action porte sur les opportunités identifiées au niveau ASIN et marque. 3 axes de travail :</p>'
+      + '<ol style="font-size:13px;line-height:1.9;color:var(--tx);padding-left:22px;margin:0 0 14px">'
+      + '<li><strong>Surveiller les ASINs en baisse</strong> — vérifier disponibilité, Buy Box et fiches sur les ' + (_d7.enBaisse||[]).length + ' ASINs sous-performants.</li>'
+      + '<li><strong>Capitaliser sur les ASINs en hausse</strong> — s\'assurer que les ' + (_d7.enHausse||[]).length + ' ASINs en progression ont les stocks et le contenu pour aller plus loin.</li>'
+      + '<li><strong>Audit des disparus résiduels</strong> — même en performance stable, ' + _nDisp7 + ' ASINs ont disparu : lesquels sont récupérables ?</li>'
+      + '</ol>'
+      + '<div>' + _cta7('→ Analyse ASINs', 'asins') + _cta7('→ Buy Box', 'buybox') + '</div>'
+      + '</div>';
+  }
+
+  // ── Conclusion générale (T5) ──────────────────────────────────────
+  const concluHtml = '<div class="yoy-section" id="yoy-sec-conclusion">'
+    + '<h3 class="yoy-section-title">Conclusion générale</h3>'
+    + tplConclusion(d, sign, clientName)
+    + '</div>';
 
   return `<div style="max-width:960px;margin:0 auto;padding:24px 20px" class="yoy-result-root">
 
@@ -15507,7 +15646,7 @@ async function yoyLaunchAnalysis() {
       metadata: {
         sanityCheckOk: pA.meta.sanityCheckOk && pRef.meta.sanityCheckOk,
         sanityCheckDetail: pA.meta.sanityCheckDetail,
-        parserVersion: 'yoy-v3.6.5-cp2',
+        parserVersion: 'yoy-v3.6.5.6-T1-T7',
       },
     };
 
@@ -15953,96 +16092,321 @@ function yoyFmtEur(v) {
   };
 })();
 
-// Implémentation complète : CP3
+// v3.6.5.6 — T1.F + T2.F (Skill YoY V3 — templates quasi litteraux)
 
-/**
- * tplAnomalies — Template interprétatif section "Anomalies catalogue"
- * @param {object} dims  — Résultats dimension 12
- * @param {string} sign  — 'negative' | 'positive' | 'stable'
- * @returns {string}     — Paragraphe HTML
- */
 function tplAnomalies(dims, sign) {
-  // CP3 — placeholder
-  return `<p style="color:var(--tx2);font-style:italic">Analyse des anomalies catalogue en cours de rédaction (v3.6.5-CP3).</p>`;
+  const d12 = dims.dim12 || {};
+  const anomPairs = d12.anomPairs || [];
+  const n = anomPairs.length;
+
+  const sorted = anomPairs.slice().sort((a, b) => (b.caTot || 0) - (a.caTot || 0));
+  const top = sorted[0];
+
+  let lecture = '';
+  if (n === 0) {
+    lecture = `<p class="yoy-section-para">Aucune anomalie orthographique détectée par fuzzy matching sur les noms de marque. Le catalogue est propre sur ce critère.</p>`;
+  } else {
+    const topPhrase = top
+      ? ` La paire la plus impactante en CA cumulé est <strong>${esc(top.marque1)}</strong> / <strong>${esc(top.marque2)}</strong> (${yoyFmtEur(top.caTot || 0)}).`
+      : '';
+    lecture = `<p class="yoy-section-para"><strong>${n}</strong> paire${n > 1 ? 's' : ''} de marques avec orthographe quasi-identique repérée${n > 1 ? 's' : ''} par fuzzy matching. Effet probable : fragmentation du SEO Amazon (chaque variante est indexée séparément) et fragmentation du reporting marque interne. À traiter via la fonction Cas Vendor Central pour demande de fusion catalogue.${topPhrase}</p>`;
+  }
+
+  const verdictText = n === 0
+    ? `Catalogue propre sur le critère orthographique. Pas d'action nécessaire.`
+    : `${n} doublon${n > 1 ? 's' : ''} orthographique${n > 1 ? 's' : ''} à fusionner. Action rapide à fort effet de levier : un seul cas VC pour consolider le reporting marque et le SEO.`;
+  const vClass = n > 0 ? (sign === 'negative' ? 'neg' : '') : '';
+  const verdict = `<div class="verdict-block ${vClass}"><em>${verdictText}</em></div>`;
+
+  return { lecture, verdict };
 }
 
-// Implémentation complète : CP3
+// v3.6.5.6 — T1.B + T2.B (Skill YoY V3 — templates quasi litteraux)
 
-/**
- * tplCatalogue — Template interprétatif section "Mouvement du catalogue"
- * @param {object} dims  — Résultats dimensions 7-8
- * @param {string} sign  — 'negative' | 'positive' | 'stable'
- * @returns {string}     — Paragraphe HTML
- */
 function tplCatalogue(dims, sign) {
-  // CP3 — placeholder
-  return `<p style="color:var(--tx2);font-style:italic">Analyse du mouvement catalogue en cours de rédaction (v3.6.5-CP3).</p>`;
+  const d7 = dims.dim7 || {};
+  const d1 = dims.dim1 || {};
+
+  const nDisparus = (d7.disparus || []).length;
+  const nApparus  = (d7.apparus  || []).length;
+  const nStables  = (d7.stables  || []).length;
+  const nBaisse   = (d7.enBaisse || []).length;
+  const nHausse   = (d7.enHausse || []).length;
+  const nCommuns  = nStables + nBaisse + nHausse;
+  const nA1Total  = nDisparus + nCommuns;
+
+  const pctDisparus = nA1Total > 0 ? (Math.round(nDisparus / nA1Total * 1000) / 10) : 0;
+  const impactDisparusAnn = (d7.sumDisparusRef || 0) * 365;
+  const impactApparusAnn  = (d7.sumApparusA   || 0) * 365;
+
+  let lecture = '';
+
+  if (sign === 'negative') {
+    lecture = `<p class="yoy-section-para">Sur les ${nA1Total} ASINs actifs en référence, <strong>${nDisparus}</strong> ne vendent plus rien en période A — soit <strong>${pctDisparus} %</strong> du catalogue effacé. Cette catégorie pèse à elle seule <strong>${yoyFmtEur(impactDisparusAnn)}</strong> de CA annualisé. Les ${nApparus} ASINs apparus ne compensent que partiellement. Les ASINs encore actifs sont relativement stables en valeur agrégée — ce n'est pas la performance par ASIN qui décroche, c'est la largeur du catalogue.</p>`;
+  } else if (sign === 'positive') {
+    const moteur = impactApparusAnn > Math.abs(impactDisparusAnn)
+      ? `les ASINs déjà présents qui montent en cadence`
+      : `une combinaison de nouveaux ASINs et de meilleure tenue des ASINs existants`;
+    lecture = `<p class="yoy-section-para">Sur les ${nA1Total} ASINs actifs en référence, <strong>${nCommuns}</strong> restent actifs en période A et accélèrent en valeur agrégée. Les <strong>${nApparus}</strong> ASINs apparus apportent <strong>${yoyFmtEur(impactApparusAnn)}</strong> supplémentaires. Les ${nDisparus} disparus ne pèsent que <strong>${yoyFmtEur(Math.abs(impactDisparusAnn))}</strong> sur la balance. La progression est portée principalement par ${moteur}.</p>`;
+  } else {
+    const netRotation = impactApparusAnn - impactDisparusAnn;
+    lecture = `<p class="yoy-section-para">Sur les ${nA1Total} ASINs actifs en référence, on note <strong>${nDisparus}</strong> disparitions et <strong>${nApparus}</strong> apparitions — soit une rotation de <strong>${pctDisparus} %</strong> du catalogue. Le bilan net est <strong>${yoyFmtEurSigned(netRotation)}/an</strong>. Le catalogue est en mouvement mais à somme quasi nulle.</p>`;
+  }
+
+  const verdictText = sign === 'negative'
+    ? `${nDisparus} ASINs disparus en un an. C'est le vrai sujet : Amazon a cessé de commander, ou les fiches sont devenues invisibles. À distinguer ASIN par ASIN — c'est l'objet du plan d'action.`
+    : sign === 'positive'
+    ? `La croissance vient principalement du portefeuille existant qui accélère. Bonne nouvelle : c'est une dynamique sur des ASINs déjà installés, donc protégeable.`
+    : `Catalogue actif globalement stable en volume. Rotation neutre. Continuer la surveillance, sans urgence opérationnelle.`;
+  const vClass = sign === 'negative' ? 'neg' : sign === 'positive' ? 'pos' : '';
+  const verdict = `<div class="verdict-block ${vClass}"><em>${verdictText}</em></div>`;
+
+  return { lecture, verdict };
 }
 
-// Implémentation complète : CP3
+// v3.6.5.6 — T1.C + T2.C (Skill YoY V3 — templates quasi litteraux)
 
-/**
- * tplConcentration — Template interprétatif section "Concentration du chiffre d'affaires"
- * @param {object} dims  — Résultats dimension 9
- * @param {string} sign  — 'negative' | 'positive' | 'stable'
- * @returns {string}     — Paragraphe HTML
- */
 function tplConcentration(dims, sign) {
-  // CP3 — placeholder
-  return `<p style="color:var(--tx2);font-style:italic">Analyse de la concentration en cours de rédaction (v3.6.5-CP3).</p>`;
+  const d9 = dims.dim9 || {};
+  const concA   = d9.concA   || {};
+  const concRef = d9.concRef || {};
+
+  const top10A   = concA.top10   != null ? yoyFmtPct(concA.top10)   : '—';
+  const top10Ref = concRef.top10 != null ? yoyFmtPct(concRef.top10) : '—';
+
+  let lecture = '';
+
+  if (sign === 'negative') {
+    lecture = `<p class="yoy-section-para">Le Top 10 représentait <strong>${top10Ref}</strong> du CA en référence. Il pèse maintenant <strong>${top10A}</strong>. La queue longue, qui amortissait les variations, s'est érodée. La perte d'un seul ASIN du Top en période A impacte mécaniquement plus le CA total qu'en référence. C'est un signal de risque opérationnel direct : si un best-seller décroche pour rupture, Buy Box ou suppression, l'effet sera disproportionné.</p>`;
+  } else if (sign === 'positive') {
+    lecture = `<p class="yoy-section-para">Le Top 10 pèse maintenant <strong>${top10A}</strong> du CA contre <strong>${top10Ref}</strong> en référence. La croissance est tirée par quelques best-sellers qui dominent de plus en plus. Avantage : priorisation simple pour le pilotage opérationnel. Risque : exposition élevée en cas de rupture, perte Buy Box ou suppression de l'un de ces ASINs.</p>`;
+  } else {
+    lecture = `<p class="yoy-section-para">La concentration reste comparable : Top 10 à <strong>${top10A}</strong> (vs <strong>${top10Ref}</strong> en référence). La structure du portefeuille n'a pas changé fondamentalement.</p>`;
+  }
+
+  const verdictText = sign === 'negative'
+    ? `La concentration est passée de ${top10Ref} à ${top10A} sur le Top 10. Sécuriser le Top 10 actuel devient une priorité opérationnelle.`
+    : sign === 'positive'
+    ? `Le Top 10 pèse ${top10A} du CA. Concentrer la vigilance pilotage sur ces 10 ASINs maximise le ROI temps/euro.`
+    : `Structure de portefeuille stable. Top 10 à ${top10A} comme en référence — pas de surveillance nouvelle à mettre en place.`;
+  const vClass = sign === 'negative' ? 'neg' : sign === 'positive' ? 'pos' : '';
+  const verdict = `<div class="verdict-block ${vClass}"><em>${verdictText}</em></div>`;
+
+  return { lecture, verdict };
 }
 
-// Implémentation complète : CP3
+// v3.6.5.6 — T5 (Skill YoY V3 — templates quasi litteraux)
 
 /**
- * tplConclusion — Template interprétatif section "Conclusion"
- * @param {object} dims  — Résultats toutes dimensions
- * @param {string} sign  — 'negative' | 'positive' | 'stable'
- * @returns {string}     — Paragraphe HTML
+ * tplConclusion — HTML du corps de la section conclusion (T5)
+ * @param {object} dims        — Résultat yoyComputeDimensions()
+ * @param {string} sign        — 'negative' | 'positive' | 'stable'
+ * @param {string} clientName  — Nom du client
+ * @returns {string}           — HTML interne (sans le wrapper yoy-section)
  */
-function tplConclusion(dims, sign) {
-  // CP3 — placeholder
-  return `<p style="color:var(--tx2);font-style:italic">Conclusion en cours de rédaction (v3.6.5-CP3).</p>`;
+function tplConclusion(dims, sign, clientName) {
+  const d1  = dims.dim1  || {};
+  const d7  = dims.dim7  || {};
+  const d10 = dims.dim10 || {};
+
+  const name = clientName || 'Ce compte';
+
+  const nDisparus  = (d7.disparus || []).length;
+  const nCommuns   = (d7.stables  || []).length + (d7.enBaisse || []).length + (d7.enHausse || []).length;
+  const nA1Total   = nDisparus + nCommuns;
+  const pctDisparus = nA1Total > 0 ? (Math.round(nDisparus / nA1Total * 10) / 10) : 0;
+  const nApparus   = (d7.apparus || []).length;
+
+  // Top 2 marques gagnantes (pour cas POS)
+  const getDp = b => b.deltaPct != null ? b.deltaPct
+    : (b.caRefPerDay > 0 ? (b.caAPerDay / b.caRefPerDay - 1) * 100 : 0);
+  const gainBrands = (d10.topBrands || [])
+    .map(b => ({ name: b.marque, dp: getDp(b) }))
+    .filter(b => b.dp > 0)
+    .sort((a, b) => b.dp - a.dp);
+  const m1Gain = gainBrands[0] ? gainBrands[0].name : null;
+  const m2Gain = gainBrands[1] ? gainBrands[1].name : null;
+
+  const deltaAnn       = d1.deltaCAAnnu;
+  const deltaAnnFmt    = deltaAnn != null ? yoyFmtEur(Math.abs(deltaAnn)) : '—';
+  const deltaSignedFmt = deltaAnn != null ? yoyFmtEurSigned(deltaAnn)     : '—';
+  const deltaPctFmt    = d1.deltaCAPct != null ? yoyFmtPct(d1.deltaCAPct, true) : '—';
+  const vClass = sign === 'negative' ? 'neg' : sign === 'positive' ? 'pos' : '';
+
+  if (sign === 'negative') {
+    return `<p class="yoy-section-para">Le compte <strong>${esc(name)}</strong> perd <strong>${deltaAnnFmt}/an</strong> en projection annualisée par rapport à la période de référence. La baisse n'est pas due à un effondrement de la demande ou à un problème de prix, mais à <strong>une contraction de ${pctDisparus} % du catalogue actif</strong>, concentrée sur quelques marques et un nombre limité d'ASINs.</p>
+<div class="verdict-block ${vClass}"><em>Le potentiel de récupération n'est pas négligeable, car la baisse est très concentrée. Si les ASINs les plus touchés sont récupérables — stock, Buy Box, disponibilité, PO, fiche — il y a probablement un levier significatif de regagne CA.</em></div>
+<p class="yoy-section-para" style="margin-top:12px">L'enjeu opérationnel est dans l'audit ASIN par ASIN. C'est l'objet des outils de pilotage Amazon Pilot : Analyse ASINs, Buy Box, Diagnostic CA.</p>`;
+  } else if (sign === 'positive') {
+    const gardenOf = (m1Gain && m2Gain) ? ` tirée par ${esc(m1Gain)} et ${esc(m2Gain)} principalement` : m1Gain ? ` tirée par ${esc(m1Gain)} principalement` : '';
+    return `<p class="yoy-section-para">Le compte <strong>${esc(name)}</strong> progresse de <strong>${deltaAnnFmt}/an</strong> en projection annualisée par rapport à la période de référence. La progression est saine : portée par les volumes, soutenue par ${nApparus} nouveaux ASINs${gardenOf}.</p>
+<div class="verdict-block ${vClass}"><em>Le sujet n'est pas de pousser plus loin, mais de sécuriser la dynamique. Un best-seller qui décroche pour rupture ou perte de Buy Box impacterait significativement la trajectoire.</em></div>
+<p class="yoy-section-para" style="margin-top:12px">L'enjeu opérationnel est dans la surveillance des Top 10 ASINs et dans la consolidation des marques motrices. Les outils Buy Box et Appros sont calibrés pour ce pilotage défensif.</p>`;
+  } else {
+    return `<p class="yoy-section-para">Le compte <strong>${esc(name)}</strong> évolue de <strong>${deltaSignedFmt}/an</strong>, soit <strong>${deltaPctFmt}</strong>. Performance globalement stable, sans signal de risque imminent ni moteur de croissance évident à activer en agrégat.</p>
+<div class="verdict-block ${vClass}"><em>Sous une stabilité apparente, il y a presque toujours des dynamiques internes. Le travail utile se fait au niveau ASIN et marque, pas au niveau du compte.</em></div>
+<p class="yoy-section-para" style="margin-top:12px">L'enjeu opérationnel est de garder une cadence de surveillance régulière via la Revue Hebdo et de saisir les opportunités identifiées dans les sections précédentes.</p>`;
+  }
 }
 
-// Implémentation complète : CP3
+// v3.6.5.6 — T1.D + T2.D (Skill YoY V3 — templates quasi litteraux)
 
-/**
- * tplMarques — Template interprétatif section "Ventilation par marque"
- * @param {object} dims  — Résultats dimension 10
- * @param {string} sign  — 'negative' | 'positive' | 'stable'
- * @returns {string}     — Paragraphe HTML
- */
 function tplMarques(dims, sign) {
-  // CP3 — placeholder
-  return `<p style="color:var(--tx2);font-style:italic">Analyse par marque en cours de rédaction (v3.6.5-CP3).</p>`;
+  const d10 = dims.dim10 || {};
+  const brands = (d10.topBrands || []).slice(0, 10);
+
+  // backward compat : deltaPct peut etre absent (v3.6.5.3 et avant)
+  const getDp = b => b.deltaPct != null ? b.deltaPct
+    : (b.caRefPerDay > 0 ? (b.caAPerDay / b.caRefPerDay - 1) * 100 : 0);
+  const getDj = b => (b.caAPerDay || 0) - (b.caRefPerDay || 0);
+
+  const sorted = brands.map(b => ({ marque: b.marque, dp: getDp(b), dj: getDj(b), caAPerDay: b.caAPerDay || 0, caAShare: b.caAShare }))
+    .sort((a, b) => a.dp - b.dp);
+
+  const perdBrands = sorted.filter(b => b.dp < 0).slice(0, 3);
+  const gainBrands = sorted.filter(b => b.dp > 0).reverse();
+  const domBrand   = brands.slice().sort((a, b) => (b.caAPerDay||0) - (a.caAPerDay||0))[0];
+
+  let lecture = '';
+
+  if (sign === 'negative' && perdBrands.length >= 2) {
+    const m1 = perdBrands[0], m2 = perdBrands[1], m3 = perdBrands[2] || perdBrands[1];
+    const mG  = gainBrands[0];
+    const ancrage = mG
+      ? ` À l'inverse, <strong>${esc(mG.marque)}</strong> reste un point d'ancrage (${yoyFmtEurSigned(mG.dj)}/j).`
+      : '';
+    lecture = `<p class="yoy-section-para">Le recul est concentré sur quelques familles. <strong>${esc(m1.marque)}</strong> (${yoyFmtEurSigned(m1.dj)}/j), <strong>${esc(m2.marque)}</strong> (${yoyFmtEurSigned(m2.dj)}/j) et <strong>${esc(m3.marque)}</strong> (${yoyFmtEurSigned(m3.dj)}/j) sont les 3 marques qui décrochent le plus en valeur quotidienne.${ancrage} La question opérationnelle : ces reculs sont-ils dus à un retrait Amazon (PO non renouvelées) ou à une perte de disponibilité (rupture, suppression) ?</p>`;
+  } else if (sign === 'positive' && gainBrands.length >= 1) {
+    const g1 = gainBrands[0], g2 = gainBrands[1], g3 = gainBrands[2];
+    const mP = perdBrands[0];
+    const recul = mP
+      ? ` À l'inverse, <strong>${esc(mP.marque)}</strong> est la principale marque en recul (${yoyFmtEurSigned(mP.dj)}/j) — à vérifier s'il s'agit d'une fin de cycle produit, d'une cannibalisation interne ou d'un problème de disponibilité.`
+      : '';
+    const g2str = g2 ? `, <strong>${esc(g2.marque)}</strong> (+${yoyFmtEur(g2.dj)}/j)` : '';
+    const g3str = g3 ? ` et <strong>${esc(g3.marque)}</strong> (+${yoyFmtEur(g3.dj)}/j)` : '';
+    lecture = `<p class="yoy-section-para">La croissance est portée principalement par <strong>${esc(g1.marque)}</strong> (+${yoyFmtEur(g1.dj)}/j)${g2str}${g3str}.${recul}</p>`;
+  } else {
+    const pctA = domBrand && domBrand.caAShare != null ? yoyFmtPct(domBrand.caAShare * 100) : '—';
+    lecture = `<p class="yoy-section-para">Pas de marque qui sort fortement du lot, ni positivement ni négativement. La performance marque par marque est globalement parallèle à la référence. La marque dominante reste <strong>${domBrand ? esc(domBrand.marque) : '—'}</strong> (${pctA} du CA).</p>`;
+  }
+
+  let verdictText = '';
+  if (sign === 'negative' && perdBrands.length >= 2) {
+    const names = perdBrands.map(b => b.marque).join(', ');
+    verdictText = `${names} : ${perdBrands.length} familles à auditer en priorité — recul normal ou anomalie évitable ?`;
+  } else if (sign === 'positive' && gainBrands.length >= 1) {
+    const top2 = gainBrands.slice(0, 2).map(b => b.marque).join(' et ');
+    verdictText = `${top2} : ${gainBrands.length >= 2 ? '2 marques' : '1 marque'} à sécuriser comme actif stratégique de la croissance actuelle.`;
+  } else {
+    verdictText = `Pas de marque qui s'extrait du peloton. Si on cherche un effet levier, c'est à construire, pas à protéger.`;
+  }
+  const vClass = sign === 'negative' ? 'neg' : sign === 'positive' ? 'pos' : '';
+  const verdict = `<div class="verdict-block ${vClass}"><em>${verdictText}</em></div>`;
+
+  return { lecture, verdict };
 }
 
-// Implémentation complète : CP3
+// v3.6.5.6 — T1.A + T2.A (Skill YoY V3 — templates quasi litteraux)
 
-/**
- * tplPerformance — Template interprétatif section "Performance et marge"
- * @param {object} dims  — Résultats dimensions 1-6
- * @param {string} sign  — 'negative' | 'positive' | 'stable'
- * @returns {string}     — Paragraphe HTML
- */
 function tplPerformance(dims, sign) {
-  // CP3 — placeholder
-  const sens = sign === 'negative' ? 'recul' : sign === 'positive' ? 'progression' : 'stabilité';
-  return `<p style="color:var(--tx2);font-style:italic">Analyse de performance en cours de rédaction (v3.6.5-CP3). Tendance : ${esc(sens)}.</p>`;
+  const d1 = dims.dim1 || {}, d2 = dims.dim2 || {}, d3 = dims.dim3 || {};
+  const d4 = dims.dim4 || {}, d5 = dims.dim5 || {};
+
+  const uDp   = d2.deltaUPct   != null ? yoyFmtPct(d2.deltaUPct,   true) : '—';
+  const caDp  = d1.deltaCAPct  != null ? yoyFmtPct(d1.deltaCAPct,  true) : '—';
+  const pmvDp = d3.deltaPMVPct != null ? yoyFmtPct(d3.deltaPMVPct, true) : '—';
+  const margeA  = d4.tauxMargeA != null ? yoyFmtPct(d4.tauxMargeA) : '—';
+  const margeDpt = d4.deltaTauxMarge;
+  const retA  = d5.tauxRetA;
+  const retRef = d5.tauxRetRef;
+
+  let lecture = '';
+
+  if (sign === 'negative') {
+    let margePhrase;
+    if (margeDpt == null) { margePhrase = `est à ${margeA}`; }
+    else if (Math.abs(margeDpt) < 1) { margePhrase = `reste stable autour de ${margeA}`; }
+    else if (margeDpt > 0) { margePhrase = `s'améliore de ${yoyFmtPts(margeDpt)} (${margeA})`; }
+    else { margePhrase = `se dégrade de ${yoyFmtPts(Math.abs(margeDpt))} (${margeA})`; }
+
+    const margeSignal = (margeDpt == null || margeDpt >= 0)
+      ? `préserve son économie sur le compte — indirectement, c'est un signal d'absence de soutien promotionnel particulier`
+      : `voit baisser son économie sur le compte — indirectement, c'est un signal de pression accrue sur la rentabilité Amazon`;
+    const retPhrase = (retA == null || retRef == null) ? 'la stabilité'
+      : retA < retRef ? 'la légère baisse'
+      : retA > retRef ? 'la légère hausse'
+      : 'la stabilité';
+
+    lecture = `<p class="yoy-section-para">La baisse en volume (${uDp}) est plus marquée que la baisse en CA (${caDp}). Le prix moyen unitaire progresse de ${pmvDp} : l'assortiment qui vend en période A est plus cher mais bouge moins. La marge Amazon Retail ${margePhrase}, ce qui signifie qu'Amazon ${margeSignal}. Le ratio expédié/commandé proche de 100 % et ${retPhrase} du taux de retours excluent un décrochage logistique global ou un problème qualité diffus.</p>`;
+
+  } else if (sign === 'positive') {
+    const unitsVsCA = (d2.deltaUPct != null && d1.deltaCAPct != null && d2.deltaUPct > d1.deltaCAPct) ? 'dépasse' : 'suit';
+    const pmvMix = (d3.deltaPMVPct != null && Math.abs(d3.deltaPMVPct) < 2)
+      ? 'la croissance vient essentiellement des volumes vendus, pas du prix'
+      : `d'un mix volume + prix`;
+    const pmvDir = (d3.deltaPMVPct != null && d3.deltaPMVPct > 0) ? 'progresse légèrement' : 'reste stable';
+    let margePhrase2;
+    if (margeDpt == null) { margePhrase2 = `est à ${margeA}`; }
+    else if (Math.abs(margeDpt) < 1) { margePhrase2 = `reste stable autour de ${margeA}`; }
+    else if (margeDpt > 0) { margePhrase2 = `s'améliore de ${yoyFmtPts(margeDpt)}, à ${margeA}`; }
+    else { margePhrase2 = `se dégrade de ${yoyFmtPts(Math.abs(margeDpt))}, à ${margeA}, signal de pression croissante sur la rentabilité Amazon`; }
+
+    lecture = `<p class="yoy-section-para">La progression en volume (${uDp}) ${unitsVsCA} la progression en CA (${caDp}). Le prix moyen unitaire ${pmvDir} (${pmvDp}) : ${pmvMix}. La marge Amazon Retail ${margePhrase2}. Le ratio expédié/commandé proche de 100 % indique une chaîne logistique qui suit la cadence.</p>`;
+
+  } else {
+    const margeStable = margeDpt != null ? ` (${yoyFmtPts(margeDpt)} vs référence)` : '';
+    lecture = `<p class="yoy-section-para">Performance globalement stable entre les deux périodes : CA à ${caDp}, volume à ${uDp}, prix moyen à ${pmvDp}. La marge Amazon Retail reste à ${margeA}${margeStable}. Pas de signal de rupture côté ratio expédié/commandé ni côté retours. Si une dynamique se cache derrière cette stabilité agrégée, elle est à chercher au niveau ASIN ou marque (cf. sections suivantes).</p>`;
+  }
+
+  const verdictText = sign === 'negative'
+    ? `Le problème n'est pas le prix, ni la logistique, ni la qualité produit. Il faut donc chercher ailleurs : assortiment, disponibilité, commandes Amazon.`
+    : sign === 'positive'
+    ? `La croissance est saine et soutenue par les volumes, sans tension prix ni logistique. À sécuriser dans la durée plutôt qu'à pousser plus loin.`
+    : `Pas de signal fort en agrégat. Si quelque chose bouge sur ce compte, c'est au niveau ASIN ou marque — pas dans les indicateurs globaux.`;
+  const vClass = sign === 'negative' ? 'neg' : sign === 'positive' ? 'pos' : '';
+  const verdict = `<div class="verdict-block ${vClass}"><em>${verdictText}</em></div>`;
+
+  return { lecture, verdict };
 }
 
-// Implémentation complète : CP3
+// v3.6.5.6 — T1.E + T2.E (Skill YoY V3 — templates quasi litteraux)
 
-/**
- * tplTopMouvements — Template interprétatif section "Top mouvements ASIN"
- * @param {object} dims  — Résultats dimension 11
- * @param {string} sign  — 'negative' | 'positive' | 'stable'
- * @returns {string}     — Paragraphe HTML
- */
 function tplTopMouvements(dims, sign) {
-  // CP3 — placeholder
-  return `<p style="color:var(--tx2);font-style:italic">Analyse des mouvements ASIN en cours de rédaction (v3.6.5-CP3).</p>`;
+  const d11 = dims.dim11 || {};
+  const perdants = d11.perdants || [];
+  const gagnants = d11.gagnants || [];
+
+  const top10Perd = perdants.slice(0, 10);
+  const top10Gain = gagnants.slice(0, 10);
+
+  const totalPerdJour = top10Perd.reduce((s, r) => s + (r.deltaPerDay || 0), 0);
+  const totalGainJour = top10Gain.reduce((s, r) => s + (r.deltaPerDay || 0), 0);
+  const absPerdAn = Math.abs(totalPerdJour) * 365;
+
+  const passeAZero = top10Perd.filter(r => (r.caAPerDay || 0) < 0.01).length;
+
+  let lecture = '';
+
+  if (sign === 'negative') {
+    const patternPerd = passeAZero > 0
+      ? `${passeAZero} ASINs passés à 0 € (suppression/rupture)`
+      : `recul de vélocité sur plusieurs familles`;
+    lecture = `<p class="yoy-section-para">Les 10 plus gros perdants pèsent <strong>${yoyFmtEur(Math.abs(totalPerdJour))}/jour</strong> (soit <strong>${yoyFmtEur(absPerdAn)}/an</strong>). Les 10 plus gros gagnants pèsent <strong>${yoyFmtEur(totalGainJour)}/jour</strong>. Le solde est franchement déséquilibré côté perte. Le pattern dominant côté perdants : ${patternPerd}. Côté gagnants, on note des résistances ponctuelles sur quelques références.</p>`;
+  } else if (sign === 'positive') {
+    lecture = `<p class="yoy-section-para">Les 10 plus gros gagnants pèsent <strong>+${yoyFmtEur(totalGainJour)}/jour</strong>. Les 10 plus gros perdants pèsent <strong>${yoyFmtEur(Math.abs(totalPerdJour))}/jour</strong>. Le solde est nettement positif. La croissance se construit ASIN par ASIN, avec une diversification visible. À surveiller toutefois : les ASINs en déclin méritent une vérification individuelle (disponibilité, Buy Box, fiche).</p>`;
+  } else {
+    lecture = `<p class="yoy-section-para">Les 10 plus gros gagnants pèsent <strong>+${yoyFmtEur(totalGainJour)}/jour</strong>, les 10 plus gros perdants <strong>${yoyFmtEur(Math.abs(totalPerdJour))}/jour</strong>. Le solde des extrêmes est globalement équilibré — pas de mouvement structurant côté ASINs individuels.</p>`;
+  }
+
+  const verdictText = sign === 'negative'
+    ? `Les 10 ASINs les plus en chute concentrent ${yoyFmtEur(Math.abs(totalPerdJour))}/jour de perte. C'est sur eux que doit porter l'audit prioritaire.`
+    : sign === 'positive'
+    ? `Les 10 ASINs les plus en progression apportent +${yoyFmtEur(totalGainJour)}/jour. Disponibilité, stock et Buy Box sur ces 10 références = priorité opérationnelle.`
+    : `Pas de mouvement individuel structurant. Les variations ASIN se compensent.`;
+  const vClass = sign === 'negative' ? 'neg' : sign === 'positive' ? 'pos' : '';
+  const verdict = `<div class="verdict-block ${vClass}"><em>${verdictText}</em></div>`;
+
+  return { lecture, verdict };
 }
 
 // Modèle : Sonnet 4.6 par défaut, switch Opus 4.7 si add-on activé (v3.6.6+)
