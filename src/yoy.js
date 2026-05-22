@@ -311,6 +311,24 @@ function renderYoYResult() {
     ? (dim4.deltaTauxMarge > 1 ? '#15803d' : dim4.deltaTauxMarge < -1 ? '#b91c1c' : '#475569')
     : '#475569';
 
+  // ── C1+C2+C3 v3.6.5.10 : classes de charte et couleurs big value
+  const _kpi1CardClass = dim1.deltaCAPct != null
+    ? (dim1.deltaCAPct > 0.5 ? 'kpi-card--pos' : dim1.deltaCAPct < -0.5 ? 'kpi-card--neg' : 'kpi-card--neutral')
+    : 'kpi-card--neutral';
+  const _kpi2CardClass = _kpi2Solde > 0 ? 'kpi-card--pos' : _kpi2Solde < 0 ? 'kpi-card--neg' : 'kpi-card--neutral';
+  const _kpi3CardClass = dim4.deltaTauxMarge != null
+    ? (dim4.deltaTauxMarge > 1 ? 'kpi-card--pos' : dim4.deltaTauxMarge < -1 ? 'kpi-card--neg' : 'kpi-card--neutral')
+    : 'kpi-card--neutral';
+  // C3 : sur cards neg/pos, big value en gris foncé (le fond porte le signe)
+  const _kpi1BigColor = (_kpi1CardClass === 'kpi-card--neg' || _kpi1CardClass === 'kpi-card--pos') ? '#1f2937' : _kpi1Color;
+  const _kpi2BigColor = (_kpi2CardClass === 'kpi-card--neg' || _kpi2CardClass === 'kpi-card--pos') ? '#1f2937' : _kpi2Color;
+  const _kpi3BigColor = (_kpi3CardClass === 'kpi-card--neg' || _kpi3CardClass === 'kpi-card--pos') ? '#1f2937' : _kpi3Color;
+  // C2 : font-size adaptatif pour éviter le wrap (valeurs monétaires longues)
+  const _kpi1BigSize = (function() {
+    var raw = deltaCAAnnu.replace(/[<>\/a-z"=;:\s]/gi, '').length;
+    return raw > 9 ? '28px' : raw > 7 ? '32px' : '40px';
+  })();
+
   // ── KPI 4 : Analyse causale — C3 v3.6.5.9 : 3 causes heuristiques visibles, sans flou
   const _dim7kpi       = d.dim7 || {};
   const _disparusCAkpi  = (_dim7kpi.sumDisparusRef || 0) * (dRef || 1);
@@ -841,10 +859,10 @@ function renderYoYResult() {
     <!-- 4 KPI cards — C1+C2+C3 v3.6.5.9 : impact visuel 40px, signes indépendants, 3 causes en clair -->
     <div class="yoy-kpi-grid" style="margin-bottom:28px">
 
-      <!-- KPI 1 : Évolution du CA — C1+C2 v3.6.5.9 -->
-      <div class="yoy-kpi-card">
+      <!-- KPI 1 : Évolution du CA — C1+C2+C3 v3.6.5.10 -->
+      <div class="yoy-kpi-card ${_kpi1CardClass}">
         <div class="yoy-kpi-label">Évolution du chiffre d'affaires</div>
-        <div class="yoy-kpi-value" style="color:${_kpi1Color}">${deltaCAAnnu}</div>
+        <div class="yoy-kpi-value" style="color:${_kpi1BigColor};font-size:${_kpi1BigSize}">${deltaCAAnnu}</div>
         <div class="yoy-kpi-sub">
           <strong>Delta annualisé.</strong><br>
           Période A projetée (${dRef || '?'} j) : ${_kpi1AProjFmt}<br>
@@ -852,10 +870,10 @@ function renderYoYResult() {
         </div>
       </div>
 
-      <!-- KPI 2 : Mouvement catalogue — C1+C2 v3.6.5.9 : solde net, couleur indépendante -->
-      <div class="yoy-kpi-card">
+      <!-- KPI 2 : Mouvement catalogue — C1+C2+C3 v3.6.5.10 -->
+      <div class="yoy-kpi-card ${_kpi2CardClass}">
         <div class="yoy-kpi-label">Mouvement du catalogue</div>
-        <div class="yoy-kpi-value" style="color:${_kpi2Color}">${_kpi2SoldeStr}</div>
+        <div class="yoy-kpi-value" style="color:${_kpi2BigColor}">${_kpi2SoldeStr}</div>
         <div class="yoy-kpi-sub">
           <span style="color:#b91c1c;font-weight:600">−${disparusN} disparus</span> &nbsp;/&nbsp; <span style="color:#15803d;font-weight:600">+${apparusN} apparus</span><br>
           Soit ${_kpi2PctDisp} du catalogue de référence<br>
@@ -863,18 +881,18 @@ function renderYoYResult() {
         </div>
       </div>
 
-      <!-- KPI 3 : Marge Amazon Retail — C1+C2 v3.6.5.9 : seuil ±1pt, couleur sharp -->
-      <div class="yoy-kpi-card">
+      <!-- KPI 3 : Marge Amazon Retail — C1+C2+C3 v3.6.5.10 -->
+      <div class="yoy-kpi-card ${_kpi3CardClass}">
         <div class="yoy-kpi-label">Rentabilité Amazon Retail</div>
-        <div class="yoy-kpi-value" style="color:${_kpi3Color}">${_kpi3TauxAFmt}</div>
+        <div class="yoy-kpi-value" style="color:${_kpi3BigColor}">${_kpi3TauxAFmt}</div>
         <div class="yoy-kpi-sub">
           Référence : ${_kpi3TauxRefFmt} &nbsp;|&nbsp; ${deltaTauxMarge}<br>
           <em style="color:var(--tx3)">Marge d'Amazon sur le compte — pas la marge industrielle de la marque.</em>
         </div>
       </div>
 
-      <!-- KPI 4 : Analyse causale - C3 v3.6.5.9 : 3 causes heuristiques en clair, neutre -->
-      <div class="yoy-kpi-card">
+      <!-- KPI 4 : Analyse causale - C1 v3.6.5.10 : toujours analytical (fond doré pâle) -->
+      <div class="yoy-kpi-card kpi-card--analytical">
         <div class="yoy-kpi-label">Analyse causale</div>
         <div style="font-size:12px;line-height:1.8;margin-top:6px">
           <div style="margin-bottom:2px">

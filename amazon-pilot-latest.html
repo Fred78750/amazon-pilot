@@ -557,15 +557,25 @@ a:hover { text-decoration: underline; }
 .yoy-table tbody tr:last-child td { border-bottom:none; }
 .yoy-table tbody tr:hover td { background:var(--s2); }
 
-/* KPI cards executive summary — C1 v3.6.5.9 : impact visuel renforcé */
+/* KPI cards executive summary — C1 v3.6.5.10 : charte visuelle par card */
 .yoy-kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
 .yoy-kpi-card { background:var(--s2); border:0.5px solid var(--bd2); border-radius:var(--rd); padding:24px 20px; box-shadow:0 2px 10px rgba(0,0,0,0.08); }
 .yoy-kpi-label { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--tx3); margin-bottom:8px; font-weight:700; }
-.yoy-kpi-value { font-size:40px; font-weight:700; margin-bottom:6px; font-variant-numeric:tabular-nums; line-height:1; }
+/* C2 v3.6.5.10 : white-space nowrap pour éviter le wrap de la big value */
+.yoy-kpi-value { font-size:40px; font-weight:700; margin-bottom:6px; font-variant-numeric:tabular-nums; line-height:1; white-space:nowrap; }
 .yoy-kpi-sub   { font-size:11px; color:var(--tx2); line-height:1.6; margin-top:8px; }
 .yoy-kpi-neg   { color:#b91c1c; }
 .yoy-kpi-pos   { color:#15803d; }
 .yoy-kpi-stable { color:#475569; }
+/* C1 v3.6.5.10 : variantes de charte visuelle par signe */
+.yoy-kpi-card.kpi-card--neg      { background:#fef2f2; border:none; border-left:3px solid #b91c1c; box-shadow:0 2px 10px rgba(185,28,28,0.08); }
+.yoy-kpi-card.kpi-card--pos      { background:#f0fdf4; border:none; border-left:3px solid #15803d; box-shadow:0 2px 10px rgba(21,128,61,0.08); }
+.yoy-kpi-card.kpi-card--neutral  { background:#f8fafc; border:none; border-left:3px solid #475569; box-shadow:0 2px 10px rgba(71,85,105,0.08); }
+.yoy-kpi-card.kpi-card--analytical { background:#fefce8; border:none; border-left:3px solid #a16207; box-shadow:0 2px 10px rgba(161,98,7,0.08); }
+/* Sur cards colorées, label légèrement plus foncé pour contraste */
+.kpi-card--neg .yoy-kpi-label   { color:rgba(185,28,28,0.65); }
+.kpi-card--pos .yoy-kpi-label   { color:rgba(21,128,61,0.65); }
+.kpi-card--analytical .yoy-kpi-label { color:rgba(161,98,7,0.65); }
 
 /* Sections analytiques */
 .yoy-section { background:var(--s2); border:0.5px solid var(--bd2); border-radius:var(--rd); padding:20px; margin-bottom:32px; }
@@ -694,7 +704,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.6.5.9';
+const APP_VERSION = '3.6.5.10';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -14599,6 +14609,24 @@ function renderYoYResult() {
     ? (dim4.deltaTauxMarge > 1 ? '#15803d' : dim4.deltaTauxMarge < -1 ? '#b91c1c' : '#475569')
     : '#475569';
 
+  // ── C1+C2+C3 v3.6.5.10 : classes de charte et couleurs big value
+  const _kpi1CardClass = dim1.deltaCAPct != null
+    ? (dim1.deltaCAPct > 0.5 ? 'kpi-card--pos' : dim1.deltaCAPct < -0.5 ? 'kpi-card--neg' : 'kpi-card--neutral')
+    : 'kpi-card--neutral';
+  const _kpi2CardClass = _kpi2Solde > 0 ? 'kpi-card--pos' : _kpi2Solde < 0 ? 'kpi-card--neg' : 'kpi-card--neutral';
+  const _kpi3CardClass = dim4.deltaTauxMarge != null
+    ? (dim4.deltaTauxMarge > 1 ? 'kpi-card--pos' : dim4.deltaTauxMarge < -1 ? 'kpi-card--neg' : 'kpi-card--neutral')
+    : 'kpi-card--neutral';
+  // C3 : sur cards neg/pos, big value en gris foncé (le fond porte le signe)
+  const _kpi1BigColor = (_kpi1CardClass === 'kpi-card--neg' || _kpi1CardClass === 'kpi-card--pos') ? '#1f2937' : _kpi1Color;
+  const _kpi2BigColor = (_kpi2CardClass === 'kpi-card--neg' || _kpi2CardClass === 'kpi-card--pos') ? '#1f2937' : _kpi2Color;
+  const _kpi3BigColor = (_kpi3CardClass === 'kpi-card--neg' || _kpi3CardClass === 'kpi-card--pos') ? '#1f2937' : _kpi3Color;
+  // C2 : font-size adaptatif pour éviter le wrap (valeurs monétaires longues)
+  const _kpi1BigSize = (function() {
+    var raw = deltaCAAnnu.replace(/[<>\/a-z"=;:\s]/gi, '').length;
+    return raw > 9 ? '28px' : raw > 7 ? '32px' : '40px';
+  })();
+
   // ── KPI 4 : Analyse causale — C3 v3.6.5.9 : 3 causes heuristiques visibles, sans flou
   const _dim7kpi       = d.dim7 || {};
   const _disparusCAkpi  = (_dim7kpi.sumDisparusRef || 0) * (dRef || 1);
@@ -15129,10 +15157,10 @@ function renderYoYResult() {
     <!-- 4 KPI cards — C1+C2+C3 v3.6.5.9 : impact visuel 40px, signes indépendants, 3 causes en clair -->
     <div class="yoy-kpi-grid" style="margin-bottom:28px">
 
-      <!-- KPI 1 : Évolution du CA — C1+C2 v3.6.5.9 -->
-      <div class="yoy-kpi-card">
+      <!-- KPI 1 : Évolution du CA — C1+C2+C3 v3.6.5.10 -->
+      <div class="yoy-kpi-card ${_kpi1CardClass}">
         <div class="yoy-kpi-label">Évolution du chiffre d'affaires</div>
-        <div class="yoy-kpi-value" style="color:${_kpi1Color}">${deltaCAAnnu}</div>
+        <div class="yoy-kpi-value" style="color:${_kpi1BigColor};font-size:${_kpi1BigSize}">${deltaCAAnnu}</div>
         <div class="yoy-kpi-sub">
           <strong>Delta annualisé.</strong><br>
           Période A projetée (${dRef || '?'} j) : ${_kpi1AProjFmt}<br>
@@ -15140,10 +15168,10 @@ function renderYoYResult() {
         </div>
       </div>
 
-      <!-- KPI 2 : Mouvement catalogue — C1+C2 v3.6.5.9 : solde net, couleur indépendante -->
-      <div class="yoy-kpi-card">
+      <!-- KPI 2 : Mouvement catalogue — C1+C2+C3 v3.6.5.10 -->
+      <div class="yoy-kpi-card ${_kpi2CardClass}">
         <div class="yoy-kpi-label">Mouvement du catalogue</div>
-        <div class="yoy-kpi-value" style="color:${_kpi2Color}">${_kpi2SoldeStr}</div>
+        <div class="yoy-kpi-value" style="color:${_kpi2BigColor}">${_kpi2SoldeStr}</div>
         <div class="yoy-kpi-sub">
           <span style="color:#b91c1c;font-weight:600">−${disparusN} disparus</span> &nbsp;/&nbsp; <span style="color:#15803d;font-weight:600">+${apparusN} apparus</span><br>
           Soit ${_kpi2PctDisp} du catalogue de référence<br>
@@ -15151,18 +15179,18 @@ function renderYoYResult() {
         </div>
       </div>
 
-      <!-- KPI 3 : Marge Amazon Retail — C1+C2 v3.6.5.9 : seuil ±1pt, couleur sharp -->
-      <div class="yoy-kpi-card">
+      <!-- KPI 3 : Marge Amazon Retail — C1+C2+C3 v3.6.5.10 -->
+      <div class="yoy-kpi-card ${_kpi3CardClass}">
         <div class="yoy-kpi-label">Rentabilité Amazon Retail</div>
-        <div class="yoy-kpi-value" style="color:${_kpi3Color}">${_kpi3TauxAFmt}</div>
+        <div class="yoy-kpi-value" style="color:${_kpi3BigColor}">${_kpi3TauxAFmt}</div>
         <div class="yoy-kpi-sub">
           Référence : ${_kpi3TauxRefFmt} &nbsp;|&nbsp; ${deltaTauxMarge}<br>
           <em style="color:var(--tx3)">Marge d'Amazon sur le compte — pas la marge industrielle de la marque.</em>
         </div>
       </div>
 
-      <!-- KPI 4 : Analyse causale - C3 v3.6.5.9 : 3 causes heuristiques en clair, neutre -->
-      <div class="yoy-kpi-card">
+      <!-- KPI 4 : Analyse causale - C1 v3.6.5.10 : toujours analytical (fond doré pâle) -->
+      <div class="yoy-kpi-card kpi-card--analytical">
         <div class="yoy-kpi-label">Analyse causale</div>
         <div style="font-size:12px;line-height:1.8;margin-top:6px">
           <div style="margin-bottom:2px">
