@@ -568,26 +568,39 @@ a:hover { text-decoration: underline; }
 .yoy-kpi-stable { color:var(--tx2); }
 
 /* Sections analytiques */
-.yoy-section { background:var(--s2); border:0.5px solid var(--bd2); border-radius:var(--rd); padding:20px; margin-bottom:16px; }
+.yoy-section { background:var(--s2); border:0.5px solid var(--bd2); border-radius:var(--rd); padding:20px; margin-bottom:32px; }
 .yoy-section-title { font-size:15px; font-weight:700; margin-bottom:4px; color:var(--tx); }
 .yoy-section-intro { font-size:12px; color:var(--tx2); margin-bottom:14px; line-height:1.6; }
 .yoy-section-lecture { font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; letter-spacing:.06em; margin:12px 0 6px; }
 .yoy-section-para { font-size:13px; color:var(--tx); line-height:1.7; margin-bottom:10px; }
 
-/* Verdict en bloc (blockquote) */
+/* Verdict en bloc citation — C7a : bordure bleue 4px, fond bleu très pâle */
 .verdict-block {
-  border-left: 3px solid var(--or);
-  margin: 12px 0 0;
-  padding: 10px 14px;
-  background: rgba(255,153,0,0.06);
+  border-left: 4px solid #3B82F6;
+  margin: 16px 0 0;
+  padding: 12px 16px;
+  background: rgba(59,130,246,0.07);
   border-radius: 0 6px 6px 0;
   font-size: 13px;
   font-style: italic;
   color: var(--tx);
-  line-height: 1.6;
+  line-height: 1.65;
 }
 .verdict-block.neg { border-left-color: var(--r); background: var(--r-bg); }
 .verdict-block.pos { border-left-color: var(--g); background: var(--g-bg); }
+
+/* Note méthodo sous tableau Performance — C7b */
+.note-method {
+  margin-top: 14px;
+  padding: 10px 14px;
+  background: var(--s3, rgba(0,0,0,0.04));
+  border-left: 3px solid var(--bd3);
+  border-radius: 0 4px 4px 0;
+  font-size: 12px;
+  color: var(--tx2);
+  line-height: 1.6;
+}
+.note-method strong { color: var(--tx); font-weight: 600; }
 
 /* Point de vigilance (si périodes inégales) */
 .yoy-vigilance {
@@ -681,7 +694,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.6.5.6';
+const APP_VERSION = '3.6.5.7';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -14274,7 +14287,7 @@ async function init() {
   }
 }
 
-// v3.6.5.6 — T1-T7 : Bibliothèque de templates littéraux (Skill YoY V3)
+// v3.6.5.7 — C1-C7 : Corrections signe diagnostic, KPI EUR en grand, hypothèse causale, note méthodo, tableau 4 colonnes, CSS
 // CP1 : Fondations techniques (routing, import, parser, sanity check, IndexedDB)
 // CP2 : Calculs 12 dimensions + KPI cards
 // CP3 : Templates Free + rendu complet 6 sections
@@ -14577,20 +14590,22 @@ function renderYoYResult() {
   const _disparusPctkpi = dim1.caRef > 0 ? _disparusCAkpi / dim1.caRef * 100 : 0;
   const _deltaUkpi   = (d.dim2 || {}).deltaUPct  || 0;
   const _deltaPMVkpi = (d.dim3 || {}).deltaPMVPct || 0;
+  // ── KPI 4 hypothèse causale (C3 v3.6.5.7) : cause, pas symptôme
   let kpi4Icon, kpi4Label;
   if (deltaCAPct == null || Math.abs(deltaCAPct) < 3) {
-    kpi4Icon = '➡️'; kpi4Label = 'Stable';
+    kpi4Icon = '➡️'; kpi4Label = 'Pas de signal fort';
   } else if (deltaCAPct < 0) {
-    if (_disparusPctkpi > 25)           { kpi4Icon = '📦'; kpi4Label = 'Perte périmètre'; }
-    else if (_deltaUkpi < -10 && Math.abs(_deltaPMVkpi) < 5) { kpi4Icon = '📉'; kpi4Label = 'Recul de volume'; }
-    else if (_deltaPMVkpi < -5)         { kpi4Icon = '💰'; kpi4Label = 'Pression prix'; }
-    else                                { kpi4Icon = '⚠️'; kpi4Label = 'Multi-facteurs'; }
+    if (_disparusPctkpi > 25)                          { kpi4Icon = '📦'; kpi4Label = 'Abandon Amazon (PO non renouvelées)'; }
+    else if (_disparusPctkpi > 10)                     { kpi4Icon = '📦'; kpi4Label = 'Périmètre réduit (PO raréfiées)'; }
+    else if (_deltaUkpi < -10 && Math.abs(_deltaPMVkpi) < 5) { kpi4Icon = '📉'; kpi4Label = 'Ruptures structurelles'; }
+    else if (_deltaPMVkpi < -5)                        { kpi4Icon = '💰'; kpi4Label = 'Pression prix / concurrence'; }
+    else                                               { kpi4Icon = '⚠️'; kpi4Label = 'Causes multiples à investiguer'; }
   } else {
-    if (_deltaUkpi > 10)                { kpi4Icon = '📈'; kpi4Label = 'Volume en hausse'; }
-    else if (_deltaPMVkpi > 5)          { kpi4Icon = '✨'; kpi4Label = 'Mix favorable'; }
-    else                                { kpi4Icon = '📈'; kpi4Label = 'Croissance CA'; }
+    if (_deltaUkpi > 10)                               { kpi4Icon = '📈'; kpi4Label = 'Hausse demande organique'; }
+    else if (_deltaPMVkpi > 5)                         { kpi4Icon = '✨'; kpi4Label = 'Mix produit favorable'; }
+    else                                               { kpi4Icon = '📈'; kpi4Label = 'Accélération ventes'; }
   }
-  const kpi4 = `<span style="font-size:13px">${kpi4Icon}&nbsp;${esc(kpi4Label)}</span>`;
+  const kpi4 = `<span style="font-size:12px">${kpi4Icon}&nbsp;${esc(kpi4Label)}</span>`;
 
   // ── Section 1 : Performance volume / prix / marge / retours (dim1-6)
   const dim2 = d.dim2 || {};
@@ -14598,61 +14613,62 @@ function renderYoYResult() {
   const dim5 = d.dim5 || {};
   const dim6 = d.dim6 || {};
   const s1Title = YOY_TITLES.s1[sign];
-  // Annualisation des valeurs totales
+  // C6 : colonnes brutes + projeté (plus d'annualisation dans le tableau)
   const dAn  = dA  || 1;
   const dRen = dRef || 1;
-  const annA   = v => v != null ? yoyFmtEur(v * 365 / dAn)  : '—';
-  const annRef = v => v != null ? yoyFmtEur(v * 365 / dRen) : '—';
-  // COGS par unité expédiée
-  const cogsUnitA   = dim6.uExpA   > 0 ? (dim4.cogsA   / dim6.uExpA)   : null;
-  const cogsUnitRef = dim6.uExpRef > 0 ? (dim4.cogsRef  / dim6.uExpRef) : null;
-  const cogsUnitDp  = cogsUnitRef  > 0 ? (cogsUnitA / cogsUnitRef - 1) * 100 : null;
+  const hRefJ = dRef ? `Référence (${dRef} j)` : 'Référence';
+  const hAJ   = dA   ? `A observé (${dA} j)`   : 'A observé';
+  const hAP   = dRef ? `A projeté ${dRef} j`    : 'A projeté';
+  // Valeurs projetées CA & unités (extrapolation linéaire)
+  const caAProj = dim1.caAProj != null ? dim1.caAProj : (dim1.caA != null && dAn > 0 ? dim1.caA * dRen / dAn : null);
+  const uAProj  = dim2.uAProj  != null ? dim2.uAProj  : (dim2.uA  != null && dAn > 0 ? dim2.uA  * dRen / dAn : null);
   // Marge brute delta %
   const margeDp = dim4.margeRef > 0 ? (dim4.margeA / dim4.margeRef - 1) * 100 : null;
-  // Retours delta %
-  const retDp = dim5.retoursRef > 0 ? (dim5.retoursA / dim5.retoursRef - 1) * 100 : null;
 
   const s1Table = `<table class="yoy-table">
-    <thead><tr><th>Indicateur</th><th>Période A (annualisé)</th><th>Réf (annualisé)</th><th>Variation</th></tr></thead>
+    <thead><tr><th>Indicateur</th><th class="num">${hRefJ}</th><th class="num">${hAJ}</th><th class="num">${hAP}</th><th class="num">Variation</th></tr></thead>
     <tbody>
       <tr><td>CA commandé</td>
-          <td class="num">${dim1.caA != null ? annA(dim1.caA) : '—'}</td>
-          <td class="num">${dim1.caRef != null ? annRef(dim1.caRef) : '—'}</td>
+          <td class="num">${dim1.caRef != null ? yoyFmtEur(dim1.caRef) : '—'}</td>
+          <td class="num">${dim1.caA   != null ? yoyFmtEur(dim1.caA)   : '—'}</td>
+          <td class="num">${caAProj    != null ? yoyFmtEur(caAProj)    : '—'}</td>
           <td class="num ${kpi1Class}">${deltaCAPctFmt}</td></tr>
-      <tr><td>CA expédié</td>
-          <td class="num">${dim4.caExpA != null ? annA(dim4.caExpA) : '—'}</td>
-          <td class="num">${dim4.caExpRef != null ? annRef(dim4.caExpRef) : '—'}</td>
-          <td class="num ${dim4.caExpRef > 0 ? yoyDeltaClass((dim4.caExpA/dim4.caExpRef-1)*100) : 'muted'}">${dim4.caExpRef > 0 ? yoyFmtPct((dim4.caExpA/dim4.caExpRef-1)*100, true) : '—'}</td></tr>
-      <tr><td>Ratio exp/cmd (CA)</td>
-          <td class="num">${dim6.ratioCAA != null ? yoyFmtPct(dim6.ratioCAA) : '—'}</td>
-          <td class="num">${dim6.ratioCARef != null ? yoyFmtPct(dim6.ratioCARef) : '—'}</td>
-          <td class="num ${dim6.ratioCAA != null ? yoyDeltaClass(dim6.ratioCAA - dim6.ratioCARef) : 'muted'}">${dim6.ratioCAA != null ? yoyFmtPts(dim6.ratioCAA - dim6.ratioCARef) : '—'}</td></tr>
       <tr><td>Unités commandées</td>
-          <td class="num">${dim2.uA != null ? yoyFmtNum(dim2.uA * 365 / dAn) : '—'}</td>
-          <td class="num">${dim2.uRef != null ? yoyFmtNum(dim2.uRef * 365 / dRen) : '—'}</td>
+          <td class="num">${dim2.uRef != null ? yoyFmtNum(dim2.uRef) : '—'}</td>
+          <td class="num">${dim2.uA   != null ? yoyFmtNum(dim2.uA)   : '—'}</td>
+          <td class="num">${uAProj    != null ? yoyFmtNum(uAProj)    : '—'}</td>
           <td class="num ${dim2.deltaUPct != null ? yoyDeltaClass(dim2.deltaUPct) : 'muted'}">${dim2.deltaUPct != null ? yoyFmtPct(dim2.deltaUPct, true) : '—'}</td></tr>
       <tr><td>Prix moyen de vente</td>
-          <td class="num">${dim3.pmvA != null ? yoyFmtEur(dim3.pmvA) : '—'}</td>
           <td class="num">${dim3.pmvRef != null ? yoyFmtEur(dim3.pmvRef) : '—'}</td>
+          <td class="num" colspan="2">${dim3.pmvA != null ? yoyFmtEur(dim3.pmvA) : '—'}</td>
           <td class="num ${dim3.deltaPMVPct != null ? yoyDeltaClass(dim3.deltaPMVPct) : 'muted'}">${dim3.deltaPMVPct != null ? yoyFmtPct(dim3.deltaPMVPct, true) : '—'}</td></tr>
-      <tr style="border-top:2px solid var(--bd2)"><td>COGS / unité expédiée</td>
-          <td class="num">${cogsUnitA != null ? yoyFmtEur(cogsUnitA) : '—'}</td>
-          <td class="num">${cogsUnitRef != null ? yoyFmtEur(cogsUnitRef) : '—'}</td>
-          <td class="num ${cogsUnitDp != null ? yoyDeltaClass(-cogsUnitDp) : 'muted'}">${cogsUnitDp != null ? yoyFmtPct(cogsUnitDp, true) : '—'}</td></tr>
-      <tr><td>Marge brute Amazon</td>
-          <td class="num">${dim4.margeA != null ? annA(dim4.margeA) : '—'}</td>
-          <td class="num">${dim4.margeRef != null ? annRef(dim4.margeRef) : '—'}</td>
+      <tr><td>CA expédié</td>
+          <td class="num">${dim4.caExpRef != null ? yoyFmtEur(dim4.caExpRef) : '—'}</td>
+          <td class="num" colspan="2">${dim4.caExpA != null ? yoyFmtEur(dim4.caExpA) : '—'}</td>
+          <td class="num ${dim4.caExpRef > 0 ? yoyDeltaClass((dim4.caExpA/dim4.caExpRef-1)*100) : 'muted'}">${dim4.caExpRef > 0 ? yoyFmtPct((dim4.caExpA/dim4.caExpRef-1)*100, true) : '—'}</td></tr>
+      <tr style="border-top:2px solid var(--bd2)"><td>Marge Amazon Retail (CA exp − COGS)</td>
+          <td class="num">${dim4.margeRef != null ? yoyFmtEur(dim4.margeRef) : '—'}</td>
+          <td class="num" colspan="2">${dim4.margeA != null ? yoyFmtEur(dim4.margeA) : '—'}</td>
           <td class="num ${margeDp != null ? yoyDeltaClass(margeDp) : 'muted'}">${margeDp != null ? yoyFmtPct(margeDp, true) : '—'}</td></tr>
-      <tr><td>Taux de marge</td>
-          <td class="num">${dim4.tauxMargeA != null ? yoyFmtPct(dim4.tauxMargeA) : '—'}</td>
+      <tr><td>Taux de marge Amazon Retail</td>
           <td class="num">${dim4.tauxMargeRef != null ? yoyFmtPct(dim4.tauxMargeRef) : '—'}</td>
+          <td class="num" colspan="2">${dim4.tauxMargeA != null ? yoyFmtPct(dim4.tauxMargeA) : '—'}</td>
           <td class="num ${dim4.deltaTauxMarge != null ? yoyDeltaClass(dim4.deltaTauxMarge) : 'muted'}">${dim4.deltaTauxMarge != null ? yoyFmtPts(dim4.deltaTauxMarge) : '—'}</td></tr>
-      <tr><td>Taux retour client</td>
-          <td class="num">${dim5.tauxRetA != null ? yoyFmtPct(dim5.tauxRetA) : '—'}</td>
+      <tr><td>Retours client</td>
+          <td class="num">${dim5.retoursRef != null ? yoyFmtNum(dim5.retoursRef) : '—'}</td>
+          <td class="num" colspan="2">${dim5.retoursA != null ? yoyFmtNum(dim5.retoursA) : '—'}</td>
+          <td class="num muted">—</td></tr>
+      <tr><td>Taux de retours</td>
           <td class="num">${dim5.tauxRetRef != null ? yoyFmtPct(dim5.tauxRetRef) : '—'}</td>
+          <td class="num" colspan="2">${dim5.tauxRetA != null ? yoyFmtPct(dim5.tauxRetA) : '—'}</td>
           <td class="num ${dim5.deltaTauxRet != null ? yoyDeltaClass(-dim5.deltaTauxRet) : 'muted'}">${dim5.deltaTauxRet != null ? yoyFmtPts(dim5.deltaTauxRet) : '—'}</td></tr>
+      <tr><td>Ratio CA expédié / commandé</td>
+          <td class="num">${dim6.ratioCARef != null ? yoyFmtPct(dim6.ratioCARef) : '—'}</td>
+          <td class="num" colspan="2">${dim6.ratioCAA != null ? yoyFmtPct(dim6.ratioCAA) : '—'}</td>
+          <td class="num ${dim6.ratioCAA != null ? yoyDeltaClass(dim6.ratioCAA - dim6.ratioCARef) : 'muted'}">${dim6.ratioCAA != null ? yoyFmtPts(dim6.ratioCAA - dim6.ratioCARef) : '—'}</td></tr>
     </tbody>
-  </table>`;
+  </table>
+  <div class="note-method"><strong>Note méthodo.</strong> La colonne "A projeté ${dRef || '?'} j" extrapole la période A à la durée de la période de référence (extrapolation linéaire) pour comparaison directe. PMV, taux et ratios ne sont pas projetés — déjà normalisés par définition. La marge affichée est la rentabilité Amazon Retail (CA expédié − COGS), pas la marge industrielle de la marque.</div>`;
   const _tpl1     = tplPerformance(d, sign);
   const s1Lecture = _tpl1.lecture ? '<div class="yoy-section-lecture">Lecture</div>' + _tpl1.lecture : '';
   const s1Verdict = _tpl1.verdict;
@@ -14859,6 +14875,8 @@ function renderYoYResult() {
   const _concTop10A7  = _d9.concA   && _d9.concA.top10   != null ? yoyFmtPct(_d9.concA.top10)   : '—';
   const _concTop10R7  = _d9.concRef && _d9.concRef.top10 != null ? yoyFmtPct(_d9.concRef.top10) : '—';
   const _deltaAnnFmt7 = _d1.deltaCAAnnu != null ? yoyFmtEur(Math.abs(_d1.deltaCAAnnu)) : '—';
+  // C1 : % sans signe (le verbe "recule"/"progresse" porte la direction)
+  const _pctAbs7      = _d1.deltaCAPct  != null ? (Math.abs(_d1.deltaCAPct).toFixed(1).replace('.', ',') + ' %') : '—';
   const _appAnn7      = (_d7.sumApparusA || 0) * 365;
 
   let s7Html = '';
@@ -14872,13 +14890,13 @@ function renderYoYResult() {
     s7Html = '<div class="yoy-section" id="yoy-sec-s7">'
       + '<h3 class="yoy-section-title">Mon diagnostic</h3>'
       + '<div class="yoy-section-lecture">Ce que les chiffres disent</div>'
-      + '<p class="yoy-section-para">Le recul de <strong>' + _deltaAnnFmt7 + '/an</strong> n\'est pas une baisse homogène de la demande, mais une <strong>contraction du catalogue actif</strong>. Trois constats convergent :</p>'
+      + '<p class="yoy-section-para">Le CA recule de <strong>' + _pctAbs7 + '</strong> en projection annualisée (soit <strong>−' + _deltaAnnFmt7 + '/an</strong>). Ce recul n\'est pas une baisse homogène de la demande, mais une <strong>contraction du catalogue actif</strong>. Trois constats convergent :</p>'
       + '<ol style="font-size:13px;line-height:1.9;color:var(--tx);padding-left:22px;margin:8px 0 14px">'
       + '<li><strong>' + _nDisp7 + ' ASINs disparus</strong> (' + _pctDisp7 + ' % du catalogue de référence) qui pesaient <strong>' + yoyFmtEur(_dispCAAnn7) + '/an</strong></li>'
       + '<li><strong>Concentration accrue</strong> du Top 10 (' + _concTop10R7 + ' → ' + _concTop10A7 + ') qui fragilise le compte</li>'
       + '<li><strong>Multi-marques en baisse</strong> (' + _perdNames7 + ' principalement)</li>'
       + '</ol>'
-      + '<div class="yoy-section-lecture">Ce que je ne vois PAS dans les chiffres</div>'
+      + '<div class="yoy-section-lecture" style="margin-top:22px">Ce que je ne vois PAS dans les chiffres</div>'
       + '<p class="yoy-section-para">Je ne vois pas de baisse du prix moyen (PMV ' + _pmvUpDown7 + ' de <strong>' + _pmvAbs7 + '</strong>). Je ne vois pas de problème logistique global (ratio expédié/commandé proche de 100 %). Je ne vois pas de dégradation qualité (taux de retours <strong>' + _retDir7 + '</strong>). Je ne chercherais donc pas en priorité du côté du prix, de l\'entrepôt ou des avis clients.</p>'
       + '<p class="yoy-section-para">La cause la plus probable se situe en amont de la demande consommateur : <strong>commandes Amazon (PO) qui se sont raréfiées, perte de référencement actif, ruptures structurelles sur ASINs clés, suppressions de listings</strong>. C\'est l\'objet du plan d\'action.</p>'
       + '</div>';
@@ -14893,7 +14911,7 @@ function renderYoYResult() {
       + '<li><strong>' + _nApp7 + ' nouveaux ASINs</strong> qui apportent <strong>' + yoyFmtEur(_appAnn7) + '/an</strong> additionnels</li>'
       + '<li><strong>Croissance multi-marques</strong> portée principalement par ' + _gainNames7 + '</li>'
       + '</ol>'
-      + '<div class="yoy-section-lecture">Ce que je ne vois PAS dans les chiffres</div>'
+      + '<div class="yoy-section-lecture" style="margin-top:22px">Ce que je ne vois PAS dans les chiffres</div>'
       + '<p class="yoy-section-para">Je ne vois pas de hausse de prix qui expliquerait mécaniquement la progression. Je ne vois pas non plus de saisonnalité particulière qui exploserait sur cette période. Je ne vois pas de signal de tension côté retours.</p>'
       + '<p class="yoy-section-para">La progression vient probablement d\'une combinaison : <strong>meilleure disponibilité côté Amazon (PO plus régulières), montée de référencement organique, ou effort commercial spécifique de la marque sur quelques ASINs clés</strong>. Le plan d\'action se focalise sur la sécurisation de cette dynamique.</p>'
       + '</div>';
@@ -14904,7 +14922,7 @@ function renderYoYResult() {
       + '<h3 class="yoy-section-title">Mon diagnostic</h3>'
       + '<div class="yoy-section-lecture">Ce que les chiffres disent</div>'
       + '<p class="yoy-section-para">Le CA évolue de <strong>' + _deltaSignedFmt7 + '/an</strong>, soit <strong>' + _deltaPctFmt7 + '</strong> : performance proche de la référence. Mais cette stabilité agrégée peut masquer des mouvements internes — ' + _nDisp7 + ' disparitions compensées par ' + _nApp7 + ' apparitions, et des rotations marque par marque visibles dans les sections précédentes.</p>'
-      + '<div class="yoy-section-lecture">Ce que je ne vois PAS dans les chiffres</div>'
+      + '<div class="yoy-section-lecture" style="margin-top:22px">Ce que je ne vois PAS dans les chiffres</div>'
       + '<p class="yoy-section-para">Je ne vois pas de signal de risque imminent. Je ne vois pas non plus de moteur de croissance évident à activer.</p>'
       + '<p class="yoy-section-para">Le plan d\'action porte sur les opportunités identifiées au niveau ASIN ou marque (cf. sections précédentes), pas sur un sujet global.</p>'
       + '</div>';
@@ -14915,16 +14933,23 @@ function renderYoYResult() {
   const _perdants11  = _d11.perdants || [];
   const _gagnants11  = _d11.gagnants || [];
 
+  // C5 : liste ASIN en tableau (ASIN | Titre | Marque | CA réf./j)
   const _mkAsinList = function(list) {
-    if (!list || !list.length) return '';
-    return '<ul style="font-size:12px;font-family:monospace;margin:8px 0 12px;padding-left:16px;line-height:1.8">'
-      + list.map(function(a) {
-          const caFmt = a.caRefPerDay != null ? yoyFmtEur((a.caRefPerDay||0) * (_d1.dRef||365))
-            : a.caAPerDay != null ? yoyFmtEur((a.caAPerDay||0) * (_d1.dA||365)) : '—';
-          const deltFmt = a.deltaPerDay != null ? ' — <strong>' + yoyFmtEurSigned(a.deltaPerDay * 365) + '/an</strong>' : '';
-          return '<li><strong>' + esc(a.asin||'—') + '</strong> — ' + esc(a.titre||'—') + ' (' + esc(a.marque||'—') + ') — ' + caFmt + deltFmt + '</li>';
+    if (!list || !list.length) {
+      return '<p class="yoy-section-para" style="color:var(--tx3);font-size:12px;font-style:italic">Aucun ASIN identifié pour ce critère.</p>';
+    }
+    return '<table class="yoy-table" style="margin:10px 0 14px;font-size:12px">'
+      + '<thead><tr><th>ASIN</th><th>Titre</th><th>Marque</th><th class="num">CA réf./j</th></tr></thead>'
+      + '<tbody>' + list.map(function(a) {
+          const ca = a.caRefPerDay != null ? yoyFmtEur(a.caRefPerDay) : (a.caAPerDay != null ? yoyFmtEur(a.caAPerDay) : '—');
+          const titre = (a.titre || '—');
+          const titreCourt = titre.length > 55 ? titre.substring(0, 55) + '…' : titre;
+          return '<tr><td style="font-family:monospace;font-size:11px;white-space:nowrap">' + esc(a.asin||'—') + '</td>'
+            + '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">' + esc(titreCourt) + '</td>'
+            + '<td style="font-size:11px">' + esc(a.marque||'—') + '</td>'
+            + '<td class="num">' + ca + '</td></tr>';
         }).join('')
-      + '</ul>';
+      + '</tbody></table>';
   };
 
   let s8Html = '';
@@ -15037,9 +15062,9 @@ function renderYoYResult() {
     <!-- 4 KPI cards -->
     <div class="yoy-kpi-grid" style="margin-bottom:24px">
       <div class="yoy-kpi-card">
-        <div class="yoy-kpi-label">CA annualisé</div>
-        <div class="yoy-kpi-value ${kpi1Class}">${deltaCAPctFmt}</div>
-        <div class="yoy-kpi-sub">${deltaCAAnnu} / an</div>
+        <div class="yoy-kpi-label">Évolution du CA</div>
+        <div class="yoy-kpi-value ${kpi1Class}" style="font-size:20px">${deltaCAAnnu}</div>
+        <div class="yoy-kpi-sub">${deltaCAPctFmt} / an</div>
       </div>
       <div class="yoy-kpi-card">
         <div class="yoy-kpi-label">Mouvement catalogue</div>
@@ -15052,9 +15077,9 @@ function renderYoYResult() {
         <div class="yoy-kpi-sub">Δ taux marge</div>
       </div>
       <div class="yoy-kpi-card">
-        <div class="yoy-kpi-label">Diagnostic</div>
-        <div class="yoy-kpi-value" style="font-size:13px">${kpi4}</div>
-        <div class="yoy-kpi-sub">cause principale</div>
+        <div class="yoy-kpi-label">Hypothèse causale</div>
+        <div class="yoy-kpi-value" style="font-size:12px;line-height:1.3">${kpi4}</div>
+        <div class="yoy-kpi-sub">heuristique (dims 1–7)</div>
       </div>
     </div>
 

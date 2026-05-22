@@ -550,26 +550,39 @@ a:hover { text-decoration: underline; }
 .yoy-kpi-stable { color:var(--tx2); }
 
 /* Sections analytiques */
-.yoy-section { background:var(--s2); border:0.5px solid var(--bd2); border-radius:var(--rd); padding:20px; margin-bottom:16px; }
+.yoy-section { background:var(--s2); border:0.5px solid var(--bd2); border-radius:var(--rd); padding:20px; margin-bottom:32px; }
 .yoy-section-title { font-size:15px; font-weight:700; margin-bottom:4px; color:var(--tx); }
 .yoy-section-intro { font-size:12px; color:var(--tx2); margin-bottom:14px; line-height:1.6; }
 .yoy-section-lecture { font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; letter-spacing:.06em; margin:12px 0 6px; }
 .yoy-section-para { font-size:13px; color:var(--tx); line-height:1.7; margin-bottom:10px; }
 
-/* Verdict en bloc (blockquote) */
+/* Verdict en bloc citation — C7a : bordure bleue 4px, fond bleu très pâle */
 .verdict-block {
-  border-left: 3px solid var(--or);
-  margin: 12px 0 0;
-  padding: 10px 14px;
-  background: rgba(255,153,0,0.06);
+  border-left: 4px solid #3B82F6;
+  margin: 16px 0 0;
+  padding: 12px 16px;
+  background: rgba(59,130,246,0.07);
   border-radius: 0 6px 6px 0;
   font-size: 13px;
   font-style: italic;
   color: var(--tx);
-  line-height: 1.6;
+  line-height: 1.65;
 }
 .verdict-block.neg { border-left-color: var(--r); background: var(--r-bg); }
 .verdict-block.pos { border-left-color: var(--g); background: var(--g-bg); }
+
+/* Note méthodo sous tableau Performance — C7b */
+.note-method {
+  margin-top: 14px;
+  padding: 10px 14px;
+  background: var(--s3, rgba(0,0,0,0.04));
+  border-left: 3px solid var(--bd3);
+  border-radius: 0 4px 4px 0;
+  font-size: 12px;
+  color: var(--tx2);
+  line-height: 1.6;
+}
+.note-method strong { color: var(--tx); font-weight: 600; }
 
 /* Point de vigilance (si périodes inégales) */
 .yoy-vigilance {
