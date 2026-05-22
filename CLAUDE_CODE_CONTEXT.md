@@ -1,6 +1,6 @@
 ﻿# CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 22 mai 2026 (v3.6.6 recette + preprod — Parser ERP universel)
+**Dernière mise à jour :** 22 mai 2026 (v3.6.6 PROD — Parser ERP universel)
 
 ---
 
@@ -102,7 +102,7 @@ Tout patch doit être minimal et ciblé :
 | v3.6.5.10 | ✅ Stable staging | b5cd215 |
 | v3.6.5.11 | ✅ Stable staging | ad8320f |
 | v3.6.5.12 | ✅ **PROD** — mergé 22 mai 2026 / tag v3.6.5.12 | 93a9157 (merge) / tag v3.6.5.12 |
-| v3.6.6 | ✅ Stable recette + preprod — 12/12 smoke tests — en attente GO prod | 988add4 |
+| v3.6.6 | ✅ **PROD** — mergé 22 mai 2026 / tag v3.6.6 | d078c90 (merge) / tag v3.6.6 |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -131,8 +131,8 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | **v3.6.5.12** (merge 93a9157 — 22 mai 2026) | https://amazon.foliow.app |
-| Recette (staging) | **v3.6.6** (commit 750082b — 22 mai 2026) | https://d9xny9istvl53.cloudfront.net |
+| Production (main) | **v3.6.6** (merge d078c90 — 22 mai 2026) | https://amazon.foliow.app |
+| Recette (staging) | **v3.6.6** (commit fa04f32 — 22 mai 2026) | https://d9xny9istvl53.cloudfront.net |
 | Preprod | **v3.6.6** (deploy direct AWS CLI — 22 mai 2026) | https://preprod.amazon.foliow.app |
 
 ✅ **MERGÉ EN PROD le 19 mai 2026** — merge 01656bc, tag v3.6.2, APP_VERSION 3.6.2 vérifié, CloudFront invalidé.
@@ -142,6 +142,10 @@ Scope : moteur de recherche ASIN transversal topbar + rebranchement Buy Box / Ap
 Smoke tests : colonne cause ✅ | fragile=0 légitime (0 ASIN Cogex avec ≥3 sem. historique) | récupérées=0 attendu.
 
 ✅ **v3.6.5.12 MERGÉ EN PROD le 22 mai 2026** — validé recette + preprod (22 mai 2026). Anti-régression complet : 6/6 Playwright ✅, 10/10 écrans ✅, 0 erreur JS ✅, YoY KPI grid 4 cards ✅, 10 nowrap spans ✅.
+
+✅ **v3.6.6 MERGÉ EN PROD le 22 mai 2026** — merge d078c90, tag v3.6.6, APP_VERSION 3.6.6 vérifié, CloudFront invalidé.
+Scope : Parser ERP universel (parseFileERP, downloadERPTemplate, handleERPImport, getStockERP) + IndexedDB v4 erp_stock + ÉTAPE 4 import + fix handleErpStock (support Gers — header décalé, Stock Physique non réservé) + 12/12 smoke tests. Anti-régression 22/22 ✅.
+BTI-1 (deploy-preprod.yml) : backlog v3.6.7.
 
 ✅ **MERGÉ EN PROD le 18 mai 2026** — merge fae7d79, APP_VERSION 3.6.1.5 vérifié, CloudFront invalidé.
 Scope merge groupé : v3.6.0 + v3.6.1 + v3.6.1.1 + v3.6.1.2 + v3.6.1.3 + v3.6.1.4 + v3.6.1.5
