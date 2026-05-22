@@ -12,7 +12,7 @@
 - V0.3 (21 mai matin) — **scénario commercial réel** (onboarding dissimulé) ; **segmentation marché 3 strates** ; **contrainte SEPA ETI** ; **modèle économique freemium structuré** ; **compteur IA page Configuration** ; règles 14-15 ; v3.6.3 fenêtre `recovered` arrêtée à 90j
 - V0.4 (21 mai fin de journée) — **refonte numérotation versions** (v3.6.x.y, v3.7 réservé archi) ; **merge prod opportuniste** ; **stratégie format ERP** (modèle fourni) ; **v3.6.4 = Parser ERP universel** (en attente Gers) ; **méthodologie YoY Étape 1** (grille 12 Free + 4 Pro, formalisée en skill séparé) ; **3 patterns d'erreur supplémentaires** identifiés en session 21 mai ; correction roadmap (suppression v3.8 → v3.13)
 - V0.5 (22 mai matin) — 7 patterns d'erreur identifiés sur session brief v3.6.5 + livraisons Claude Code ; règle 18 (skill autoporteur) ; règle 19 (format de fichier explicite dans tout brief parsing) ; règle 20 (standard qualité subjectif → extraits littéraux obligatoires) ; règle 21 (séquentialité réelle = arrêter le message à la fin de Q1) ; mise à jour statut v3.6.5 en développement ; skill `YOY_ETAPE_1_grille_constat.md` passé V2 → V3. **Note : V0.5 produite mais jamais déposée sur le repo — remplacée directement par V0.6.**
-- **V0.6 (22 mai fin de soirée) — Apports majeurs : (1) v3.6.5.12 livrée prod, (2) rectification roadmap : Parser ERP = v3.6.6 (pas v3.6.4 — décalage chronologique acté), (3) modèle format ERP rectifié : 2 configurations stocks acceptées en parallèle (séparé vs cumulé), (4) règles 23-26 ajoutées (sur-cadrage, sobriété ≠ discrétion, signe indépendant par KPI, comparaison d'écrans), (5) 8 nouveaux patterns d'erreur identifiés sur sessions 22 mai après-midi/soirée, (6) précision règle 16 (numérotation suit ordre chronologique de production, pas planification), (7) statut prod mis à jour v3.6.5.12.**
+- **V0.6 (22 mai fin de soirée) — Apports majeurs : (1) v3.6.5.12 + v3.6.3 livrées prod groupées (règle 17), (2) rectification roadmap : Parser ERP = v3.6.6 (pas v3.6.4 — décalage chronologique acté), (3) modèle format ERP rectifié : 2 configurations stocks acceptées en parallèle (séparé vs cumulé), (4) règles 23-26 ajoutées (sur-cadrage, sobriété ≠ discrétion, signe indépendant par KPI, comparaison d'écrans), (5) 8 nouveaux patterns d'erreur identifiés sur sessions 22 mai après-midi/soirée, (6) précision règle 16 (numérotation suit ordre chronologique de production, pas planification), (7) statut prod mis à jour v3.6.5.12. Révisé fin de soirée avec apprentissages post-merge : convention tag git groupé (règle 27), backlog technique infrastructure créé (deploy-preprod.yml manquant), précision branches staging vs main pour commits docs.**
 
 ---
 
@@ -59,6 +59,7 @@
 | 24 | **Sobriété analytique ≠ discrétion visuelle.** Le registre d'écriture (factuel, sans marketing) est indépendant du poids typographique (gros chiffre vs petit chiffre). On peut être très sobre rédactionnellement ET très impactant visuellement. Pour un hero block / KPI executive summary, l'impact visuel est même un objectif explicite (saisir le directeur d'ETI en 5 secondes). Le mode "sobre et analytique" s'applique aux sections détaillées (Lecture, Diagnostic, Plan d'action), pas au hero block. (Identifié 22 mai sur arbitrage "accroche plus sexy" v3.6.5.8) | Modules à fort enjeu commercial avec rendu visuel sous-calibré, prospect qui décroche avant les sections analytiques |
 | 25 | **Sur un tableau de bord à plusieurs KPI, chaque KPI a sa propre logique de signe.** Pas de tonalité globale uniforme (tout rouge si compte en chute, tout vert si compte en croissance). On peut afficher 2 cards rouges + 2 vertes simultanément si les indicateurs racontent des choses opposées. Le traitement visuel (fond, bordure, couleur valeur) s'applique card par card, calculé dynamiquement selon la valeur de la card, pas selon une tonalité de compte. (Identifié 22 mai sur charte visuelle KPI v3.6.5.10) | Tableau de bord visuellement faux ou trompeur, masque les signaux importants |
 | 26 | **Avant de pointer un écart de chiffres comme un bug, vérifier que les écrans portent sur les mêmes données.** Si deux écrans affichent des chiffres différents, vérifier d'abord les périodes/filtres/datasets affichés en sous-titre AVANT de conclure à un bug. L'information est généralement à l'écran, juste pas dans la zone d'attention immédiate. C'est l'équivalent visuel du sanity check parsing. (Identifié 22 mai sur fausse alerte chiffres maquette V3 vs v3.6.5.7) | Fausses alertes bug, perte de temps en diagnostic erroné, perte de crédibilité Orchestrateur |
+| 27 | **Convention de tag git pour merges prod groupés (règle 17 conséquence).** 1 merge prod = 1 tag git. Si plusieurs chantiers sont groupés dans un seul merge (cf. règle 17), le tag porte le numéro du chantier le plus récent ; les chantiers groupés sont mentionnés dans le message de merge ET dans `CLAUDE_CODE_CONTEXT.md` pour traçabilité. **Pas de tag séparé** pour les chantiers intermédiaires d'un merge groupé. Exemple : merge 22 mai a regroupé v3.6.3 + v3.6.5 → 1 seul tag `v3.6.5.12`, pas de tag `v3.6.3` séparé. (Identifié 22 mai après merge prod et question Claude Code sur la convention) | Multiplication artificielle des tags git, confusion sur ce qui est livré quand |
 
 ---
 
@@ -285,9 +286,11 @@ YoY et Buy Box ne sont pas concurrents — **ils servent des personas différent
 ### Statut prod actuel (à mettre à jour à chaque session)
 | Environnement | Version |
 |---|---|
-| **Prod (main)** | **v3.6.5.12** — mergée 22 mai 2026 (fin de soirée) ; tag git `v3.6.5.12` à confirmer par Claude Code |
-| **Staging (CI)** | v3.6.5.12 |
-| **Preprod** | v3.6.3 (`665d4cb`) — toujours en attente merge groupé avec un futur chantier (règle 17) |
+| **Prod (main)** | **v3.6.5.12** — mergée 22 mai 2026 fin de soirée (merge `93a9157`, tag git `v3.6.5.12`). **Inclut aussi v3.6.3** (Buy Box causes + statuts fragile/recovered) groupée selon règle 17. |
+| **Staging (CI)** | `de90995` — 2 commits docs au-dessus de main (mise à jour CLAUDE_CODE_CONTEXT.md + dépôt V0.6 + brief v3.6.6). Code applicatif identique à main. |
+| **Preprod** | `0e780b5` — sync main post-prod. Vide en termes de chantiers en attente. |
+
+**Note convention branches (V0.6)** : les commits docs (mise à jour `CLAUDE_CODE_CONTEXT.md`, dépôt `Claude_Orchestrateur_Context.md`, dépôt briefs `CLAUDE_CODE_v*.md`) restent sur staging entre 2 merges prod. Ils ne sont dans main qu'au prochain merge groupé. C'est normal et n'empêche pas leur lecture par Claude Code qui travaille sur staging.
 
 ### Roadmap validée — cible commercialisation été 2026 (refonte V0.4, RECTIFIÉE V0.6)
 
@@ -301,11 +304,11 @@ YoY et Buy Box ne sont pas concurrents — **ils servent des personas différent
 | Version | Libellé sémantique | Statut / Délai | Contenu |
 |---|---|---|---|
 | **v3.6.2** | Header + moteur de recherche ASIN transversal | ✅ **Livrée prod** 19 mai (merge `01656bc`) | Header avec moteur de recherche ASIN + rebranchement Buy Box / Appros / Prévisionnel sur `getFilteredAsins` |
-| **v3.6.3** | Buy Box causes + statuts fragile/recovered | ✅ **Preprod validée** (`665d4cb`) — merge prod **différé** (règle 17), à grouper avec un futur chantier (probablement v3.6.7) | (c) Causes en colonne Phase 1 Buy Box + (d) statuts `fragile`/`recovered` avec fenêtre 90 j (cohérence KPI "Résolus 90 j"). Items (a) croisement défauts × ASIN et (b) filtres cycle de vie reportés v3.6.10 (bloqués techniquement) |
+| **v3.6.3** | Buy Box causes + statuts fragile/recovered | ✅ **Livrée prod** 22 mai (groupée avec v3.6.5.12, merge `93a9157`, règle 17) | (c) Causes en colonne Phase 1 Buy Box + (d) statuts `fragile`/`recovered` avec fenêtre 90 j (cohérence KPI "Résolus 90 j"). Items (a) croisement défauts × ASIN et (b) filtres cycle de vie reportés v3.6.10 (bloqués techniquement) |
 | ~~v3.6.4~~ | ~~Parser ERP universel~~ | ❌ **Slot sauté** | Planifié en V0.4, sauté chronologiquement. Repris en v3.6.6 (cf. règle 16 précisée V0.6) |
 | **v3.6.5** | YoY Étape 1 — Analyse comparée + module hameçon freemium | ✅ **Livrée prod** 22 mai (v3.6.5.12 finale, 7 itérations correctives v3.6.5.5 → v3.6.5.12) | Module "Analyse comparée" dans la sidebar. Suit le **skill `YOY_ETAPE_1_grille_constat.md` V3** (12 dim Free + 4 dim Pro + bibliothèque de templates littéraux). Module hameçon offert à 0 € pour onboarding dissimulé. Charte visuelle par card (4 styles : neg/pos/neutral/analytical), big value adaptative, typographie défensive. |
 | **v3.6.6** | **Parser ERP universel + modèle Amazon Pilot** | 🎯 **PROCHAIN CHANTIER** | Parser agnostique au format ERP. Stratégie : Amazon Pilot fournit un MODÈLE Excel avec colonnes nommées attendues. **2 configurations stocks acceptées en parallèle (V0.6) : (a) Stocks séparés `Stock libre` + `Stock Amazon`, (b) Stock cumulé `Stock disponible Amazon` agrégé.** Le parser tolère que le fournisseur en remplisse une OU les deux. Tolérance synonymes courants. Pas de prévisionnel ERP (vélocité = ventes réelles Amazon). ~2-3 j Claude Code |
-| **v3.6.7** | YoY Étape 2 — Warnings + éveil 80/20 | À cadrer | Règles d'alerte visuelles. **Candidat naturel pour le mécanisme d'éveil 80/20** (KPI agrégé "X ASINs longue traîne en érosion = Y €/mois", alerte cumulative longue traîne sur Dashboard et Revue Hebdo). Bon candidat pour groupage merge prod avec v3.6.3 en attente preprod. ~1 sem |
+| **v3.6.7** | YoY Étape 2 — Warnings + éveil 80/20 | À cadrer | Règles d'alerte visuelles. **Candidat naturel pour le mécanisme d'éveil 80/20** (KPI agrégé "X ASINs longue traîne en érosion = Y €/mois", alerte cumulative longue traîne sur Dashboard et Revue Hebdo). ~1 sem |
 | **v3.6.8** | YoY Étape 3a — Enquête ASINs disparus | À cadrer | Classification 4 catégories des ASINs sortis (rupture vs abandon Amazon vs suppression vs autres). ~4 sem |
 | **v3.6.9** | YoY Étape 4 — Rendu béotien + export Word | À cadrer | Export Word + narrative IA Claude. **Livrable commercialement vendable** au directeur — clé de voûte de la conversion Free → Pro. ~3 sem |
 | | **── Commercialisation été 2026 ──** | | |
@@ -559,6 +562,21 @@ Après création d'une Lambda Function URL en eu-west-3 :
 3. `put-public-access-block-config BlockPublicPolicy=false`
 - CLI v1 ne supporte pas `put-public-access-block-config`
 - 403 "Host not in allowlist" depuis container Claude = normal, tester depuis CloudShell
+
+---
+
+## BACKLOG TECHNIQUE INFRASTRUCTURE (V0.6)
+
+Items non bloquants mais à traiter à un moment opportun. Ne déclenchent pas de chantier dédié — à intégrer comme tâche annexe d'un chantier qui a un peu de marge.
+
+| # | Item | Priorité | Contexte | Quand le traiter |
+|---|---|---|---|---|
+| BTI-1 | **Workflow `deploy-preprod.yml` absent** | Moyenne | La branche preprod existe sur GitHub mais aucun workflow ne la déploie automatiquement. Le déploiement preprod actuel se fait via AWS CLI direct (cf. merge prod 22 mai). Identifié par Claude Code dans rapport post-merge. Pertinent dès qu'on utilise preprod plus systématiquement (audit anti-régression routine v3.6.6+). | Quand un chantier a 30 min de marge en fin (probablement v3.6.7 ou v3.6.8). À demander en parallèle, pas en chantier dédié. |
+| | | | | |
+
+**Ajout d'items** : quand Claude Code signale un point de dette infrastructure dans un rapport post-merge ou post-livraison, l'inscrire ici avec contexte + quand le traiter. Ne pas le perdre.
+
+**Suppression d'items** : quand l'item est traité, le supprimer de la table (ne pas garder de trace dans une section "DONE", la traçabilité est dans l'historique git).
 
 ---
 
