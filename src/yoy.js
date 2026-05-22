@@ -865,8 +865,8 @@ function renderYoYResult() {
         <div class="yoy-kpi-value" style="color:${_kpi1BigColor};font-size:${_kpi1BigSize}">${deltaCAAnnu}</div>
         <div class="yoy-kpi-sub">
           <strong>Delta annualisé.</strong><br>
-          Période A projetée (${dRef || '?'} j) : ${_kpi1AProjFmt}<br>
-          Référence : ${_kpi1RefFmt} &nbsp;|&nbsp; ${deltaCAPctFmt}
+          Période A projetée (${dRef || '?'} j) : <span style="white-space:nowrap">${_kpi1AProjFmt}</span><br>
+          Référence : <span style="white-space:nowrap">${_kpi1RefFmt}</span> | <span style="white-space:nowrap">${deltaCAPctFmt}</span>
         </div>
       </div>
 
@@ -876,8 +876,8 @@ function renderYoYResult() {
         <div class="yoy-kpi-value" style="color:${_kpi2BigColor}">${_kpi2SoldeStr}</div>
         <div class="yoy-kpi-sub">
           <span style="color:#b91c1c;font-weight:600">−${disparusN} disparus</span> &nbsp;/&nbsp; <span style="color:#15803d;font-weight:600">+${apparusN} apparus</span><br>
-          Soit ${_kpi2PctDisp} du catalogue de référence<br>
-          Impact disparus : ${_kpi2Impact}
+          Soit <span style="white-space:nowrap">${_kpi2PctDisp}</span> du catalogue de référence<br>
+          Impact disparus : <span style="white-space:nowrap">${_kpi2Impact}</span>
         </div>
       </div>
 
@@ -887,7 +887,7 @@ function renderYoYResult() {
         <div class="yoy-kpi-value" style="color:${_kpi3BigColor}">${_kpi3TauxAFmt}</div>
         <div class="yoy-kpi-sub">
           Référence : ${_kpi3TauxRefFmt} &nbsp;|&nbsp; ${deltaTauxMarge}<br>
-          <em style="color:var(--tx3)">Marge d'Amazon sur le compte — pas la marge industrielle de la marque.</em>
+          <em style="color:var(--tx3)">Marge d'Amazon sur le compte — pas la marge industrielle de la marque.</em>
         </div>
       </div>
 
@@ -896,13 +896,13 @@ function renderYoYResult() {
         <div class="yoy-kpi-label">Analyse causale</div>
         <div style="font-size:12px;line-height:1.8;margin-top:6px">
           <div style="margin-bottom:2px">
-            <span style="color:#475569;font-weight:700">&#9654;</span>&nbsp;<strong style="color:var(--tx)">${esc(kpi4Label)}</strong>${_causePct4 != null ? '<span style="color:#475569;font-weight:400;font-size:11px"> - ' + _causePct4 + ' %</span>' : ''}
+            <span style="color:#475569;font-weight:700">&#9654;</span>&nbsp;<strong style="color:var(--tx);white-space:nowrap">${esc(kpi4Label)}</strong>${_causePct4 != null ? '<span style="color:#475569;font-weight:400;font-size:11px"> - ' + _causePct4 + ' %</span>' : ''}
           </div>
           <div style="font-size:11px;color:var(--tx2)">
-            <span style="color:#475569">&#9658;</span>&nbsp;${esc(_cause2Label4)}${_cause2Pct4 != null ? '<span style="color:#94a3b8"> - ' + _cause2Pct4 + ' %</span>' : ''}
+            <span style="color:#475569">&#9658;</span>&nbsp;<span style="white-space:nowrap">${esc(_cause2Label4)}</span>${_cause2Pct4 != null ? '<span style="color:#94a3b8"> - ' + _cause2Pct4 + ' %</span>' : ''}
           </div>
           <div style="font-size:11px;color:var(--tx2)">
-            <span style="color:#475569">&#9658;</span>&nbsp;${esc(_cause3Label4)}${_cause3Pct4 != null ? '<span style="color:#94a3b8"> - ' + _cause3Pct4 + ' %</span>' : ''}
+            <span style="color:#475569">&#9658;</span>&nbsp;<span style="white-space:nowrap">${esc(_cause3Label4)}</span>${_cause3Pct4 != null ? '<span style="color:#94a3b8"> - ' + _cause3Pct4 + ' %</span>' : ''}
           </div>
         </div>
         <div class="yoy-kpi-sub">
@@ -1908,9 +1908,9 @@ function yoyFmtEur(v) {
   if (v === null || v === undefined || isNaN(v)) return '—';
   var abs = Math.abs(v);
   var sign = v < 0 ? '−' : '';
-  if (abs >= 1000000) return sign + (abs / 1000000).toFixed(1).replace('.', ',') + ' M€';
-  if (abs >= 1000)    return sign + Math.round(abs).toLocaleString('fr-FR') + ' €';
-  return sign + abs.toFixed(2).replace('.', ',') + ' €';
+  if (abs >= 1000000) return sign + (abs / 1000000).toFixed(1).replace('.', ',') + ' M€';
+  if (abs >= 1000)    return sign + Math.round(abs).toLocaleString('fr-FR') + ' €';
+  return sign + abs.toFixed(2).replace('.', ',') + ' €';
 }
 
 // ═══════════════════════════════════════════════════════════════
