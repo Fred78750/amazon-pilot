@@ -704,7 +704,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.6.6';
+const APP_VERSION = '3.6.6.2';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -770,6 +770,11 @@ const aiUsage = {
 };
 
 
+// V9 conditionnel par client + collecte historique smoke_history (IDB v5)
+
+// ─────────────────────────────────────────────────────────────────────────
+// SMOKE_REF : valeurs globales de référence (rétro-compatibilité tests V4)
+// ─────────────────────────────────────────────────────────────────────────
 const SMOKE_REF = {
   ca2024:  { val: 1547729, tol: 0.02, expiry: '2026-12-31', label: 'CA 2024' }, // recalibré 2026-05-18 après reimport Cogex
   ca2025:  { val: 1166183, tol: 0.02, expiry: '2027-12-31', label: 'CA 2025' }, // recalibré 2026-05-18 après reimport Cogex
@@ -777,20 +782,40 @@ const SMOKE_REF = {
   asinRef: { asin: 'B009G3EMDI', label: 'ASIN B009G3EMDI cohérence pipeline' }
 };
 
+// ─────────────────────────────────────────────────────────────────────────
+// SMOKE_REF_BY_CLIENT : calibration par client
+// Clients absents → V9 silencieux (info console + skip, pas d'alerte rouge)
+// Calibration future via accumulation historique smoke_history (~6 mois min)
+// ─────────────────────────────────────────────────────────────────────────
+const SMOKE_REF_BY_CLIENT = {
+  'cogex': {
+    CA_2024:  { value: 1547729, tolerance: 0.02, expiry: '2026-12-31', label: 'CA 2024' },
+    CA_2025:  { value: 1166183, tolerance: 0.02, expiry: '2027-12-31', label: 'CA 2025' },
+    asinMin:  { value: 1500,  label: 'ASINs catalogue >= 1500' },
+    asinRef:  { asin: 'B009G3EMDI', label: 'ASIN réf. B009G3EMDI' },
+  },
+  // Gers, autres clients : calibration à venir après 6+ mois d'historique
+};
+
 async function smokeTest(silent) {
   const now = new Date();
   const results = { vital: [], important: [], ts: now.toISOString(), version: APP_VERSION };
   const pass = (lvl, id, lbl) => results[lvl].push({ id, label: lbl, ok: true });
   const fail = (lvl, id, lbl, msg) => results[lvl].push({ id, label: lbl, ok: false, msg });
-  const refExpired = (ref) => ref.expiry && new Date(ref.expiry) < now;
+  const refExpiredByDate = (expiry) => expiry && new Date(expiry) < now;
   const inTol = (v, ref, tol) => v >= ref * (1-tol) && v <= ref * (1+tol);
   const getErr = () => { const e = document.querySelector('.alr-r'); return e && e.textContent.includes('Erreur') ? e.textContent.slice(0,80) : null; };
 
   // V1 — Client actif
   const c = typeof cl === 'function' ? cl() : null;
-  if (c && c.name && c.asins && c.asins.length >= SMOKE_REF.asinMin.val)
+  // Calibration client : lookup SMOKE_REF_BY_CLIENT par c.id (lowercase)
+  const clientId  = c?.id ? String(c.id).toLowerCase().trim() : null;
+  const clientCal = clientId ? (SMOKE_REF_BY_CLIENT[clientId] || null) : null;
+  // Seuil ASINs : calibré si connu, sinon 1 ASIN minimum
+  const asinMinReq = clientCal?.asinMin?.value || 1;
+  if (c && c.name && c.asins && c.asins.length >= asinMinReq)
     pass('vital','V1', 'Client actif : ' + c.name + ' (' + c.asins.length + ' ASINs)');
-  else fail('vital','V1','Client actif', !c ? 'Aucun client' : 'Seulement ' + (c?.asins?.length||0) + ' ASINs');
+  else fail('vital','V1','Client actif', !c ? 'Aucun client' : 'Seulement ' + (c?.asins?.length||0) + ' ASINs (min ' + asinMinReq + ')');
 
   // V2 — Tableau de bord
   try {
@@ -827,14 +852,15 @@ async function smokeTest(silent) {
 
   // V5 — Buy Box Phase 2 (carnet d'enquête v3.6.1 — dossier sans crash)
   try {
+    const refAsin = clientCal?.asinRef?.asin || SMOKE_REF.asinRef.asin;
     window._buyboxView = null; window._buyboxAsin = null; // reset état UI
-    if (typeof buyboxOpenCase === 'function' && c) buyboxOpenCase(c, SMOKE_REF.asinRef.asin);
-    window._buyboxView = 'case'; window._buyboxAsin = SMOKE_REF.asinRef.asin;
+    if (typeof buyboxOpenCase === 'function' && c) buyboxOpenCase(c, refAsin);
+    window._buyboxView = 'case'; window._buyboxAsin = refAsin;
     if (typeof render === 'function') render();
     await new Promise(r => setTimeout(r, 400));
     const e = getErr();
     const hasCase = document.body.innerHTML.includes('Carnet d\'enquête') || document.body.innerHTML.includes('Hypothèses');
-    if (!e && hasCase) pass('vital','V5','Buy Box Phase 2 ouvert (' + SMOKE_REF.asinRef.asin + ')');
+    if (!e && hasCase) pass('vital','V5','Buy Box Phase 2 ouvert (' + refAsin + ')');
     else fail('vital','V5','Buy Box Phase 2', e || 'DOM Carnet enquête absent');
     // Remettre sur vue liste avant de continuer
     window._buyboxView = 'list'; window._buyboxAsin = null;
@@ -871,62 +897,63 @@ async function smokeTest(silent) {
     else fail('vital','V8','Agent SEO', e || 'Contenu SEO absent');
   } catch(ex) { fail('vital','V8','Agent SEO', ex.message); }
 
-  // V9a — CA 2024
-  if (!refExpired(SMOKE_REF.ca2024)) {
-    const v = Math.round(c?.annualData?.['2024']?.ventes?.totalCA||0);
-    if (v === 0) pass('vital','V9a','CA 2024 : non importé (optionnel)');
-    else if (inTol(v, SMOKE_REF.ca2024.val, SMOKE_REF.ca2024.tol))
-      pass('vital','V9a','CA 2024 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
-    else fail('vital','V9a','CA 2024 dévié','Attendu ~' + SMOKE_REF.ca2024.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
-  }
-
-  // V9b — CA 2025
-  if (!refExpired(SMOKE_REF.ca2025)) {
-    const v = Math.round(c?.annualData?.['2025']?.ventes?.totalCA||0);
-    if (v === 0) pass('vital','V9b','CA 2025 : non importé (optionnel)');
-    else if (inTol(v, SMOKE_REF.ca2025.val, SMOKE_REF.ca2025.tol))
-      pass('vital','V9b','CA 2025 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
-    else fail('vital','V9b','CA 2025 dévié','Attendu ~' + SMOKE_REF.ca2025.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
-  }
-
-  // V9c — ASINs catalogue
-  const asinCnt = c?.asins?.length||0;
-  if (asinCnt >= SMOKE_REF.asinMin.val) pass('vital','V9c','Catalogue : ' + asinCnt + ' ASINs');
-  else fail('vital','V9c','Catalogue ASINs', asinCnt + ' < minimum ' + SMOKE_REF.asinMin.val);
-
-  // V9d — ASIN de référence : invariants pipeline (PAS la santé business)
-  // v3.1.70 — On vérifie que l'import n'a pas cassé la cohérence des données,
-  //          pas que le CA est dans une fourchette (volatile par nature)
-  const refA = c?.asins?.find(a => a.asin === SMOKE_REF.asinRef.asin);
-  if (!refA) {
-    fail('vital','V9d','ASIN réf. ABSENT du catalogue après import', SMOKE_REF.asinRef.asin);
+  // ── V9 — Tests calibrés par client ────────────────────────────────────
+  // Si client non calibré dans SMOKE_REF_BY_CLIENT → skip silencieux
+  if (!clientCal) {
+    console.info('[INFO] SMOKE_REF non calibré pour ce client (' + (c?.name || clientId || 'inconnu') +
+      '). Test en phase d\'apprentissage — historique en cours de constitution.');
   } else {
-    const rev = Math.round(refA.revenue || 0);
-    const units = refA.units || refA.orderedUnits || 0;
-    const checks = [];
-
-    // Invariant 1 : cohérence units/revenue (l'un sans l'autre = parser cassé)
-    // Seuil rev>500 pour éviter faux positif sur commandes non encore expédiées (orderedRevenue>0, shippedUnits=0)
-    if (units > 0 && rev === 0) checks.push('units=' + units + ' mais revenue=0 (parser CA cassé ?)');
-    if (rev > 500 && units === 0) checks.push('revenue=' + rev + '€ mais units=0 (parser units cassé ?)');
-
-    // Invariant 2 : ratio prix unitaire dans [0,1€ ; 1000€]
-    // Détecte erreur virgule décimale, unité monétaire, ou colonne mal mappée
-    if (rev > 0 && units > 0) {
-      const prixUnit = rev / units;
-      if (prixUnit < 0.1) checks.push('prix unitaire ' + prixUnit.toFixed(2) + '€ anormalement bas');
-      if (prixUnit > 1000) checks.push('prix unitaire ' + prixUnit.toFixed(2) + '€ anormalement haut');
+    // V9a — CA 2024
+    if (clientCal.CA_2024 && !refExpiredByDate(clientCal.CA_2024.expiry)) {
+      const v = Math.round(c?.annualData?.['2024']?.ventes?.totalCA||0);
+      if (v === 0) pass('vital','V9a','CA 2024 : non importé (optionnel)');
+      else if (inTol(v, clientCal.CA_2024.value, clientCal.CA_2024.tolerance))
+        pass('vital','V9a','CA 2024 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
+      else fail('vital','V9a','CA 2024 dévié','Attendu ~' + clientCal.CA_2024.value.toLocaleString('fr-FR') + ' ±2%, obtenu ' + v.toLocaleString('fr-FR'));
     }
 
-    // Invariant 3 : title et brand non vides (sinon c'est un row tronqué à l'import)
-    if (!refA.title) checks.push('title vide');
-    if (!refA.brand) checks.push('brand vide');
+    // V9b — CA 2025
+    if (clientCal.CA_2025 && !refExpiredByDate(clientCal.CA_2025.expiry)) {
+      const v = Math.round(c?.annualData?.['2025']?.ventes?.totalCA||0);
+      if (v === 0) pass('vital','V9b','CA 2025 : non importé (optionnel)');
+      else if (inTol(v, clientCal.CA_2025.value, clientCal.CA_2025.tolerance))
+        pass('vital','V9b','CA 2025 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
+      else fail('vital','V9b','CA 2025 dévié','Attendu ~' + clientCal.CA_2025.value.toLocaleString('fr-FR') + ' ±2%, obtenu ' + v.toLocaleString('fr-FR'));
+    }
 
-    if (checks.length === 0) {
-      const detail = rev === 0 ? 'pas de vente cette semaine (OK)' : rev + '€ / ' + units + 'u (cohérent)';
-      pass('vital','V9d','ASIN réf. ' + SMOKE_REF.asinRef.asin + ' : ' + detail);
-    } else {
-      fail('vital','V9d','ASIN réf. cohérence pipeline', checks.join(' | '));
+    // V9c — ASINs catalogue
+    if (clientCal.asinMin) {
+      const asinCnt = c?.asins?.length||0;
+      if (asinCnt >= clientCal.asinMin.value) pass('vital','V9c','Catalogue : ' + asinCnt + ' ASINs');
+      else fail('vital','V9c','Catalogue ASINs', asinCnt + ' < minimum ' + clientCal.asinMin.value);
+    }
+
+    // V9d — ASIN de référence : invariants pipeline (PAS la santé business)
+    // v3.1.70 — cohérence units/revenue, ratio prix, title/brand non vides
+    if (clientCal.asinRef) {
+      const refA = c?.asins?.find(a => a.asin === clientCal.asinRef.asin);
+      if (!refA) {
+        fail('vital','V9d','ASIN réf. ABSENT du catalogue après import', clientCal.asinRef.asin);
+      } else {
+        const rev   = Math.round(refA.revenue || 0);
+        const units = refA.units || refA.orderedUnits || 0;
+        const checks = [];
+        if (units > 0 && rev === 0) checks.push('units=' + units + ' mais revenue=0 (parser CA cassé ?)');
+        if (rev > 500 && units === 0) checks.push('revenue=' + rev + '€ mais units=0 (parser units cassé ?)');
+        if (rev > 0 && units > 0) {
+          const prixUnit = rev / units;
+          if (prixUnit < 0.1) checks.push('prix unitaire ' + prixUnit.toFixed(2) + '€ anormalement bas');
+          if (prixUnit > 1000) checks.push('prix unitaire ' + prixUnit.toFixed(2) + '€ anormalement haut');
+        }
+        if (!refA.title) checks.push('title vide');
+        if (!refA.brand) checks.push('brand vide');
+        if (checks.length === 0) {
+          const detail = rev === 0 ? 'pas de vente cette semaine (OK)' : rev + '€ / ' + units + 'u (cohérent)';
+          pass('vital','V9d','ASIN réf. ' + clientCal.asinRef.asin + ' : ' + detail);
+        } else {
+          fail('vital','V9d','ASIN réf. cohérence pipeline', checks.join(' | '));
+        }
+      }
     }
   }
 
@@ -1000,6 +1027,22 @@ async function smokeTest(silent) {
   };
   try { localStorage.setItem('ap-smoketest-last', JSON.stringify(results)); } catch(e) {}
   if (!silent) renderSmokeResult(results);
+
+  // ── AJOUT 2 — Collecte historique smoke (IDB smoke_history) ──────────
+  // Enregistrement systématique, quel que soit le client (calibré ou non)
+  if (typeof saveSmokeHistory === 'function' && c && c.id) {
+    const measures = {
+      CA_2024:    Math.round(c?.annualData?.['2024']?.ventes?.totalCA || 0),
+      CA_2025:    Math.round(c?.annualData?.['2025']?.ventes?.totalCA || 0),
+      CA_semaine: Math.round((c?.asins || []).reduce(function(s, a) {
+        return s + (typeof getRevenue === 'function' ? (getRevenue(a, c) || 0) : (a.revenue || 0));
+      }, 0)),
+      nb_asins:   (c?.asins || []).length,
+      nb_units:   Math.round((c?.asins || []).reduce(function(s, a) { return s + (a.units || 0); }, 0)),
+    };
+    saveSmokeHistory(c.id, c.name || c.id, measures);
+  }
+
   return results;
 }
 
@@ -1294,6 +1337,380 @@ async function getStockERP(clientId, sku) {
       req.onerror   = function() { resolve(null); };
     });
   } catch(e) { return null; }
+}
+
+
+// EN canonique + FR suppletif — agregation multi-pays par ASIN
+// Injection via marker // @parser_vc dans core.js
+
+// ─────────────────────────────────────────────────────────────────
+// vcNorm : normalisation robuste des headers Vendor Central
+// Etend norm() : apostrophes typo ‘’, tirets –—,
+// espaces irreguliers    ​
+// ─────────────────────────────────────────────────────────────────
+function vcNorm(s) {
+  return (s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[‘’´`]/g, "'")
+    .replace(/[–—−―]/g, '-')
+    .replace(/[   ​﻿]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// ─────────────────────────────────────────────────────────────────
+// VC_COL_DICT : 33 champs canoniques EN <-> FR
+// Valeurs EN : chaines originales Amazon
+// Valeurs FR : chaines simplifiees ASCII (vcNorm leve les accents/typo)
+// ─────────────────────────────────────────────────────────────────
+var VC_COL_DICT = {
+  asin:                            { en: ['ASIN'],                                              fr: ['ASIN'] },
+  titre:                           { en: ['Product title'],                                     fr: ['Nom du produit'] },
+  marque:                          { en: ['Brand'],                                             fr: ['Marque'] },
+  marche:                          { en: ['Store code'],                                        fr: ['Code de la boutique'] },
+
+  // Stock commun (Approv + Fab)
+  vendor_confirmation_pct:         { en: ['Vendor confirmation %'],                             fr: ['% de confirmation fournisseur'] },
+  net_received_amount:             { en: ['Net Received'],                                      fr: ['Quantite nette recue'] },
+  net_received_units:              { en: ['Net Received Units'],                                fr: ["Nombre net d'unites recues"] },
+  open_po_qty:                     { en: ['Open Purchase Order Quantity'],                      fr: ['Quantite de bons de commande ouverts', 'Quantite de commande en cours'] },
+  receive_fill_pct:                { en: ['Receive fill %'],                                    fr: ['% de reception'] },
+  vendor_lead_time_days:           { en: ['Overall Vendor Lead Time (days)'],                   fr: ['Delai de livraison global du fournisseur (jours)', "Delai d'approvisionnement global du fournisseur (jours)"] },
+  aged_90_sellable_inventory:      { en: ['Aged 90+ Days Sellable Inventory'],                  fr: ['Stock vendable datant de plus de 90 jours'] },
+  aged_90_sellable_units:          { en: ['Aged 90+ Days Sellable Units'],                      fr: ['Unites vendables datant de plus de 90 jours'] },
+  sellable_on_hand_inventory:      { en: ['Sellable On Hand Inventory'],                        fr: ['Stock disponible a la vente', 'Stock disponible vendable'] },
+  sellable_on_hand_units:          { en: ['Sellable On Hand Units'],                            fr: ['Unites vendables en stock'] },
+  unsellable_on_hand_inventory:    { en: ['Unsellable On Hand Inventory'],                      fr: ['Stock disponible invendable'] },
+  unsellable_on_hand_units:        { en: ['Unsellable On Hand Units'],                          fr: ['Unites invendables en stock'] },
+  sell_through_pct:                { en: ['Sell-through %'],                                    fr: ['% de vente au detail'] },
+  unhealthy_inventory:             { en: ['Unhealthy Inventory'],                               fr: ['Stock malsain', 'Stock en mauvaise sante'] },
+  unhealthy_units:                 { en: ['Unhealthy Units'],                                   fr: ['Unites malsaines', 'Unites en mauvaise sante'] },
+
+  // Stock_Fab uniquement
+  sourceable_oos_pct:              { en: ['Sourceable product OOS %'],                          fr: ['Produits en rupture avec approvisionnement possible', '% des produits en rupture avec approvisionnement possible'] },
+  unfilled_customer_ordered_units: { en: ['Unfilled Customer Ordered Units'],                   fr: ['Unites commandees par les clients non traitees'] },
+
+  // Trafic
+  glance_views:                    { en: ['Featured offer page views'],                         fr: ["Vues de la page de l'offre vedette"] },
+
+  // Ventes commun (Approv + Fab)
+  dispatched_revenue:              { en: ['Dispatched revenue'],                                fr: ["Chiffre d'affaires base sur les expeditions", 'Revenus bases sur les expeditions'] },
+  dispatched_cogs:                 { en: ['Dispatched COGS'],                                   fr: ['COGS expedie'] },
+  dispatched_units:                { en: ['Dispatched units'],                                  fr: ['Unites expediees'] },
+  customer_returns:                { en: ['Customer returns'],                                  fr: ['Retours client', 'Retours du client'] },
+
+  // Ventes_Fab uniquement
+  ordered_revenue:                 { en: ['Ordered revenue'],                                   fr: ["Chiffre d'affaires base sur les commandes", 'Revenus bases sur les commandes'] },
+  ordered_units:                   { en: ['Ordered units'],                                     fr: ['Unites commandees'] },
+};
+
+// ─────────────────────────────────────────────────────────────────
+// buildVCHeaderMap : construit header CSV reel -> fieldKey
+// ─────────────────────────────────────────────────────────────────
+function buildVCHeaderMap(headers) {
+  // Etape 1 : normKey -> fieldKey depuis le dictionnaire (EN + FR)
+  var normToField = {};
+  for (var fk0 in VC_COL_DICT) {
+    var syn0 = VC_COL_DICT[fk0];
+    ['en', 'fr'].forEach(function(lang) {
+      (syn0[lang] || []).forEach(function(term) {
+        var n = vcNorm(term);
+        if (!normToField[n]) normToField[n] = fk0;
+      });
+    });
+  }
+  // Etape 2 : mapper les headers CSV reels -> fieldKey
+  var fieldToHeader = {};
+  headers.forEach(function(h) {
+    var hn = vcNorm(h);
+    var fk = normToField[hn];
+    // Prefix match : "Sellable On Hand Inventory - Prior Period (%)" -> "sellable_on_hand_inventory"
+    if (!fk) {
+      for (var nk in normToField) {
+        if (hn === nk || hn.startsWith(nk + ' ') || hn.startsWith(nk + '-')) {
+          fk = normToField[nk]; break;
+        }
+      }
+    }
+    if (fk && !fieldToHeader[fk]) fieldToHeader[fk] = h;
+  });
+  return fieldToHeader; // { fieldKey: nomHeaderReel }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// detectVCFileType : signature de colonnes -> type de rapport
+// ─────────────────────────────────────────────────────────────────
+function detectVCFileType(headers) {
+  var hnSet = {};
+  headers.forEach(function(h) { hnSet[vcNorm(h)] = true; });
+
+  function hasVCField(fieldKey) {
+    var synset = VC_COL_DICT[fieldKey];
+    if (!synset) return false;
+    return ['en', 'fr'].some(function(lang) {
+      return (synset[lang] || []).some(function(term) { return !!hnSet[vcNorm(term)]; });
+    });
+  }
+
+  var hasOrderedRevenue = hasVCField('ordered_revenue');
+  var hasDispatchedRev  = hasVCField('dispatched_revenue');
+  var hasGlanceViews    = hasVCField('glance_views');
+  var hasSourceableOOS  = hasVCField('sourceable_oos_pct');
+  var hasVendorConfirm  = hasVCField('vendor_confirmation_pct');
+  var hasSellable       = hasVCField('sellable_on_hand_inventory');
+
+  if (hasGlanceViews)                          return 'trafic';
+  if (hasOrderedRevenue)                       return 'ventes_fab';
+  if (hasDispatchedRev)                        return 'ventes_approv';
+  if (hasSellable && hasSourceableOOS)         return 'stock_fab';
+  if (hasSellable && hasVendorConfirm)         return 'stock_approv';
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// parseVCFileMeta : parse la ligne 1 metadata VC (EN + FR)
+// Utilise parseMetadata() de core.js (disponible dans scope - hoiste)
+// ─────────────────────────────────────────────────────────────────
+function parseVCFileMeta(firstLine) {
+  var meta = parseMetadata(firstLine); // core.js
+
+  // Locale : EN -> meta['locale'], FR -> meta['local']
+  var localeRaw = meta['locale'] || meta['local'] || '';
+  var language = null;
+  if (localeRaw.toLowerCase().startsWith('en')) language = 'en';
+  else if (localeRaw.toLowerCase().startsWith('fr')) language = 'fr';
+
+  // Pays : EN -> meta['countries'], FR -> meta['pays']
+  var countriesRaw = meta['countries'] || meta['pays'] || '';
+  var countries = countriesRaw
+    ? countriesRaw.split(';').map(function(c) { return c.trim(); }).filter(Boolean)
+    : [];
+
+  // Vue distributeur
+  var apercu = meta['distributor view'] || meta['apercu du distributeur.']
+    || meta['apercu du distributeur'] || meta['distributor view.'] || '';
+  var distributorView = (
+    apercu.toLowerCase().includes('sourcing') ||
+    apercu.toLowerCase().includes('approvisionnement')
+  ) ? 'appro' : 'fab';
+
+  // Periode
+  var viewRange = meta['viewing range'] || meta['champ de vision.'] || meta['champ de vision'] || '';
+  var periodStart = null, periodEnd = null;
+  var pmatch = viewRange.match(/(\d{2}\/\d{2}\/\d{4})\s*-\s*(\d{2}\/\d{2}\/\d{4})/);
+  if (pmatch) { periodStart = pmatch[1]; periodEnd = pmatch[2]; }
+
+  // Intervalle
+  var intervalMeta = meta['reporting range'] || meta['intervalle des rapports'] || meta['intervalle'] || '';
+
+  // Entreprise
+  var company = meta['businesses'] || meta['entreprises'] || '';
+
+  return {
+    language: language, countries: countries, distributorView: distributorView,
+    periodStart: periodStart, periodEnd: periodEnd,
+    intervalMeta: intervalMeta, company: company
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────
+// parseVCFile : parser principal CSV Vendor Central
+// ─────────────────────────────────────────────────────────────────
+function parseVCFile(text, filename) {
+  var errors = [], warnings = [];
+
+  // Strip BOM UTF-8 (﻿)
+  if (text && text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
+  var lines = (text || '').split('\n');
+  if (lines.length < 2) {
+    return { ok: false, errors: ['Fichier vide ou trop court'], warnings: [] };
+  }
+
+  // ── Metadata ligne 1 ──────────────────────────────────────────
+  var meta = parseVCFileMeta(lines[0]);
+  var language = meta.language;
+
+  // ── Headers ligne 2 : detection format encapsule ──────────────
+  // Encapsule (vieux exports FR multi-pays) : ligne 2 = "ASIN,""Nom du produit"",..."
+  // Standard (EN + nouveaux exports)        : ligne 2 = ASIN,"Product title",...
+  var rawLines = lines.slice(1);
+  var headerLine = rawLines[0] ? rawLines[0].trim() : '';
+  var isEncapsulated = headerLine.startsWith('"ASIN,') || headerLine.startsWith('"asin,');
+
+  var csvText, papaConfig;
+  if (isEncapsulated) {
+    var unescaped = rawLines
+      .filter(function(l) { return l.trim(); })
+      .map(function(l) {
+        var s = l.trim();
+        if (s.startsWith('"')) s = s.slice(1);
+        s = s.replace(/"[;]*$/, '');
+        s = s.replace(/""/g, '"');
+        return s;
+      })
+      .join('\n');
+    csvText = unescaped;
+    papaConfig = { header: true, skipEmptyLines: true, delimiter: ',' };
+    log('Format multi-pays encapsule detecte — desencapsulation activee');
+  } else {
+    csvText = rawLines.join('\n');
+    papaConfig = { header: true, skipEmptyLines: true };
+  }
+
+  var res = Papa.parse(csvText, papaConfig);
+  if (!res || !res.data || !res.data.length) {
+    return { ok: false, errors: ['Aucune donnee parsee (fichier vide ou mal forme)'], warnings: warnings };
+  }
+
+  var headers = res.meta.fields || [];
+
+  // ── Detection langue par heuristique sur headers (fallback) ───
+  if (!language) {
+    var hasProductTitle = headers.some(function(h) { return vcNorm(h) === 'product title'; });
+    var hasNomProduit   = headers.some(function(h) { return vcNorm(h) === 'nom du produit'; });
+    if (hasProductTitle)    language = 'en';
+    else if (hasNomProduit) language = 'fr';
+    else                    language = 'en';
+    warnings.push('Locale absent des metadonnees — langue detectee : ' + language);
+  }
+
+  // ── Detection type de rapport ─────────────────────────────────
+  var vcType = detectVCFileType(headers);
+  if (!vcType) {
+    return {
+      ok: false,
+      errors: ["Format non reconnu — verifier qu'il s'agit d'un export Vendor Central hebdomadaire (Ventes, Trafic ou Stock ASIN)."],
+      warnings: warnings
+    };
+  }
+
+  // ── Construction fieldMap header -> fieldKey ──────────────────
+  var fieldMap = buildVCHeaderMap(headers);
+
+  // ── Detection multi-pays ──────────────────────────────────────
+  var marcheHeader = fieldMap['marche'];
+  var isMultiCountry = !!marcheHeader;
+
+  var countriesDetected = meta.countries.length > 0 ? meta.countries.slice() : [];
+  if (isMultiCountry && countriesDetected.length === 0) {
+    var marcheSet = {};
+    res.data.forEach(function(row) {
+      var v = (row[marcheHeader] || '').trim();
+      if (v) marcheSet[v] = true;
+    });
+    countriesDetected = Object.keys(marcheSet);
+  }
+
+  // ── Periodes ──────────────────────────────────────────────────
+  var periodStart = meta.periodStart;
+  var periodEnd   = meta.periodEnd;
+
+  if (!periodEnd && filename) {
+    var fn = filename.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    var fdm1 = fn.match(/[Dd]atedefin[_\s]+(\d{2}-\d{2}-\d{4})[_\s]+(\d{2}-\d{2}-\d{4})/i);
+    var fdm2 = !fdm1 ? fn.match(/(\d{2}-\d{2}-\d{4})[_\s]+(\d{2}-\d{2}-\d{4})/) : null;
+    var fdmM = fdm1 || fdm2;
+    if (fdmM) {
+      periodStart = fdmM[1].replace(/-/g, '/');
+      periodEnd   = fdmM[2].replace(/-/g, '/');
+    }
+  }
+
+  var periodType = detectPeriodType(periodStart, periodEnd, meta.intervalMeta);
+
+  // ── Champs numeriques a sommer lors de l'agregation ───────────
+  var NUM_SUM = [
+    'net_received_amount', 'net_received_units', 'open_po_qty',
+    'aged_90_sellable_inventory', 'aged_90_sellable_units',
+    'sellable_on_hand_inventory', 'sellable_on_hand_units',
+    'unsellable_on_hand_inventory', 'unsellable_on_hand_units',
+    'unhealthy_inventory', 'unhealthy_units', 'unfilled_customer_ordered_units',
+    'glance_views',
+    'dispatched_revenue', 'dispatched_cogs', 'dispatched_units', 'customer_returns',
+    'ordered_revenue', 'ordered_units'
+  ];
+
+  // ── Parsing + agregation par ASIN ─────────────────────────────
+  var asinMap = {};
+
+  res.data.forEach(function(row) {
+    var asinH = fieldMap['asin'] || 'ASIN';
+    var asin  = (row[asinH] || row['ASIN'] || '').trim();
+    if (!asin || asin.length < 5) return;
+
+    var existing = asinMap[asin];
+    if (!existing) {
+      var entry = { asin: asin };
+      entry.titre  = fieldMap['titre']  ? (row[fieldMap['titre']]  || '') : '';
+      entry.marque = fieldMap['marque'] ? (row[fieldMap['marque']] || '') : '';
+      NUM_SUM.forEach(function(fk) {
+        entry[fk] = fieldMap[fk] ? parseNum(row[fieldMap[fk]]) : 0;
+      });
+      // Champs ratio/texte : premier marche uniquement
+      entry.vendor_confirmation_pct = fieldMap['vendor_confirmation_pct'] ? (row[fieldMap['vendor_confirmation_pct']] || '') : '';
+      entry.receive_fill_pct        = fieldMap['receive_fill_pct']        ? (row[fieldMap['receive_fill_pct']]        || '') : '';
+      entry.vendor_lead_time_days   = fieldMap['vendor_lead_time_days']   ? (row[fieldMap['vendor_lead_time_days']]   || '') : '';
+      entry.sell_through_pct        = fieldMap['sell_through_pct']        ? (row[fieldMap['sell_through_pct']]        || '') : '';
+      entry.sourceable_oos_pct      = fieldMap['sourceable_oos_pct']      ? (row[fieldMap['sourceable_oos_pct']]      || '') : '';
+      asinMap[asin] = entry;
+    } else if (isMultiCountry) {
+      // Accumulation multi-pays : sommer les valeurs numeriques
+      NUM_SUM.forEach(function(fk) {
+        if (fieldMap[fk]) existing[fk] = (existing[fk] || 0) + parseNum(row[fieldMap[fk]]);
+      });
+    }
+  });
+
+  var rows = Object.keys(asinMap).map(function(k) { return asinMap[k]; });
+
+  // ── Sanity check ─────────────────────────────────────────────
+  if (rows.length === 0) {
+    return { ok: false, errors: ['Aucun ASIN valide trouve dans le fichier'], warnings: warnings };
+  }
+
+  var validASINs = rows.filter(function(r) { return /^B0[A-Z0-9]{8}$/i.test(r.asin); }).length;
+  if (validASINs / rows.length < 0.8) {
+    warnings.push('Moins de 80% ASINs au format Amazon standard : ' + validASINs + '/' + rows.length);
+  }
+
+  // Seuil minimal KPI : >= 5% de lignes avec valeur > 0
+  var kpiFieldMap = {
+    trafic: 'glance_views', ventes_approv: 'dispatched_revenue',
+    ventes_fab: 'ordered_revenue', stock_approv: 'sellable_on_hand_inventory',
+    stock_fab: 'sellable_on_hand_inventory'
+  };
+  var kpiField = kpiFieldMap[vcType];
+  if (kpiField && rows.length > 5) {
+    var kpiCount = rows.filter(function(r) { return (r[kpiField] || 0) > 0; }).length;
+    if (kpiCount / rows.length < 0.05) {
+      errors.push('Format non reconnu ou fichier corrompu : ' + kpiCount + '/' + rows.length + ' lignes avec ' + kpiField + ' > 0.');
+      return { ok: false, errors: errors, warnings: warnings };
+    }
+  }
+
+  // ── Market legacy ─────────────────────────────────────────────
+  var mktCodes = (typeof MARKET_CODES !== 'undefined') ? MARKET_CODES : {};
+  var market = meta.countries.length === 1 ? (mktCodes[meta.countries[0]] || '.fr') : '.fr';
+
+  return {
+    ok: true,
+    vcType: vcType,
+    language: language,
+    isMultiCountry: isMultiCountry,
+    rows: rows,
+    countriesDetected: countriesDetected,
+    aggregationApplied: isMultiCountry,
+    errors: errors,
+    warnings: warnings,
+    periodStart: periodStart,
+    periodEnd:   periodEnd,
+    periodType:  periodType,
+    distributorView: meta.distributorView,
+    company:     meta.company,
+    market:      market
+  };
 }
 
 
@@ -1902,7 +2319,7 @@ let _db = null;
 function openDB() {
   return new Promise((resolve, reject) => {
     if (_db) return resolve(_db);
-    const req = indexedDB.open('AmazonPilot', 4);
+    const req = indexedDB.open('AmazonPilot', 5);  // v5 : ajout smoke_history
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('clients')) {
@@ -1919,10 +2336,58 @@ function openDB() {
       if (!db.objectStoreNames.contains('erp_stock')) {
         db.createObjectStore('erp_stock', { keyPath: '_key' });
       }
+      // v5 — historique mesures smoke par client (brique amorce détection dérive)
+      if (!db.objectStoreNames.contains('smoke_history')) {
+        const sh = db.createObjectStore('smoke_history', { keyPath: 'key' });
+        sh.createIndex('clientId',  'clientId',  { unique: false });
+        sh.createIndex('timestamp', 'timestamp', { unique: false });
+      }
     };
     req.onsuccess = e => { _db = e.target.result; resolve(_db); };
     req.onerror = () => reject(req.error);
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// saveSmokeHistory : enregistre un point de mesure dans IDB smoke_history
+// Appelé à chaque fin de smokeTest(), quel que soit le client.
+// Pas de logique d'évaluation ici — collecte uniquement (v3.6.6.1).
+// ─────────────────────────────────────────────────────────────────────────
+async function saveSmokeHistory(clientId, clientName, measures) {
+  try {
+    const db = await openDB();
+    const ts  = new Date().toISOString();
+    const key = (clientId || 'unknown') + ':' + ts;
+    await new Promise(function(res, rej) {
+      const tx = db.transaction(['smoke_history'], 'readwrite');
+      tx.objectStore('smoke_history').put({
+        key:        key,
+        clientId:   clientId   || 'unknown',
+        clientName: clientName || clientId || 'unknown',
+        timestamp:  ts,
+        measures:   measures || {}
+      });
+      tx.oncomplete = res;
+      tx.onerror = function() { rej(tx.error); };
+    });
+    // Compter les mesures accumulées pour ce client (via index)
+    const clientEntries = await new Promise(function(res) {
+      const tx2 = db.transaction(['smoke_history'], 'readonly');
+      const req2 = tx2.objectStore('smoke_history').index('clientId').getAll(clientId || 'unknown');
+      req2.onsuccess = function() { res(req2.result || []); };
+      req2.onerror  = function() { res([]); };
+    });
+    const nbMesures = clientEntries.length;
+    // Date cible = 1ère mesure + 6 mois
+    const sorted   = clientEntries.slice().sort(function(a, b) { return a.timestamp < b.timestamp ? -1 : 1; });
+    const firstTs  = sorted.length > 0 ? sorted[0].timestamp : ts;
+    const dateCible = new Date(firstTs);
+    dateCible.setMonth(dateCible.getMonth() + 6);
+    const dateCibleStr = dateCible.toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
+    console.info('[INFO] SMOKE_HISTORY: ' + (clientName || clientId) + ' — ' + nbMesures + ' mesures accumulées. Détection de dérive activée dès ' + dateCibleStr + '.');
+  } catch(err) {
+    console.warn('[WARN] saveSmokeHistory:', err);
+  }
 }
 
 function migrateXMLTitles(clients) {
@@ -2174,6 +2639,118 @@ function detectPeriodType(startDate, endDate, intervalMeta) {
 }
 
 function parseCSVFile(text, filename) {
+  // v3.6.6.1 — Délégation au parser universel multilingue parseVCFile()
+  // Maintient la structure de retour legacy pour tous les appelants existants
+  var result = parseVCFile(text, filename);
+
+  if (!result.ok) {
+    log('✗ ' + (filename || '') + ' : ' + (result.errors[0] || 'Format non reconnu'), 'err');
+    return { error: result.errors[0] || 'Format non reconnu' };
+  }
+
+  // Traduction vcType -> type legacy + distributorView
+  var type, distributorView;
+  var vcType = result.vcType;
+  if      (vcType === 'stock_approv')  { type = 'stock';  distributorView = 'appro'; }
+  else if (vcType === 'stock_fab')     { type = 'stock';  distributorView = 'fab';   }
+  else if (vcType === 'ventes_approv') { type = 'ventes'; distributorView = 'appro'; }
+  else if (vcType === 'ventes_fab')    { type = 'ventes'; distributorView = 'fab';   }
+  else if (vcType === 'trafic')        { type = 'trafic'; distributorView = 'fab';   }
+  else { return { error: 'Type non reconnu : ' + vcType }; }
+
+  // Log type + langue detectes
+  var typeLabels = {
+    trafic: 'Trafic ASIN', ventes_approv: 'Ventes ASIN Approvisionnement',
+    ventes_fab: 'Ventes ASIN Fabrication', stock_approv: 'Stock ASIN Approvisionnement',
+    stock_fab: 'Stock ASIN Fabrication'
+  };
+  var langLabel = result.language === 'en' ? 'Anglais (en_GB)' : 'Français (fr_FR)';
+  log('📋 ' + (typeLabels[vcType] || vcType) + ' • ' + langLabel
+    + ' • ' + result.rows.length + ' ASINs'
+    + (result.isMultiCountry ? ' (agrégé ' + result.countriesDetected.length + ' marchés)' : ''), 'ok');
+
+  // Message UI + console multi-pays (v3.6.6.1)
+  if (result.isMultiCountry) {
+    var ctMsg = '🌍 Multi-pays détecté (' + result.countriesDetected.length
+      + ' marchés : ' + result.countriesDetected.join(', ')
+      + '). Agrégation tous marchés effectuée. Stock et CA affichés = somme Europe.';
+    log(ctMsg, 'ok');
+    if (typeof showToast === 'function') {
+      setTimeout(function() { showToast(ctMsg, 'alr-b'); }, 150);
+    }
+  }
+
+  // Traduction rows -> data format legacy
+  var data = result.rows.map(function(row) {
+    var item = {
+      asin:            row.asin,
+      title:           row.titre  || '',
+      brand:           row.marque || '',
+      market:          result.market,
+      periodStart:     result.periodStart,
+      periodEnd:       result.periodEnd,
+      periodType:      result.periodType,
+      distributorView: distributorView
+    };
+    if (type === 'ventes') {
+      item.orderedRevenue = row.ordered_revenue    || 0;
+      item.shippedRevenue = row.dispatched_revenue || 0;
+      // revenue : Fab -> expedie, Appro -> commande si dispo sinon expedie (compat v3.1.72)
+      item.revenue = distributorView === 'fab'
+        ? item.shippedRevenue
+        : (item.orderedRevenue > 0 ? item.orderedRevenue : item.shippedRevenue);
+      item.orderedUnits = row.ordered_units    || 0;
+      item.shippedUnits = row.dispatched_units || 0;
+      item.units = distributorView === 'fab'
+        ? item.orderedUnits
+        : (item.orderedUnits > 0 ? item.orderedUnits : item.shippedUnits);
+      item.returns      = row.customer_returns || 0;
+      item.revenueDelta = '';
+      item.revenueYoY   = '';
+      item.unitsDelta   = '';
+    }
+    if (type === 'trafic') {
+      item.glanceViews = row.glance_views || 0;
+      item.gvDelta     = '';
+      item.gvYoY       = '';
+    }
+    if (type === 'stock') {
+      item.sellableStock   = row.sellable_on_hand_inventory   || 0;
+      item.sellableUnits   = row.sellable_on_hand_units       || 0;
+      item.unsellableUnits = row.unsellable_on_hand_units     || 0;
+      item.unhealthyStock  = row.unhealthy_inventory          || 0;
+      item.unhealthyUnits  = row.unhealthy_units              || 0;
+      item.openPOQty       = row.open_po_qty                  || 0;
+      item.oosPct          = row.sourceable_oos_pct           || '';
+      item.confirmPct      = row.vendor_confirmation_pct      || '';
+      item.retailPct       = row.sell_through_pct             || '';
+    }
+    return item;
+  });
+
+  return {
+    type:              type,
+    market:            result.market,
+    distributorView:   distributorView,
+    periodStart:       result.periodStart,
+    periodEnd:         result.periodEnd,
+    periodType:        result.periodType,
+    company:           result.company,
+    rowCount:          data.length,
+    data:              data,
+    filename:          filename,
+    // Champs enrichis v3.6.6.1
+    language:          result.language,
+    isMultiCountry:    result.isMultiCountry,
+    countriesDetected: result.countriesDetected,
+    vcType:            vcType
+  };
+}
+
+// _parseCSVFile_LEGACY : corps original remplacé en v3.6.6.1 par le wrapper parseVCFile()
+// Conservé ci-dessous jusqu'à validation complète — à supprimer en v3.6.7
+/* eslint-disable */
+function _parseCSVFile_LEGACY_UNUSED(text, filename) {
   const lines = text.split('\n');
   if (lines.length < 2) return { error: 'Fichier vide ou invalide' };
   const meta = parseMetadata(lines[0]);

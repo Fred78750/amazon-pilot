@@ -36,7 +36,7 @@ def strip_header(code):
     return '\n'.join(lines)
 
 def get_ver(js):
-    m = re.search(r"APP_VERSION = '(\d+\.\d+\.\d+)'", js)
+    m = re.search(r"APP_VERSION = '([\d.]+)'", js)
     return m.group(1) if m else '0.0.0'
 
 def bump(v):
@@ -52,6 +52,7 @@ def build(ver=None, check=False):
     smoke  = strip_header(r('smoke.js'))
     guide      = strip_header(r('guide_asn.js'))
     parser_erp = strip_header(r('parser_erp.js'))
+    parser_vc  = strip_header(r('parser_vc.js'))
     yoy    = strip_header(r('yoy.js'))
     yoy_ai = strip_header(r('yoy_ai.js'))
     # Templates Free — tous les fichiers src/templates/yoy_*.js (ordre alphabétique stable)
@@ -67,7 +68,7 @@ def build(ver=None, check=False):
 
     for name, content in [('core.js',core),('buybox.js',buybox),('seo.js',seo),
                            ('smoke.js',smoke),('guide_asn.js',guide),
-                           ('parser_erp.js',parser_erp),
+                           ('parser_erp.js',parser_erp),('parser_vc.js',parser_vc),
                            ('yoy.js',yoy),('yoy_ai.js',yoy_ai),('templates/*',yoy_templates)]:
         log(f"{name:<20} {len(content)//1024} Ko")
 
@@ -80,12 +81,13 @@ def build(ver=None, check=False):
     # Injection avec \n pour éviter collision @smoke vs @smoke_manual
     js = js.replace('// @guide\n',        guide + '\n')
     js = js.replace('// @parser_erp\n',  parser_erp + '\n')
+    js = js.replace('// @parser_vc\n',   parser_vc + '\n')
     js = js.replace('// @smoke\n',        smoke_main + '\n')
     js = js.replace('// @buybox\n',       buybox + '\n')
     js = js.replace('// @seo\n',          seo + '\n')
     js = js.replace('// @yoy\n',          yoy_full + '\n')
     js = js.replace('// @smoke_manual\n', smoke_manual + '\n')
-    js = re.sub(r"APP_VERSION = '\d+\.\d+\.\d+'", f"APP_VERSION = '{new_ver}'", js, count=1)
+    js = re.sub(r"APP_VERSION = '[\d.]+'", f"APP_VERSION = '{new_ver}'", js, count=1)
     log(f"JS : {len(js)//1024} Ko")
 
     log("Injection HTML", 'STEP')

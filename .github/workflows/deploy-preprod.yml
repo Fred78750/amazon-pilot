@@ -1,0 +1,35 @@
+name: Deploy Amazon Pilot to S3 (Preprod)
+
+on:
+  push:
+    branches: [preprod]
+
+jobs:
+  deploy-preprod:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-3
+
+      - name: Deploy to S3 (Preprod)
+        run: |
+          LATEST=$(ls amazon-pilot-v*.html | sort -V | tail -1)
+          echo "Deploying $LATEST"
+          aws s3 cp "$LATEST" s3://amazon-pilot-preprod/index.html \
+            --cache-control "no-cache,no-store,must-revalidate"
+
+      - name: Invalidate CloudFront (Preprod)
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id E3CODYJ437XKU5 \
+            --paths "/*"
+
+      - name: Done
+        run: echo "Deployed to Preprod successfully"
