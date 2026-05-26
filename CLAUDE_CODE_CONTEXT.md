@@ -1,6 +1,6 @@
 ﻿# CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 26 mai 2026 (v3.6.6.2 staging — Parser VC multilingue + SMOKE_REF par client + smoke_history)
+**Dernière mise à jour :** 26 mai 2026 (v3.6.6.2 PROD — Parser VC multilingue + SMOKE_REF par client + smoke_history IDB v5)
 
 ---
 
@@ -104,7 +104,7 @@ Tout patch doit être minimal et ciblé :
 | v3.6.5.12 | ✅ **PROD** — mergé 22 mai 2026 / tag v3.6.5.12 | 93a9157 (merge) / tag v3.6.5.12 |
 | v3.6.6 | ✅ **PROD** — mergé 22 mai 2026 / tag v3.6.6 | d078c90 (merge) / tag v3.6.6 |
 | v3.6.6.1 | ✅ **PROD** — en production avant patch (tag implicite, commit de référence) | — |
-| v3.6.6.2 | ✅ Staging — 26 mai 2026 (en attente GO Fred → preprod → main) | 802cb8d / tag v3.6.6.2 |
+| v3.6.6.2 | ✅ **PROD** — mergé 26 mai 2026 / tag v3.6.6.2 | 24630bf (merge) / tag v3.6.6.2 |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -133,9 +133,9 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | **v3.6.6** (merge d078c90 — 22 mai 2026) | https://amazon.foliow.app |
-| Recette (staging) | **v3.6.6.2** (commit 802cb8d — 26 mai 2026) | https://d9xny9istvl53.cloudfront.net |
-| Preprod | **v3.6.6** (deploy direct AWS CLI — 22 mai 2026) | https://preprod.amazon.foliow.app |
+| Production (main) | **v3.6.6.2** (merge 24630bf — 26 mai 2026) | https://amazon.foliow.app |
+| Recette (staging) | **v3.6.6.2** (commit f32ab40 — 26 mai 2026) | https://d9xny9istvl53.cloudfront.net |
+| Preprod | **v3.6.6.2** (deploy 26 mai 2026) | https://preprod.amazon.foliow.app |
 
 ✅ **MERGÉ EN PROD le 19 mai 2026** — merge 01656bc, tag v3.6.2, APP_VERSION 3.6.2 vérifié, CloudFront invalidé.
 Scope : moteur de recherche ASIN transversal topbar + rebranchement Buy Box / Appros / Prévisionnel.
@@ -148,8 +148,10 @@ Smoke tests : colonne cause ✅ | fragile=0 légitime (0 ASIN Cogex avec ≥3 se
 ✅ **v3.6.6 MERGÉ EN PROD le 22 mai 2026** — merge d078c90, tag v3.6.6, APP_VERSION 3.6.6 vérifié, CloudFront invalidé.
 Scope : Parser ERP universel (parseFileERP, downloadERPTemplate, handleERPImport, getStockERP) + IndexedDB v4 erp_stock + ÉTAPE 4 import + fix handleErpStock (support Gers — header décalé, Stock Physique non réservé) + 12/12 smoke tests. Anti-régression 22/22 ✅.
 
-⏸ **v3.6.6.2 EN ATTENTE MERGE PROD** — staging validé 26 mai 2026 — 20/20 smoke tests Playwright ✅.
-Scope : Parser CSV Vendor Central multilingue (src/parser_vc.js nouveau module) — EN canonique + FR suppletif, vcNorm(), VC_COL_DICT 33 champs, détection automatique type rapport (5 types), agrégation multi-pays 1 ligne/ASIN (fix CA x6 sur multi-marchés Gers), erreur bloquante type inconnu, retro-compat parseCSVFile(). SMOKE_REF par client : SMOKE_REF_BY_CLIENT, V9a/V9b/V9c/V9d conditionnels (Gers = skip silencieux, pas d'alerte rouge). smoke_history : IDB v5, collecte historique KPIs par client (brique amorce détection dérive, sans logique d'évaluation). build.py étendu 4 composants de version. Tests : V6a-V6g (parser VC) + V7 (smoke_history IDB).
+✅ **v3.6.6.2 MERGÉ EN PROD le 26 mai 2026** — merge 24630bf, tag v3.6.6.2, APP_VERSION 3.6.6.2 vérifié, CloudFront invalidé.
+Scope : Parser CSV Vendor Central multilingue (src/parser_vc.js nouveau module) — EN canonique + FR suppletif, vcNorm(), VC_COL_DICT 33 champs, détection automatique type rapport (5 types), agrégation multi-pays 1 ligne/ASIN (fix CA ×N marchés sur Gers), erreur bloquante type inconnu, retro-compat parseCSVFile(). SMOKE_REF par client : SMOKE_REF_BY_CLIENT, V9a/V9b/V9c/V9d conditionnels (Cogex calibré, Gers = skip silencieux). smoke_history : IDB v5, collecte historique KPIs par client (brique amorce détection dérive v3.6.8+). Anti-régression 46/46 ✅.
+Validation terrain Fred : import 5 fichiers EN Gers (agrégation multi-pays OK) + ERP Gers 3712 refs + YoY Cogex analyses historiques OK.
+BTI-1 (deploy-preprod.yml) : backlog — slot v3.6.7 réservé YoY Étape 2.
 
 ### PIÈGES RENCONTRÉS v3.6.6.2 (à mémoriser)
 - **Caractères spéciaux dans smoke.spec.js** : apostrophes courbes `'` dans des strings JS single-quoted cassent la syntaxe. Contournement : utiliser double quotes pour les strings contenant des apostrophes, ou `\uXXXX` explicites. Si l'Edit tool refuse (mismatch bytes), passer par un script Python intermédiaire.
@@ -353,7 +355,7 @@ Un ASIN peut avoir 2 VC (COGEX + 3J6MN), SKU différent par VC. Le SKU ne peut p
 
 - [x] **v3.6.6** : Parser ERP universel (parseFileERP, downloadERPTemplate, handleERPImport, getStockERP) + IDB v4 erp_stock + fix handleErpStock Gers. PROD 22 mai 2026.
 
-- [x] **v3.6.6.2** (staging 26 mai 2026) :
+- [x] **v3.6.6.2** (PROD 26 mai 2026) :
   - `src/parser_vc.js` (NOUVEAU module) — Parser CSV Vendor Central multilingue EN-first / FR suppletif
     - `vcNorm()` : normalisation robuste (NFD accents, apostrophes typo U+2018/U+2019, tirets cadratin, espaces NBSP/NNBSP)
     - `VC_COL_DICT` : 33 champs canoniques EN↔FR (valeurs ASCII-simplifiées côté FR, vcNorm lève les accents des vrais headers)
