@@ -10,7 +10,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.6.6';
+const APP_VERSION = '3.6.6.1';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -81,6 +81,8 @@ const aiUsage = {
 // @guide
 
 // @parser_erp
+
+// @parser_vc
 
 let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
@@ -687,7 +689,7 @@ let _db = null;
 function openDB() {
   return new Promise((resolve, reject) => {
     if (_db) return resolve(_db);
-    const req = indexedDB.open('AmazonPilot', 4);
+    const req = indexedDB.open('AmazonPilot', 5);  // v5 : ajout smoke_history
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('clients')) {
@@ -704,10 +706,58 @@ function openDB() {
       if (!db.objectStoreNames.contains('erp_stock')) {
         db.createObjectStore('erp_stock', { keyPath: '_key' });
       }
+      // v5 — historique mesures smoke par client (brique amorce détection dérive)
+      if (!db.objectStoreNames.contains('smoke_history')) {
+        const sh = db.createObjectStore('smoke_history', { keyPath: 'key' });
+        sh.createIndex('clientId',  'clientId',  { unique: false });
+        sh.createIndex('timestamp', 'timestamp', { unique: false });
+      }
     };
     req.onsuccess = e => { _db = e.target.result; resolve(_db); };
     req.onerror = () => reject(req.error);
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// saveSmokeHistory : enregistre un point de mesure dans IDB smoke_history
+// Appelé à chaque fin de smokeTest(), quel que soit le client.
+// Pas de logique d'évaluation ici — collecte uniquement (v3.6.6.1).
+// ─────────────────────────────────────────────────────────────────────────
+async function saveSmokeHistory(clientId, clientName, measures) {
+  try {
+    const db = await openDB();
+    const ts  = new Date().toISOString();
+    const key = (clientId || 'unknown') + ':' + ts;
+    await new Promise(function(res, rej) {
+      const tx = db.transaction(['smoke_history'], 'readwrite');
+      tx.objectStore('smoke_history').put({
+        key:        key,
+        clientId:   clientId   || 'unknown',
+        clientName: clientName || clientId || 'unknown',
+        timestamp:  ts,
+        measures:   measures || {}
+      });
+      tx.oncomplete = res;
+      tx.onerror = function() { rej(tx.error); };
+    });
+    // Compter les mesures accumulées pour ce client (via index)
+    const clientEntries = await new Promise(function(res) {
+      const tx2 = db.transaction(['smoke_history'], 'readonly');
+      const req2 = tx2.objectStore('smoke_history').index('clientId').getAll(clientId || 'unknown');
+      req2.onsuccess = function() { res(req2.result || []); };
+      req2.onerror  = function() { res([]); };
+    });
+    const nbMesures = clientEntries.length;
+    // Date cible = 1ère mesure + 6 mois
+    const sorted   = clientEntries.slice().sort(function(a, b) { return a.timestamp < b.timestamp ? -1 : 1; });
+    const firstTs  = sorted.length > 0 ? sorted[0].timestamp : ts;
+    const dateCible = new Date(firstTs);
+    dateCible.setMonth(dateCible.getMonth() + 6);
+    const dateCibleStr = dateCible.toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
+    console.info('[INFO] SMOKE_HISTORY: ' + (clientName || clientId) + ' — ' + nbMesures + ' mesures accumulées. Détection de dérive activée dès ' + dateCibleStr + '.');
+  } catch(err) {
+    console.warn('[WARN] saveSmokeHistory:', err);
+  }
 }
 
 function migrateXMLTitles(clients) {
@@ -959,6 +1009,118 @@ function detectPeriodType(startDate, endDate, intervalMeta) {
 }
 
 function parseCSVFile(text, filename) {
+  // v3.6.6.1 — Délégation au parser universel multilingue parseVCFile()
+  // Maintient la structure de retour legacy pour tous les appelants existants
+  var result = parseVCFile(text, filename);
+
+  if (!result.ok) {
+    log('✗ ' + (filename || '') + ' : ' + (result.errors[0] || 'Format non reconnu'), 'err');
+    return { error: result.errors[0] || 'Format non reconnu' };
+  }
+
+  // Traduction vcType -> type legacy + distributorView
+  var type, distributorView;
+  var vcType = result.vcType;
+  if      (vcType === 'stock_approv')  { type = 'stock';  distributorView = 'appro'; }
+  else if (vcType === 'stock_fab')     { type = 'stock';  distributorView = 'fab';   }
+  else if (vcType === 'ventes_approv') { type = 'ventes'; distributorView = 'appro'; }
+  else if (vcType === 'ventes_fab')    { type = 'ventes'; distributorView = 'fab';   }
+  else if (vcType === 'trafic')        { type = 'trafic'; distributorView = 'fab';   }
+  else { return { error: 'Type non reconnu : ' + vcType }; }
+
+  // Log type + langue detectes
+  var typeLabels = {
+    trafic: 'Trafic ASIN', ventes_approv: 'Ventes ASIN Approvisionnement',
+    ventes_fab: 'Ventes ASIN Fabrication', stock_approv: 'Stock ASIN Approvisionnement',
+    stock_fab: 'Stock ASIN Fabrication'
+  };
+  var langLabel = result.language === 'en' ? 'Anglais (en_GB)' : 'Français (fr_FR)';
+  log('📋 ' + (typeLabels[vcType] || vcType) + ' • ' + langLabel
+    + ' • ' + result.rows.length + ' ASINs'
+    + (result.isMultiCountry ? ' (agrégé ' + result.countriesDetected.length + ' marchés)' : ''), 'ok');
+
+  // Message UI + console multi-pays (v3.6.6.1)
+  if (result.isMultiCountry) {
+    var ctMsg = '🌍 Multi-pays détecté (' + result.countriesDetected.length
+      + ' marchés : ' + result.countriesDetected.join(', ')
+      + '). Agrégation tous marchés effectuée. Stock et CA affichés = somme Europe.';
+    log(ctMsg, 'ok');
+    if (typeof showToast === 'function') {
+      setTimeout(function() { showToast(ctMsg, 'alr-b'); }, 150);
+    }
+  }
+
+  // Traduction rows -> data format legacy
+  var data = result.rows.map(function(row) {
+    var item = {
+      asin:            row.asin,
+      title:           row.titre  || '',
+      brand:           row.marque || '',
+      market:          result.market,
+      periodStart:     result.periodStart,
+      periodEnd:       result.periodEnd,
+      periodType:      result.periodType,
+      distributorView: distributorView
+    };
+    if (type === 'ventes') {
+      item.orderedRevenue = row.ordered_revenue    || 0;
+      item.shippedRevenue = row.dispatched_revenue || 0;
+      // revenue : Fab -> expedie, Appro -> commande si dispo sinon expedie (compat v3.1.72)
+      item.revenue = distributorView === 'fab'
+        ? item.shippedRevenue
+        : (item.orderedRevenue > 0 ? item.orderedRevenue : item.shippedRevenue);
+      item.orderedUnits = row.ordered_units    || 0;
+      item.shippedUnits = row.dispatched_units || 0;
+      item.units = distributorView === 'fab'
+        ? item.orderedUnits
+        : (item.orderedUnits > 0 ? item.orderedUnits : item.shippedUnits);
+      item.returns      = row.customer_returns || 0;
+      item.revenueDelta = '';
+      item.revenueYoY   = '';
+      item.unitsDelta   = '';
+    }
+    if (type === 'trafic') {
+      item.glanceViews = row.glance_views || 0;
+      item.gvDelta     = '';
+      item.gvYoY       = '';
+    }
+    if (type === 'stock') {
+      item.sellableStock   = row.sellable_on_hand_inventory   || 0;
+      item.sellableUnits   = row.sellable_on_hand_units       || 0;
+      item.unsellableUnits = row.unsellable_on_hand_units     || 0;
+      item.unhealthyStock  = row.unhealthy_inventory          || 0;
+      item.unhealthyUnits  = row.unhealthy_units              || 0;
+      item.openPOQty       = row.open_po_qty                  || 0;
+      item.oosPct          = row.sourceable_oos_pct           || '';
+      item.confirmPct      = row.vendor_confirmation_pct      || '';
+      item.retailPct       = row.sell_through_pct             || '';
+    }
+    return item;
+  });
+
+  return {
+    type:              type,
+    market:            result.market,
+    distributorView:   distributorView,
+    periodStart:       result.periodStart,
+    periodEnd:         result.periodEnd,
+    periodType:        result.periodType,
+    company:           result.company,
+    rowCount:          data.length,
+    data:              data,
+    filename:          filename,
+    // Champs enrichis v3.6.6.1
+    language:          result.language,
+    isMultiCountry:    result.isMultiCountry,
+    countriesDetected: result.countriesDetected,
+    vcType:            vcType
+  };
+}
+
+// _parseCSVFile_LEGACY : corps original remplacé en v3.6.6.1 par le wrapper parseVCFile()
+// Conservé ci-dessous jusqu'à validation complète — à supprimer en v3.6.7
+/* eslint-disable */
+function _parseCSVFile_LEGACY_UNUSED(text, filename) {
   const lines = text.split('\n');
   if (lines.length < 2) return { error: 'Fichier vide ou invalide' };
   const meta = parseMetadata(lines[0]);
