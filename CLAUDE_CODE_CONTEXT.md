@@ -1,6 +1,6 @@
 ﻿# CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 22 mai 2026 (v3.6.6 PROD — Parser ERP universel)
+**Dernière mise à jour :** 26 mai 2026 (v3.6.7 staging — Parser VC multilingue + SMOKE_REF par client + smoke_history)
 
 ---
 
@@ -103,6 +103,7 @@ Tout patch doit être minimal et ciblé :
 | v3.6.5.11 | ✅ Stable staging | ad8320f |
 | v3.6.5.12 | ✅ **PROD** — mergé 22 mai 2026 / tag v3.6.5.12 | 93a9157 (merge) / tag v3.6.5.12 |
 | v3.6.6 | ✅ **PROD** — mergé 22 mai 2026 / tag v3.6.6 | d078c90 (merge) / tag v3.6.6 |
+| v3.6.7 | ✅ Staging — 26 mai 2026 (en attente GO Fred → preprod → main) | 8ec7f19 |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -132,7 +133,7 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 | Environnement | Version | URL |
 |---|---|---|
 | Production (main) | **v3.6.6** (merge d078c90 — 22 mai 2026) | https://amazon.foliow.app |
-| Recette (staging) | **v3.6.6** (commit fa04f32 — 22 mai 2026) | https://d9xny9istvl53.cloudfront.net |
+| Recette (staging) | **v3.6.7** (commit 8ec7f19 — 26 mai 2026) | https://d9xny9istvl53.cloudfront.net |
 | Preprod | **v3.6.6** (deploy direct AWS CLI — 22 mai 2026) | https://preprod.amazon.foliow.app |
 
 ✅ **MERGÉ EN PROD le 19 mai 2026** — merge 01656bc, tag v3.6.2, APP_VERSION 3.6.2 vérifié, CloudFront invalidé.
@@ -145,7 +146,14 @@ Smoke tests : colonne cause ✅ | fragile=0 légitime (0 ASIN Cogex avec ≥3 se
 
 ✅ **v3.6.6 MERGÉ EN PROD le 22 mai 2026** — merge d078c90, tag v3.6.6, APP_VERSION 3.6.6 vérifié, CloudFront invalidé.
 Scope : Parser ERP universel (parseFileERP, downloadERPTemplate, handleERPImport, getStockERP) + IndexedDB v4 erp_stock + ÉTAPE 4 import + fix handleErpStock (support Gers — header décalé, Stock Physique non réservé) + 12/12 smoke tests. Anti-régression 22/22 ✅.
-BTI-1 (deploy-preprod.yml) : backlog v3.6.7.
+
+⏸ **v3.6.7 EN ATTENTE MERGE PROD** — staging validé 26 mai 2026 — 20/20 smoke tests Playwright ✅.
+Scope : Parser CSV Vendor Central multilingue (src/parser_vc.js nouveau module) — EN canonique + FR suppletif, vcNorm(), VC_COL_DICT 33 champs, détection automatique type rapport (5 types), agrégation multi-pays 1 ligne/ASIN (fix CA x6 sur multi-marchés Gers), erreur bloquante type inconnu, retro-compat parseCSVFile(). SMOKE_REF par client : SMOKE_REF_BY_CLIENT, V9a/V9b/V9c/V9d conditionnels (Gers = skip silencieux, pas d'alerte rouge). smoke_history : IDB v5, collecte historique KPIs par client (brique amorce détection dérive, sans logique d'évaluation). build.py étendu 4 composants de version. Tests : V6a-V6g (parser VC) + V7 (smoke_history IDB).
+
+### PIÈGES RENCONTRÉS v3.6.7 (à mémoriser)
+- **Caractères spéciaux dans smoke.spec.js** : apostrophes courbes `'` dans des strings JS single-quoted cassent la syntaxe. Contournement : utiliser double quotes pour les strings contenant des apostrophes, ou `\uXXXX` explicites. Si l'Edit tool refuse (mismatch bytes), passer par un script Python intermédiaire.
+- **Deploy recette = index.html, pas amazon-pilot-latest.html** : CloudFront recette a `index.html` comme default root object. Toujours deployer sur `s3://amazon-pilot-recette/index.html` ET `amazon-pilot-latest.html` simultanement.
+- **IDB Playwright** : Les tests Playwright partagent le contexte IDB entre tests (1 worker). `cl()` retourne null si le client n'est pas chargé via IDB (localStorage seul ne suffit pas). Pour tester `saveSmokeHistory`, appeler la fonction directement plutôt que passer par `smokeTest()` avec un client injecté.
 
 ✅ **MERGÉ EN PROD le 18 mai 2026** — merge fae7d79, APP_VERSION 3.6.1.5 vérifié, CloudFront invalidé.
 Scope merge groupé : v3.6.0 + v3.6.1 + v3.6.1.1 + v3.6.1.2 + v3.6.1.3 + v3.6.1.4 + v3.6.1.5
@@ -341,6 +349,31 @@ Un ASIN peut avoir 2 VC (COGEX + 3J6MN), SKU différent par VC. Le SKU ne peut p
   - P9 : `showToast('alr-g')` après `importBuyBoxDefects` et `importBuyBoxAppointments`
   - CSS : ~100 lignes Buy Box dans `src/styles.css`
   - smoke.js V5 : critère mis à jour "Carnet d'enquête" (ex "Plan d'action" supprimé)
+
+- [x] **v3.6.6** : Parser ERP universel (parseFileERP, downloadERPTemplate, handleERPImport, getStockERP) + IDB v4 erp_stock + fix handleErpStock Gers. PROD 22 mai 2026.
+
+- [x] **v3.6.7** (staging 26 mai 2026) :
+  - `src/parser_vc.js` (NOUVEAU module) — Parser CSV Vendor Central multilingue EN-first / FR suppletif
+    - `vcNorm()` : normalisation robuste (NFD accents, apostrophes typo U+2018/U+2019, tirets cadratin, espaces NBSP/NNBSP)
+    - `VC_COL_DICT` : 33 champs canoniques EN↔FR (valeurs ASCII-simplifiées côté FR, vcNorm lève les accents des vrais headers)
+    - `buildVCHeaderMap()` : exact match + prefix match sur headers CSV réels
+    - `detectVCFileType()` : signature colonnes → 5 types (trafic/ventes_fab/ventes_approv/stock_fab/stock_approv)
+    - Agrégation multi-pays : 1 ligne/ASIN (somme 19 champs NUM_SUM sur tous les marchés) — corrige V9a/V9b (CA était ×N marchés)
+    - `parseVCFile()` : parsing complet + sanity check + retour structuré {ok, vcType, language, isMultiCountry, rows, ...}
+    - `parseCSVFile()` dans core.js : wrappe parseVCFile() — retro-compat totale, traduit vcType→type legacy + distributorView
+    - Message UI/toast multi-pays ; erreur bloquante si type non reconnu (anti-parser silencieux)
+  - `src/smoke.js` — SMOKE_REF par client (Ajout 1)
+    - `SMOKE_REF_BY_CLIENT` : Cogex calibré (CA_2024=1547729, CA_2025=1166183, asinMin=1500, asinRef=B009G3EMDI)
+    - V9a/V9b/V9c/V9d conditionnels : rouge uniquement si client dans le dictionnaire, sinon console.info + skip
+    - V1 : seuil ASINs = clientCal?.asinMin.value || 1 (universel pour clients non calibrés)
+    - V5 : utilise clientCal?.asinRef?.asin || SMOKE_REF.asinRef.asin (fallback Cogex)
+  - `src/core.js` — smoke_history IDB v5 (Ajout 2)
+    - IDB v4→v5 : store `smoke_history` (keyPath='key', index clientId + timestamp)
+    - `saveSmokeHistory(clientId, clientName, measures)` : enregistre {CA_2024, CA_2025, CA_semaine, nb_asins, nb_units}
+    - Console `[INFO] SMOKE_HISTORY: client — N mesures. Détection dérive dès {1ère mesure + 6 mois}`
+    - Appelé fin smokeTest() — collecte pure, sans logique d'évaluation (brique pour v3.6.8+)
+  - `build.py` : get_ver + re.sub regex étendus aux versions 4 composants ([\d.]+) ; injection // @parser_vc
+  - `tests/smoke.spec.js` : 20/20 tests (V6a-V6g parser VC + V7 smoke_history IDB v5 + V1 étendu saveSmokeHistory/SMOKE_REF_BY_CLIENT)
 
 - [x] **v3.6.5 — YoY Étape 1 (chantier en cours — dernière version stable v3.6.5.11)**
   - Parser CSV/XLSX Vendor Central FR (colonnes FR, apostrophe typographique U+2019, séparateur milliers U+202F)
