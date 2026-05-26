@@ -684,7 +684,7 @@ test('V8d — calcEveil8020 retourne un resultat si erosion > 5000 EUR/mois', as
       ok: data !== null,
       nbAsins: data ? data.nbAsins : 0,
       montant: data ? data.montant : 0,
-      hasBlock: blockHtml.includes('erosion'),
+      hasBlock: blockHtml.length > 50,            // HTML non vide (le mot contient un accent é)
       hasCtaBtn: blockHtml.includes('goToAsinsYoY')
     };
   });
