@@ -704,7 +704,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.6.5.12';
+const APP_VERSION = '3.6.6.2';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -770,6 +770,11 @@ const aiUsage = {
 };
 
 
+// V9 conditionnel par client + collecte historique smoke_history (IDB v5)
+
+// ─────────────────────────────────────────────────────────────────────────
+// SMOKE_REF : valeurs globales de référence (rétro-compatibilité tests V4)
+// ─────────────────────────────────────────────────────────────────────────
 const SMOKE_REF = {
   ca2024:  { val: 1547729, tol: 0.02, expiry: '2026-12-31', label: 'CA 2024' }, // recalibré 2026-05-18 après reimport Cogex
   ca2025:  { val: 1166183, tol: 0.02, expiry: '2027-12-31', label: 'CA 2025' }, // recalibré 2026-05-18 après reimport Cogex
@@ -777,20 +782,40 @@ const SMOKE_REF = {
   asinRef: { asin: 'B009G3EMDI', label: 'ASIN B009G3EMDI cohérence pipeline' }
 };
 
+// ─────────────────────────────────────────────────────────────────────────
+// SMOKE_REF_BY_CLIENT : calibration par client
+// Clients absents → V9 silencieux (info console + skip, pas d'alerte rouge)
+// Calibration future via accumulation historique smoke_history (~6 mois min)
+// ─────────────────────────────────────────────────────────────────────────
+const SMOKE_REF_BY_CLIENT = {
+  'cogex': {
+    CA_2024:  { value: 1547729, tolerance: 0.02, expiry: '2026-12-31', label: 'CA 2024' },
+    CA_2025:  { value: 1166183, tolerance: 0.02, expiry: '2027-12-31', label: 'CA 2025' },
+    asinMin:  { value: 1500,  label: 'ASINs catalogue >= 1500' },
+    asinRef:  { asin: 'B009G3EMDI', label: 'ASIN réf. B009G3EMDI' },
+  },
+  // Gers, autres clients : calibration à venir après 6+ mois d'historique
+};
+
 async function smokeTest(silent) {
   const now = new Date();
   const results = { vital: [], important: [], ts: now.toISOString(), version: APP_VERSION };
   const pass = (lvl, id, lbl) => results[lvl].push({ id, label: lbl, ok: true });
   const fail = (lvl, id, lbl, msg) => results[lvl].push({ id, label: lbl, ok: false, msg });
-  const refExpired = (ref) => ref.expiry && new Date(ref.expiry) < now;
+  const refExpiredByDate = (expiry) => expiry && new Date(expiry) < now;
   const inTol = (v, ref, tol) => v >= ref * (1-tol) && v <= ref * (1+tol);
   const getErr = () => { const e = document.querySelector('.alr-r'); return e && e.textContent.includes('Erreur') ? e.textContent.slice(0,80) : null; };
 
   // V1 — Client actif
   const c = typeof cl === 'function' ? cl() : null;
-  if (c && c.name && c.asins && c.asins.length >= SMOKE_REF.asinMin.val)
+  // Calibration client : lookup SMOKE_REF_BY_CLIENT par c.id (lowercase)
+  const clientId  = c?.id ? String(c.id).toLowerCase().trim() : null;
+  const clientCal = clientId ? (SMOKE_REF_BY_CLIENT[clientId] || null) : null;
+  // Seuil ASINs : calibré si connu, sinon 1 ASIN minimum
+  const asinMinReq = clientCal?.asinMin?.value || 1;
+  if (c && c.name && c.asins && c.asins.length >= asinMinReq)
     pass('vital','V1', 'Client actif : ' + c.name + ' (' + c.asins.length + ' ASINs)');
-  else fail('vital','V1','Client actif', !c ? 'Aucun client' : 'Seulement ' + (c?.asins?.length||0) + ' ASINs');
+  else fail('vital','V1','Client actif', !c ? 'Aucun client' : 'Seulement ' + (c?.asins?.length||0) + ' ASINs (min ' + asinMinReq + ')');
 
   // V2 — Tableau de bord
   try {
@@ -827,14 +852,15 @@ async function smokeTest(silent) {
 
   // V5 — Buy Box Phase 2 (carnet d'enquête v3.6.1 — dossier sans crash)
   try {
+    const refAsin = clientCal?.asinRef?.asin || SMOKE_REF.asinRef.asin;
     window._buyboxView = null; window._buyboxAsin = null; // reset état UI
-    if (typeof buyboxOpenCase === 'function' && c) buyboxOpenCase(c, SMOKE_REF.asinRef.asin);
-    window._buyboxView = 'case'; window._buyboxAsin = SMOKE_REF.asinRef.asin;
+    if (typeof buyboxOpenCase === 'function' && c) buyboxOpenCase(c, refAsin);
+    window._buyboxView = 'case'; window._buyboxAsin = refAsin;
     if (typeof render === 'function') render();
     await new Promise(r => setTimeout(r, 400));
     const e = getErr();
     const hasCase = document.body.innerHTML.includes('Carnet d\'enquête') || document.body.innerHTML.includes('Hypothèses');
-    if (!e && hasCase) pass('vital','V5','Buy Box Phase 2 ouvert (' + SMOKE_REF.asinRef.asin + ')');
+    if (!e && hasCase) pass('vital','V5','Buy Box Phase 2 ouvert (' + refAsin + ')');
     else fail('vital','V5','Buy Box Phase 2', e || 'DOM Carnet enquête absent');
     // Remettre sur vue liste avant de continuer
     window._buyboxView = 'list'; window._buyboxAsin = null;
@@ -871,62 +897,63 @@ async function smokeTest(silent) {
     else fail('vital','V8','Agent SEO', e || 'Contenu SEO absent');
   } catch(ex) { fail('vital','V8','Agent SEO', ex.message); }
 
-  // V9a — CA 2024
-  if (!refExpired(SMOKE_REF.ca2024)) {
-    const v = Math.round(c?.annualData?.['2024']?.ventes?.totalCA||0);
-    if (v === 0) pass('vital','V9a','CA 2024 : non importé (optionnel)');
-    else if (inTol(v, SMOKE_REF.ca2024.val, SMOKE_REF.ca2024.tol))
-      pass('vital','V9a','CA 2024 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
-    else fail('vital','V9a','CA 2024 dévié','Attendu ~' + SMOKE_REF.ca2024.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
-  }
-
-  // V9b — CA 2025
-  if (!refExpired(SMOKE_REF.ca2025)) {
-    const v = Math.round(c?.annualData?.['2025']?.ventes?.totalCA||0);
-    if (v === 0) pass('vital','V9b','CA 2025 : non importé (optionnel)');
-    else if (inTol(v, SMOKE_REF.ca2025.val, SMOKE_REF.ca2025.tol))
-      pass('vital','V9b','CA 2025 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
-    else fail('vital','V9b','CA 2025 dévié','Attendu ~' + SMOKE_REF.ca2025.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
-  }
-
-  // V9c — ASINs catalogue
-  const asinCnt = c?.asins?.length||0;
-  if (asinCnt >= SMOKE_REF.asinMin.val) pass('vital','V9c','Catalogue : ' + asinCnt + ' ASINs');
-  else fail('vital','V9c','Catalogue ASINs', asinCnt + ' < minimum ' + SMOKE_REF.asinMin.val);
-
-  // V9d — ASIN de référence : invariants pipeline (PAS la santé business)
-  // v3.1.70 — On vérifie que l'import n'a pas cassé la cohérence des données,
-  //          pas que le CA est dans une fourchette (volatile par nature)
-  const refA = c?.asins?.find(a => a.asin === SMOKE_REF.asinRef.asin);
-  if (!refA) {
-    fail('vital','V9d','ASIN réf. ABSENT du catalogue après import', SMOKE_REF.asinRef.asin);
+  // ── V9 — Tests calibrés par client ────────────────────────────────────
+  // Si client non calibré dans SMOKE_REF_BY_CLIENT → skip silencieux
+  if (!clientCal) {
+    console.info('[INFO] SMOKE_REF non calibré pour ce client (' + (c?.name || clientId || 'inconnu') +
+      '). Test en phase d\'apprentissage — historique en cours de constitution.');
   } else {
-    const rev = Math.round(refA.revenue || 0);
-    const units = refA.units || refA.orderedUnits || 0;
-    const checks = [];
-
-    // Invariant 1 : cohérence units/revenue (l'un sans l'autre = parser cassé)
-    // Seuil rev>500 pour éviter faux positif sur commandes non encore expédiées (orderedRevenue>0, shippedUnits=0)
-    if (units > 0 && rev === 0) checks.push('units=' + units + ' mais revenue=0 (parser CA cassé ?)');
-    if (rev > 500 && units === 0) checks.push('revenue=' + rev + '€ mais units=0 (parser units cassé ?)');
-
-    // Invariant 2 : ratio prix unitaire dans [0,1€ ; 1000€]
-    // Détecte erreur virgule décimale, unité monétaire, ou colonne mal mappée
-    if (rev > 0 && units > 0) {
-      const prixUnit = rev / units;
-      if (prixUnit < 0.1) checks.push('prix unitaire ' + prixUnit.toFixed(2) + '€ anormalement bas');
-      if (prixUnit > 1000) checks.push('prix unitaire ' + prixUnit.toFixed(2) + '€ anormalement haut');
+    // V9a — CA 2024
+    if (clientCal.CA_2024 && !refExpiredByDate(clientCal.CA_2024.expiry)) {
+      const v = Math.round(c?.annualData?.['2024']?.ventes?.totalCA||0);
+      if (v === 0) pass('vital','V9a','CA 2024 : non importé (optionnel)');
+      else if (inTol(v, clientCal.CA_2024.value, clientCal.CA_2024.tolerance))
+        pass('vital','V9a','CA 2024 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
+      else fail('vital','V9a','CA 2024 dévié','Attendu ~' + clientCal.CA_2024.value.toLocaleString('fr-FR') + ' ±2%, obtenu ' + v.toLocaleString('fr-FR'));
     }
 
-    // Invariant 3 : title et brand non vides (sinon c'est un row tronqué à l'import)
-    if (!refA.title) checks.push('title vide');
-    if (!refA.brand) checks.push('brand vide');
+    // V9b — CA 2025
+    if (clientCal.CA_2025 && !refExpiredByDate(clientCal.CA_2025.expiry)) {
+      const v = Math.round(c?.annualData?.['2025']?.ventes?.totalCA||0);
+      if (v === 0) pass('vital','V9b','CA 2025 : non importé (optionnel)');
+      else if (inTol(v, clientCal.CA_2025.value, clientCal.CA_2025.tolerance))
+        pass('vital','V9b','CA 2025 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
+      else fail('vital','V9b','CA 2025 dévié','Attendu ~' + clientCal.CA_2025.value.toLocaleString('fr-FR') + ' ±2%, obtenu ' + v.toLocaleString('fr-FR'));
+    }
 
-    if (checks.length === 0) {
-      const detail = rev === 0 ? 'pas de vente cette semaine (OK)' : rev + '€ / ' + units + 'u (cohérent)';
-      pass('vital','V9d','ASIN réf. ' + SMOKE_REF.asinRef.asin + ' : ' + detail);
-    } else {
-      fail('vital','V9d','ASIN réf. cohérence pipeline', checks.join(' | '));
+    // V9c — ASINs catalogue
+    if (clientCal.asinMin) {
+      const asinCnt = c?.asins?.length||0;
+      if (asinCnt >= clientCal.asinMin.value) pass('vital','V9c','Catalogue : ' + asinCnt + ' ASINs');
+      else fail('vital','V9c','Catalogue ASINs', asinCnt + ' < minimum ' + clientCal.asinMin.value);
+    }
+
+    // V9d — ASIN de référence : invariants pipeline (PAS la santé business)
+    // v3.1.70 — cohérence units/revenue, ratio prix, title/brand non vides
+    if (clientCal.asinRef) {
+      const refA = c?.asins?.find(a => a.asin === clientCal.asinRef.asin);
+      if (!refA) {
+        fail('vital','V9d','ASIN réf. ABSENT du catalogue après import', clientCal.asinRef.asin);
+      } else {
+        const rev   = Math.round(refA.revenue || 0);
+        const units = refA.units || refA.orderedUnits || 0;
+        const checks = [];
+        if (units > 0 && rev === 0) checks.push('units=' + units + ' mais revenue=0 (parser CA cassé ?)');
+        if (rev > 500 && units === 0) checks.push('revenue=' + rev + '€ mais units=0 (parser units cassé ?)');
+        if (rev > 0 && units > 0) {
+          const prixUnit = rev / units;
+          if (prixUnit < 0.1) checks.push('prix unitaire ' + prixUnit.toFixed(2) + '€ anormalement bas');
+          if (prixUnit > 1000) checks.push('prix unitaire ' + prixUnit.toFixed(2) + '€ anormalement haut');
+        }
+        if (!refA.title) checks.push('title vide');
+        if (!refA.brand) checks.push('brand vide');
+        if (checks.length === 0) {
+          const detail = rev === 0 ? 'pas de vente cette semaine (OK)' : rev + '€ / ' + units + 'u (cohérent)';
+          pass('vital','V9d','ASIN réf. ' + clientCal.asinRef.asin + ' : ' + detail);
+        } else {
+          fail('vital','V9d','ASIN réf. cohérence pipeline', checks.join(' | '));
+        }
+      }
     }
   }
 
@@ -1000,6 +1027,22 @@ async function smokeTest(silent) {
   };
   try { localStorage.setItem('ap-smoketest-last', JSON.stringify(results)); } catch(e) {}
   if (!silent) renderSmokeResult(results);
+
+  // ── AJOUT 2 — Collecte historique smoke (IDB smoke_history) ──────────
+  // Enregistrement systématique, quel que soit le client (calibré ou non)
+  if (typeof saveSmokeHistory === 'function' && c && c.id) {
+    const measures = {
+      CA_2024:    Math.round(c?.annualData?.['2024']?.ventes?.totalCA || 0),
+      CA_2025:    Math.round(c?.annualData?.['2025']?.ventes?.totalCA || 0),
+      CA_semaine: Math.round((c?.asins || []).reduce(function(s, a) {
+        return s + (typeof getRevenue === 'function' ? (getRevenue(a, c) || 0) : (a.revenue || 0));
+      }, 0)),
+      nb_asins:   (c?.asins || []).length,
+      nb_units:   Math.round((c?.asins || []).reduce(function(s, a) { return s + (a.units || 0); }, 0)),
+    };
+    saveSmokeHistory(c.id, c.name || c.id, measures);
+  }
+
   return results;
 }
 
@@ -1026,6 +1069,650 @@ function renderSmokeResult(r) {
 
 
 const GUIDE_ASN_BOL_B64 = 'JVBERi0xLjQKJZOMi54gUmVwb3J0TGFiIEdlbmVyYXRlZCBQREYgZG9jdW1lbnQgKG9wZW5zb3VyY2UpCjEgMCBvYmoKPDwKL0YxIDIgMCBSIC9GMiAzIDAgUiAvRjMgNCAwIFIgL0Y0IDYgMCBSIC9GNSA4IDAgUgo+PgplbmRvYmoKMiAwIG9iago8PAovQmFzZUZvbnQgL0hlbHZldGljYSAvRW5jb2RpbmcgL1dpbkFuc2lFbmNvZGluZyAvTmFtZSAvRjEgL1N1YnR5cGUgL1R5cGUxIC9UeXBlIC9Gb250Cj4+CmVuZG9iagozIDAgb2JqCjw8Ci9CYXNlRm9udCAvSGVsdmV0aWNhLUJvbGQgL0VuY29kaW5nIC9XaW5BbnNpRW5jb2RpbmcgL05hbWUgL0YyIC9TdWJ0eXBlIC9UeXBlMSAvVHlwZSAvRm9udAo+PgplbmRvYmoKNCAwIG9iago8PAovQmFzZUZvbnQgL1phcGZEaW5nYmF0cyAvTmFtZSAvRjMgL1N1YnR5cGUgL1R5cGUxIC9UeXBlIC9Gb250Cj4+CmVuZG9iago1IDAgb2JqCjw8Ci9Db250ZW50cyAxNiAwIFIgL01lZGlhQm94IFsgMCAwIDU5NS4yNzU2IDg0MS44ODk4IF0gL1BhcmVudCAxNSAwIFIgL1Jlc291cmNlcyA8PAovRm9udCAxIDAgUiAvUHJvY1NldCBbIC9QREYgL1RleHQgL0ltYWdlQiAvSW1hZ2VDIC9JbWFnZUkgXQo+PiAvUm90YXRlIDAgL1RyYW5zIDw8Cgo+PiAKICAvVHlwZSAvUGFnZQo+PgplbmRvYmoKNiAwIG9iago8PAovQmFzZUZvbnQgL0hlbHZldGljYS1PYmxpcXVlIC9FbmNvZGluZyAvV2luQW5zaUVuY29kaW5nIC9OYW1lIC9GNCAvU3VidHlwZSAvVHlwZTEgL1R5cGUgL0ZvbnQKPj4KZW5kb2JqCjcgMCBvYmoKPDwKL0NvbnRlbnRzIDE3IDAgUiAvTWVkaWFCb3ggWyAwIDAgNTk1LjI3NTYgODQxLjg4OTggXSAvUGFyZW50IDE1IDAgUiAvUmVzb3VyY2VzIDw8Ci9Gb250IDEgMCBSIC9Qcm9jU2V0IFsgL1BERiAvVGV4dCAvSW1hZ2VCIC9JbWFnZUMgL0ltYWdlSSBdCj4+IC9Sb3RhdGUgMCAvVHJhbnMgPDwKCj4+IAogIC9UeXBlIC9QYWdlCj4+CmVuZG9iago4IDAgb2JqCjw8Ci9CYXNlRm9udCAvU3ltYm9sIC9OYW1lIC9GNSAvU3VidHlwZSAvVHlwZTEgL1R5cGUgL0ZvbnQKPj4KZW5kb2JqCjkgMCBvYmoKPDwKL0NvbnRlbnRzIDE4IDAgUiAvTWVkaWFCb3ggWyAwIDAgNTk1LjI3NTYgODQxLjg4OTggXSAvUGFyZW50IDE1IDAgUiAvUmVzb3VyY2VzIDw8Ci9Gb250IDEgMCBSIC9Qcm9jU2V0IFsgL1BERiAvVGV4dCAvSW1hZ2VCIC9JbWFnZUMgL0ltYWdlSSBdCj4+IC9Sb3RhdGUgMCAvVHJhbnMgPDwKCj4+IAogIC9UeXBlIC9QYWdlCj4+CmVuZG9iagoxMCAwIG9iago8PAovQ29udGVudHMgMTkgMCBSIC9NZWRpYUJveCBbIDAgMCA1OTUuMjc1NiA4NDEuODg5OCBdIC9QYXJlbnQgMTUgMCBSIC9SZXNvdXJjZXMgPDwKL0ZvbnQgMSAwIFIgL1Byb2NTZXQgWyAvUERGIC9UZXh0IC9JbWFnZUIgL0ltYWdlQyAvSW1hZ2VJIF0KPj4gL1JvdGF0ZSAwIC9UcmFucyA8PAoKPj4gCiAgL1R5cGUgL1BhZ2UKPj4KZW5kb2JqCjExIDAgb2JqCjw8Ci9Db250ZW50cyAyMCAwIFIgL01lZGlhQm94IFsgMCAwIDU5NS4yNzU2IDg0MS44ODk4IF0gL1BhcmVudCAxNSAwIFIgL1Jlc291cmNlcyA8PAovRm9udCAxIDAgUiAvUHJvY1NldCBbIC9QREYgL1RleHQgL0ltYWdlQiAvSW1hZ2VDIC9JbWFnZUkgXQo+PiAvUm90YXRlIDAgL1RyYW5zIDw8Cgo+PiAKICAvVHlwZSAvUGFnZQo+PgplbmRvYmoKMTIgMCBvYmoKPDwKL0NvbnRlbnRzIDIxIDAgUiAvTWVkaWFCb3ggWyAwIDAgNTk1LjI3NTYgODQxLjg4OTggXSAvUGFyZW50IDE1IDAgUiAvUmVzb3VyY2VzIDw8Ci9Gb250IDEgMCBSIC9Qcm9jU2V0IFsgL1BERiAvVGV4dCAvSW1hZ2VCIC9JbWFnZUMgL0ltYWdlSSBdCj4+IC9Sb3RhdGUgMCAvVHJhbnMgPDwKCj4+IAogIC9UeXBlIC9QYWdlCj4+CmVuZG9iagoxMyAwIG9iago8PAovUGFnZU1vZGUgL1VzZU5vbmUgL1BhZ2VzIDE1IDAgUiAvVHlwZSAvQ2F0YWxvZwo+PgplbmRvYmoKMTQgMCBvYmoKPDwKL0F1dGhvciAoQW1hem9uIFBpbG90KSAvQ3JlYXRpb25EYXRlIChEOjIwMjYwNDI5MTQwNDM3KzAwJzAwJykgL0NyZWF0b3IgKFwodW5zcGVjaWZpZWRcKSkgL0tleXdvcmRzICgpIC9Nb2REYXRlIChEOjIwMjYwNDI5MTQwNDM3KzAwJzAwJykgL1Byb2R1Y2VyIChSZXBvcnRMYWIgUERGIExpYnJhcnkgLSBcKG9wZW5zb3VyY2VcKSkgCiAgL1N1YmplY3QgKFwodW5zcGVjaWZpZWRcKSkgL1RpdGxlIChHdWlkZSBBU04gLyBCT0wgLyBDYXJyaWVyIENlbnRyYWwgXDIwNCBBbWF6b24gVmVuZG9yKSAvVHJhcHBlZCAvRmFsc2UKPj4KZW5kb2JqCjE1IDAgb2JqCjw8Ci9Db3VudCA2IC9LaWRzIFsgNSAwIFIgNyAwIFIgOSAwIFIgMTAgMCBSIDExIDAgUiAxMiAwIFIgXSAvVHlwZSAvUGFnZXMKPj4KZW5kb2JqCjE2IDAgb2JqCjw8Ci9GaWx0ZXIgWyAvQVNDSUk4NURlY29kZSAvRmxhdGVEZWNvZGUgXSAvTGVuZ3RoIDI4MTYKPj4Kc3RyZWFtCkdhdG09Pj5zPEgoNFBGSlMyWkwtVF8ocjsuZjA0SVNQIzNlJVVeY29gSl5nM1llMmQ/PTtVPktZTVhEKTtRSFlBJHEnQG0iJE0pMGNNZCYyI0RRVUBIciY+b2tJOXNQPjdPb1JtL3E9aC5DZCdFMm4pOmFOZC8lXSYlaiMjMG8oaT4wKyVjQHFmKDghVSUxM2cvPDYqVl87Y18/R1k3ZFZQaUszLkpWcHJSNzwmR1gzJS1YSHIsZm0kT2dxNCVRJ2tqcWV0Im8nP2FdV0kpS3BKOyJiL2pDZjZFKU8rYmk/Il5HYWJDX3FFOUxyIV9jVzAoSmctO08zXydpQmxeTVJCMGA0bTpXcy1NNj9eWF5JRDtxXWlVKmJfRDE+cDdCdF42M2FcVjMuaC51Ujg5SW9pJ2QvQjZwL0VBQTxUSiwtOkImKlBccVdxZi5WX0JDPCllQmVubk0qZls7Ty0lJGVISTZJIkNNKiZCJzI9anFlL09AamJAQEsub0ZZcipHdF5JTzQkPDVbTVslY1hYS2BNUiRyQDIjPl9aMlFRMTtLQ1RhT3E1I01xJ1gqKzI7UHAoTEkkbXRvVFw2NEUiXShgXj9hU2N1cUwiXllHRltMUWpwQ1xrMz9GO15KPWhdOzIzdCEtbEp1SGBiLFRWblk2QVArP19XIT9YJldIJHJya01tUj0pcV1WcDBRMzY7ZjZSWkRPdG1LVnNjbjkzPioqOHRhVnJHXEU6UEssRDptVkI3WVgjSUNIJzsrMl0kZDQoajMlPXBLSEBBSTwtWlxzQVchWWtwMiZCb25DKjUhczAhYDIxLDpQPkZcLE9lWUtFYk9EU2dsQDVhJWdjS1ZjXWxTOV48XCJPa240YWVLSTUjWztPNWwsYWB1JyhCSUdONTlGUUhnME1pbzppSTI9QWRmKT8/OzwxOnAjIjRoXUdfa0ttQ11IOnFaMzxjK2twXTpmIiFBP2NrcCRhUjlFOERfO2Baclo6dW5RRzhiY09NK2FHaTdoZl4rKjs+Pz1SS0JeXmFpIV1ELkYkT10hQXJcRXUmJiIrNkBPWGgpMEQzIlhAPXQ+VC41PTU6Vy8qOUJXXU1EIVE5KiciWClxayNoTUktJ00hYGNwMj4lSWwkKFlFUS8oLl8vX0cnLWklRkAqQjppMTtsUHFAWzBFLUpxUypiRDo2PFVuX0tcUk1FJHFxJXVSS0Y0O3BPcmtpPmtdKmItKGpFY3VGZSthaSdda2Y9NWEwK11ucSpaL2w1RmArYHIrSyw8K2xuLFpKQVMjUDg6M3JjQUxCYUptIWsjMkMkPDNxIVUibjVJQ0d0cywnLllmMDZhSExcLTFuKCM1L19rJ2tURisxI0NIWlhXPj5tUk9BdWQnT2hHQyEiN25bNTtfKmg9VCIwamJNLnIvakVtPCozcSlPOGlpVj5QamJKNjsmcl1xK0UiXm9aT2w5RT0zPFtVLVwzLzUkdDMoaEVwPmpfJSpRSF82U3VeMVU4O2JBXzZRVE4uUyYkLzQmNDYibyJHUW5dPkQ9aUMuSEwvck8tSGphPTE2XkxTZEJbSypVRlc9OnJZKk0jcE9nWEJLRkIvKGFSLlksSFJwPDhGVUxiVD0pcSl0b0dmSFtqJEc5SCNZaVQ3MEBxWjhWJ2hTPUFkUUgqUlshN0AlUHFCMlpPT1dtOjEiUT0oVVU8UFtpIlJVRiFJQFQ4Ji4rdENNIis/UGExRThgbFA8MmNyLD5EZChFMF5jJClJQU1DcV1aW2lbVVAkVTJxcFFqRyE9NEwqJjpiJTtMJjJeZGxvaWZYQDZuNDZoIW80VlBpU2Z1Um5xX1cmPlpBJGM1bmFiVyh1ZDZaQFdXKVVkIUBrXk42am5MJUIsZ0smUWVgUEBeJUVfRUg/LjRAXyMvQmdPVDluRiQtJS1lYlxiK0RzSylfXWc/Wz5nZHIxXWchL0dzNk4mYmJjTVpQSmZLJDNlJS4pTiwuSEJFW3NcOlZuU21PZFMidVFsN05WRFYsVSJQJ1JXPyctLFx0TmYqSEtgSl4tLlBzLU89NVRiKkksXzRPO2RBN25VSmpvWThPZkgmUTIvIWglMitrZ2luRTZaRGVZMT4xcC5EakcvaVAqQ2lJbnNGWFNBPm9BZ1pWUWVYPzRCOyk/MW9WYGQmJzFqMTl1N2pqYE8lZVRBZ2ZrMT1gbWRwKS0sQHErSD9Aa2grRT9NTVNALmYlJSRaU1tONUZvZ0FQVWJXX0oxRDhyJTg9YFUxY14oXkEkLGNLajhIWnRYPGc1T0g4Z1UrYTc1ZkslTS1GTys1bm4oVm5iSklsVyM7YXFxJ0leZD5sQHIwXlRMU18sP0xQS0NKbk8oLS0zZ0BIMlNqdE9fbFF1PCFsOmN1Q0FRUVNyVGNmcEF0U0E9WFFCYys4SFw6cWA2TG9dRjRcXGsxdD08O1ddXVNqczNrcipkSkFcSzdpTjQpOTZNOkNRLTVgOEA2XUotYWRLdEI1O0BuKCVobSU4TlUjXl80NlM/UDhhOWd0YzUsX1MhVSE0XypucWlPbCY8W1FvcjNhJVp1IWBBOTFzMS1PMU0tQSQ4VXMrMyovN3UzPztBKGg2QVsoXW5FdV0xLHVGUW8hVG8mUEVWJkEraVpwSDFYJmUpJ19WXWoyXjE0L2JbV2kzI0snVVoxYzgkdTZdLnNnNCEqXkJiIl8+PG89OzRpTE40LThXYFBSPDBUa1RUQnEkLElkN2VdN2E+UmFVTlI8J2hrQCModFhlI0EpJk8xJE4sWV9SRzBybi9PMy1GNWc2VyVFaiw+LXIkQXIyNTNaPiJvaTFMJVxHTjs/ZUhAbEw1N0hcU1cuYms4RShxVzpOKGJLOUZFMylaQFRjUW1IP1Bqa1cjVWRcRiQ8KXBZKz5YUmw/T2NtaWI0SGRsIk81L0UiMHAqNFMvc2NxVWosIUpCRkVaJ3FWMlw7dEczZ01hX3QxZmA5Pjo1IWwrJ0l1SltAZy5bcXUzMT42PHVIXXRccG9rTT5zJ2g+TC80T2AwaCROKTglb0QnLGcrNCcoZnFMdC0+aCEwXGUkT3RFUkFdXUYzYzNxcU8lXlx1YWptYjdCK1I1aiVOOCViYDImK1hPIldpUiRhN2I4Ujk0ZlJjJmswNmwjcFVXKTwhSF11QiQpcmI2UlxlckwvXiR1WSIsXjdYbipCams5WyRaXEBxXCdqZyJhcy5AUz82RXApZ01HclM4aUFVK1NIM2ZtXlkmPHA+Kmg7KicsO2tmcmFzMSY4V3VLXUNBSExjTGtpJlczOkZCais5LEllI1tUS0oyWTg+MHBeZ29GNHJzYkxXVEdeclNYODhfdTdGX2EpZCQnJzNHYVgrcEBdMm5PRyFMXDZXVE8xQzJNTFBOLEldNVMhKkU9U14qaz4hSjdUMHFPcEk2V01GOiskInRgZjlJOTtNSUVjRkY/VUskZkFVRGw9O11PZTRLMDk+MFE5KTU2WmthL0tRU0U7YT8iQzAraExfT3VqW1gtKmRGW3JUMU5XNSRWSW5HJyE5O190REBxKlxFZkUlMHBfbDBSQm0wNHFFQm5NQztoaWpuQVE7bEs4JldsZTwhZ0dLRU8iMnRBNmcvSkx0ViYtc1JvNDpZMUJtR0BwU187XENbZzEhKT5wWHQmUT8rSSlqQElnVy4nQERWQzghPzNEKzNfYyYybmMtUGwsYiNtZEVdUCJEWlNUdTtEO1NcZGZKbGMoTic8bE5yQlAqSzRUJ34+ZW5kc3RyZWFtCmVuZG9iagoxNyAwIG9iago8PAovRmlsdGVyIFsgL0FTQ0lJODVEZWNvZGUgL0ZsYXRlRGVjb2RlIF0gL0xlbmd0aCAxODU2Cj4+CnN0cmVhbQpHYXRtO2dOKSUuJSI2SCdpJTdcXzxDUTFeV0FFOnNlN2otNGooWHQzZGpNbzcxNm5mJy4kcCplW1U2Y0xXTjBOQVpUQ24wZyhaZGBfdVU+aiJ0b20xbzcnWDxdTnJAU3BDJW1vPD02cm9IcnF1Wmg8Tyh1JCM7RE5jaj0yJ1VKQmwzOyZEKERMTFNra3AiYDJQXykzIydVXHRjLWJkVnBxUTFhPHEwcnReaSpjNi9wU2pRM0sqSSRvViRwV2Ftb2pWa1dPKyJDN21wTlR0KG90VlZpb1csXUYnK1lWYyNiKmRqOlhYX19hXlRpJHMkX0RvYEFgdFY6cS5QKC9pW2RqUTgwV0MhSkM+UVlTNm4vLDd0az81MkMjV0JkSWhSN1YnK0kpND8mcDg0IlkuInA7Rj1PNWlBKEAvO0pXI0ljUUMhV3VRPz9MNjtYLiFSIUcsSV88Um8+RnBWO0IickNpbGosSXIrWG9bYE9Lb2pGXjlPPG4iQV4mI1I4LnFvQ0oybyowXDdpRj88W2JeR2dGJjkvJWVYIzg+cEdpWCojZk1gWClpbC1bXE0xYmc3JFpCSiRgZCw1TmwsQlAycnQxTlMqSk9YNTJAQGhsLGg9LyssQ3JQJjUlNSZaXnE0SmtTWCQ0LDJaa2grPShGXlpbMmVzPGVlM1B0Rl1EQSU9STA5dFIha3I6OTlpJFpCcHBAQlspUktUNTZiSXNsc1hSNGNeZkZLMUUyNGlVZEwuK29fKlVhLykjQXQlXnBnIzRjU2krIlUkY0MlYDcnQWtPW2wzKyFLPmghbG81YytOMG9KJ1JlOzZIKTIsQTZJclFBT09DZy4yI1lzP1AmPG91YkkvQ2Zra0UoME5SMyZrVWs7KkInVEpqVVlrRUkySnBHXV1dTEZqdCJzKzlxajQ+Z01qJSwiUEl1J21hYSxRVEkkOnEhWyJjZz1rZ0ZyYSNDbzleJiZMZlBlJSJTMk81Ly9wM3F1TE4vZW41SXRqWzhsODVVTkk9Lms0KW9dSkdoPVxlJGJFZDlcXUE2Ri07T2hjMFJncTlZZnVLbGhvKXBcdEQ2KEF1YGVwRlkpbCNubWtETz1SO1NVQiUjKiguKWVHXUFuVTs9SDE2SzM1WDY7V3BNZkozRS03YiMnSGxScEJxPmoidE02Jy1GaC4/NUleN2Y7Q3JMM05NdVUsUXA/JC9aTDFWNDRvOTtgPVtOQyVSVE9lWGFcPE9PJUpeXV9eJGAiJVBzaTQobFxWSmskIyVnPW4wNGVpcFNRSFQxTTN1Qzpxc2RdVTolcicuPEk1KmNVYFU5Y0JBck1yLm8lLSFJZCIiM29lVj0kdDVZSDhlRk9sXzMjOjxRYzEsTmozWD5lZGk4WkZHLjJTVDZ1RTtUJEZzX2hqUEUnSzxGJHMvJWNkYik9KW9zXzFvOF1ycjdFMTtcNTZdQ0tdcy1wY0clIWlIayttaHMtMkw2JkomLHBdJykkJ1phT2tDVWBqXjMhTUUmPDtPQTYhKSM8azIsV282V1teVmU8QV9jKjVSWUhpVUFcNUpUOTdga1sscHE4Nz8nWnEoQnRyaC8sLWFdOyc8LFYzRk8/dF4pJypQLkhhYW9sOikpbldxZzlvOWtPWUguKGhRKmdIOVtmJ21fQTtMZitTQ0doIy0iLUZsRVBuRTIhY3AiY1smcSRUV1VPLVtzIiguI0s1b2tTSm0sU0k0Xm5STFo7T20hbUdMaFg8UXRbM2dxIyNpJ0FNVTFHX0NVNT1cbFNWVyU3Jk02J1ZvLVlfYz1xTSxkPj9nL11eRE1AZ1w4K11wYDgxL19ISUxuYE1fNCNHUzM3dFZsbHVqTlc/OSVmTCc2b1hpVT5lRGBvQiQiRjI3T2pwNWVtIS45IWw5QGpZJVU6QWIhWl5zJGt1OS1pIXBnU1UiNVJZbW5aV3RqRlNaSiFybyhGcygtPi0/MF1BRkgrUkVHMF9eZUNIYk1mWiomLUZJIW5sME1YMk9fMnBAKW1lbTwkMmBROypiYTo7JkFqb1dXLDBxYipFVGwiVGo+Yl1KKEs6P2piaW9Uc2hgIlpEJ3I0Q2suXVkmUz0rVGByJnI6c1w2J2o2XHFwcio+ajhAMStBQFNXXU5hOzQ9NClAK0RgNDZDND5NVFtAIicoUDRiPWYpWCNkVzhbRF4nRmBjNzAxZGsxJmxPPF4rbVc9WXREcEQ9YnUxKD05Z18mLlxLP2JvPzwuTztAN1EjImU3RTA4JUVtOVtyXTBPcjhwTDMscm4sPjtMP0ZPNFRZalUnZmRbMUEuU20qSW9cdSMwOlpsXWpbWXQjWkUsRWp1YHBSYkFbbCNDdTctZlYlMHAuJmY4V1hsJjRgPk9RKiVHNGI7I0c7J2xnMTRMLVlGOD4lcypIUiRrdXAhbnEnIzVXOlBlOU43MVQzdTBDYSReUm5GR0MqVmFgQzctTyNuclxeclxlb2l1az9+PmVuZHN0cmVhbQplbmRvYmoKMTggMCBvYmoKPDwKL0ZpbHRlciBbIC9BU0NJSTg1RGVjb2RlIC9GbGF0ZURlY29kZSBdIC9MZW5ndGggMTIzMAo+PgpzdHJlYW0KR2F1SEphY2JDOiZBQEJbcUlcRFAzJGMiaWIwQXUhV01FZGopLVAnKVYkZyFgQG5ea3UhJVE6T2s7PVouVytEYkM9KDUjRylHQmhqallbLDFuSEE4QTA4Wml1RlMuOFo1Z1hPPTYwKEpBSHIiW0lQOnIsLVtrXl5rQTFtIUYsdU5hIjhKNUYnUytidSMmUCRwNWRTdG0+OEdbZDVuVyhcZy1rLjtpVnQ6WGBbJXRzSU09OGEtVTBhXGI8L01vUyYtXW5fZHQ0dVszMjRLUEJqKCFrbSw5Yl8vRCpkSzFlaj46MW02RzpWa3A1XmFmTj89LXRJM3E+dWFlTzkzT01lVVphWDM8cyItVjxjKilQPGpMOD9bP1EwZG9YdWVlQVNJLSQ8YW4iaWAlOVxcKzdyPEIyMi5YRTojaG0qOk1qQE1GQmIqOCkhTic0NGdfUUsuQmwqYSZhZW4+XSFcR0RbP1tPU2g7YyxoMWk7TVk9MztBcTQkckVdVVduKDRbWnJpaih1ND5kNi0tM0loTCJtRzpHPz1RTEl1ODRqOUFCPW9mMCs5NGZrWDNrKytqV2BudVVDJiQkJUtTckRNbTxec0I8TmgqO3FiYzM9NShQTDZsNlgiJEMuKlclXiM9UGE4SGA1Ty9wRFowOj1CQk5mZW8kP1BDIlNEVkBnN0U+PVROXzxGLVVDbGVzM2RcLnFMYGFiZ2xDXyVAaTNSLiU+ZzJfR0tzJjNVPUBhTU4hSldcMWlxO3FtL3JeTklsQjQndDA5VChqVEcnL1BUL0ZDXGppO2BKSXMwVi1APFVsXTMscWkkc1t0L1o4MFw1R3RVXCpNOCtEUVchUWFyJlRCQElsZlJYV1NESls1cCU2ZlIiNlc+XztpMkM1T2cvYSxxIWxrKk9tUjI0XjNXXl5mR1pXa1VbQTJMc0VaZC87W3NdWzMvNW0sVE04V1VhSCJdNnUhcSFFPmslNl5lMF5INFFQKlpKdUtUTitAYjZSSydCcUc+KDYwdCVbNEpbTW5McEREXDpLIiw5N0IkWD9sdS9wYWxDZ2RiOF9qWUdNTUYzUj9WLjNCdGM2SUw6QkttSEhoWGouUnJwcCo8W20jUGhMQ2VvWTdzUz4hKVpCYXJmb0A5bkgzbUdgalZbL2E4aU5jZFo+NSYzQ0JvIkZHKmVRYlpib2JCbCJrPzEoZ0YjRC8hcCs3SytPO0s2KGFCJm5Cb1BXV0pSS2FzcGleXGZmU0RaX2FyOmpfOlQ+SCVmcEcyZ0tlTS41PyZNWW5IXE1aNCc8ZlRQayEwJDplajcyWUtmcz8lYnJ1U0o/MjlIWltNIWc1Zkc9PXVbOHNGYS4iVik+VlsmJVdaW3U0bUI1NiVTT3JQcjpdSGUtVS1SVU89XCJVXDReZGMhKmtSS0QvNT5lUTY9XHJPTm9sJFklbXFaRDxAKSs5OHU9VGwnM0wwW2BiQz9VImk/J10vSEJKVEVOSkE2SE5oVlMxaVklZS5RQUZFKCNFYW9JYV89YiNHM0ddJChlKT1aS1c4IkZUSS0hWlhYaCUjZzFFa2tJV3EyT1spOiopU2dkc3RgTi8mMzE/ZTdVZChTNU48aitGbCFOLWNrKkI3IjI4ciknWW5haExAUyF0UH4+ZW5kc3RyZWFtCmVuZG9iagoxOSAwIG9iago8PAovRmlsdGVyIFsgL0FTQ0lJODVEZWNvZGUgL0ZsYXRlRGVjb2RlIF0gL0xlbmd0aCAyNjc2Cj4+CnN0cmVhbQpHYXVITT1gYFo0JlVyPzhrYSw4Lj5vRlVdbiNhYGJVcjpCZGpMbGdXYiNOYyhFXEs3LTZaTjxtai0+K0JcY0VsMWdwMHFCPG0oTWAyJmI8LmZBND5xaUBkLmlCKkgqRDRvRmRvIzs0cWAjc0BcWVxBKmBJaEhyQk5uODtiUkd1NiVoJVBcQCgsYDRTLF9ldE9TNi0tbFBCdTljXjQ+LCVePTQqJ0YsdS4pTSI6PWdjLFlfWywlQlglNnI8NHVNaWZKVWpBcCtuTkhoJUhaXyFdKz5nIS9LLm44ayUlaSQmNVUoYC9Vci5Ua2pFSWBOUUYvNiEnb2VgOUY2KzVZVHRfUD05ZjIwU1FlNDFQOnRwWVhHcys3WFFcMGdFN1NZaE1vYVQ3KllBclI9ay5BLk0hNDxCJS5GT05GcTNvTzVGSkNLUD8qcTVJQSpAbiEvKS04ZUUpOmdjPT9bO1BROGdfJnU3UUI3Nm1EQnFpcClxZEhrOlJpcikqJGc/UU9ObyU0XyYyb3BcR3IrW05pL1QiVjo8Ji9ya2AmZDxRSUQpJmxjRUBFV24+Q3MucTMpa1pMbiJaR1s5WktrN3VtPSpXa10xK3Q7U1kxYT5WKS8lW0hebVMhIy9GZXE3I3VEKVBOUVJuRzxJXHNXWk01TDRFQmxwYUI7PiNRQUpEVU8pZ1duQ21UTCZNPlZzOypUa2Zzaj5XcFxebT1lYFFHbiIrbFxdTCpAXyppQU9BZiE0bW1ZbkpLciFlcixNSEVpZzRkKyxmUzUtaztwbjNlPCNJZFcnXEpQKWskV0E5YVVMZFQzLylALik/ZGQzWi5UK1JOUkhgOjIuPEJTNzE1SG5UZT9HcERqZUpoLzVyT11QKEpyOE9lUztLaSJtS2kzWEpsPmpBU29odG4tSiZKXFdKXlguYHVSbURtW3NMNjJNXVQ2UjciUS1jQk1QMygzZSlMJFMsP2A4VyVtbTpZVk0zJ04tQzpDJWBRKiNnUFFwQl5dQmwrQiE5SmYlcE1MSlxdW19mTmx1UEpSM2c3NzV1KCxLOj9vYGtrdHNZREUiXUNRST9YPzV0WFIkQmNPJW5IP0x0Sz1NODtpY0YzKGE7ajpRLy9kUTpGUkAwLiRmOz0nOmUqTVVfWCYuXCJPJTc7OzJ1TC0sIy9VKjJrUDleZydbZ18pKydzRUAvSUpkNypvRlIxNWBrNzA5IWdsIVdhQmdrbTtoYWwpJDZJaHEwRmJNK1pyPydRUjg/Xi8pUS9YTVwtOCQzSHFaMSk/ZSQmbUdIbiQ0OykxRWBqayInbzhRZjwkZjZuTkFjI0tHVGNVKCxhQ0JaWFE8Ik8nRTNES10qSjYlZSVcXmdwcTpuP0BXWlIqWGwuS0gwX1tgIl1PcDFgQj5oTXFHYVItUVYhYXAyRlNlMi9IREt1JmQ8LVAsN1BwW3JlLzRxUTQ4PHVqXUNYbiYzLVgkVCJyV05cSEEwR0NYIlB1XDU3L1QrYVF1P2RMPnUrP0JeNV90QGkxTjkqQTRYRjRvOExHPVxjVFwpL1dHSVNRRjAjWTgrPzwlWmZgbWFiMiJnUTonSDQqSG81ZjFXOEFPIi0rTm8lKys0YU49Zm4iJjBxJUcsRTNvVjVkbDQnOz4zJjhgc2U7MUBYJSlEUCJNO0RZamsmQzhoZiRdKCljdF5ENTwyK2dnTSVhVUtAIjImWj4pK29GViJlZV0jQVRJQF9AMnJJcjQ9NVxRIzVwP2gkPT0pW1FhXkg4ciw2RnRuXDFqcyEnUU1aKUxSMmNfaVk4OS5oLnBRb3JFRyVMcmZfLE1PcXVidS0xYCxrRGcwSjskLCloOHREOydcPlJYIWBgaERxWjUpWCwyZFkzdC9rWUk3TiJfJ2JcVm9QZi1oTGxYZDZzN0pVUzBEPihHRWZLLiE2N1o9PT1maykpQz8+O1o8b1RiIz9ocUhUSW0uUy4wMnAjJTpiWD5qKWchJUE7Xk5lJS1JZmorUjNOS1ZYJEwwXi8tdFxVMFI2M0VyV2dgJylsWVxAI3JkXCQ+LUA/R3EpRyxwRypSayNBWmJNbjtFJE5IcksnXD1SYShLbzgmdUZNWDtIS3A+OCkmRWhmIl9FMFs6UUBdKnIrJm5fIVEhcEBuUnRxZmY6MUZDOy5eclFyLTJBYzhiZGJqMURKUDVeIi43bGBmTGk4PyJGTSldWTJrbnFuLTQ/bWlcNk0qaFlOX11oPTZvbXRyITckTm5nYDRANWxfUiNcJDdoLnJabCRYalwrakBEWUFSRiRDXnUpWytSUmlsRiE+K0ZUaGBhVClXQHExOWNhZCdgKWFEPF5nai9Cb0lnSEQuQEA/TD51VFp0MGs9XVNFRmA1OjY/WXJmSzY3ZktnOF9QUHI1M2Ehak1pLWE7LzE+Wm1VMCxhQ0kiYVFVNDlcYWdDYDxTVFlXZ1I/Zz1lRzZXRlVQWSNdaW5wRC5ZOjt1Iz47U3RfRVBXdT9bWExvXig+Pj8lYTJJQ1E5IUFaZWFKSjFrQmgoMEVjWjplQERdKj5PWyYkXFIsWFJGQHVQUDw9OmdfPS1xaW4+bilxVitWSmE/Slc7Q0xMRm80MF5IVGM8KiwnZCFOQ29pUmsiOmdGQms0M2VpKWUrWTFtVSFZLmhfVWtzYDM7XGlwMilqT09lXjs9Yz9TKVtHZSQ0RWhyaEleXV1TN3RGPU9yLTVMa0soUUk2USFbLkYvXUEnN1pMRVUtZnVZNTVKbllYKC9hTjhXJ1NcIiJXRVEoW2EpVUQ5JztgXjBYWGs5MW9iMU50Yi4hNjhMNmdpXFJiV3RTN2VYSk9qWVxGXVswXFIwJ28wdWhLW3BMZDcmc21XREVHQXQ8b3FsXWRRQSszQDZnST9AVVtlIjtQNzJfT0FOQGNIKzc8c25vUi84VHVrYGNocW89VUI5aCR0Q0hSNUAsOWUhPi5ccU4uI1A6PFMvdXMjUTUoYT5DUXJpTSUkZTNJJEBOUEREX0pMRy1HQy1KM1J1NW9Ma3RVaUxeME1YWzdtLyFzW15yTmMoPWZgQG5UOCctYU1PTzZII2FYKlhWLW4jRzwmIkdrI0BBci5ScFJcJ3NQMEVCalxOLiVRRjkxQ1REbFk4LT5vZyhLNydbXFxZSSouW2YnOG90QEZLZyZCblRyRTdgYHFjRnI4Jz9qbkBlPDleNiNgI1RGIXIpI0BpKGwlVmNkIjBlcllvRiNkJilMY1EiLUthL1VwL202aykoZ2tPKz4jNmErZGFXMl4/SEhTNixHP01ZJTkrJlg7b0pmXnNkWWw9JSNjQ1sta0coJjtzcGU1SU44IyU0SV49XFFncDZAcD8sJHU8PktcWXRLbDJWYzVqZF9KOG5mPUhyL2VyV1tCMEZ0KThFVmE3PSgjIW1jZD9QNkxQKm9kcVVNN2Q9ZUA8Q1YuR28qKSlrUSIpXmUiSWxZNFhocCpFImsmWyJxPjV1YFQiWHAyM2gySy09ZDVVPCIsVjY8bE08XDBkNUE6KjNeQy00dDdJKixUPkxaTzdMIz9dOT5KVGdKUj91K2dfXEcuLzE6I2BHfj5lbmRzdHJlYW0KZW5kb2JqCjIwIDAgb2JqCjw8Ci9GaWx0ZXIgWyAvQVNDSUk4NURlY29kZSAvRmxhdGVEZWNvZGUgXSAvTGVuZ3RoIDI2MDQKPj4Kc3RyZWFtCkdiISNdPkJBUS0mcTlTWWZYRT5JX05OaEc8MlE0SGoucjY5bktebDJTZ1Y0ZSdQJkhNNzAscTo0aHEhXyFbN3A4ZzFucCdBRSk1RSFBIyJFJilVXDE2Jj5PYm89THEkP0hxSEw/UihARGJaPj8lNW0kWF5HVmQsMkhrZ0tnVkhLIypmSVZWKmMlQS4lLCtPR0VfKDssPEAwNDdyJGA/I2BOVClCWzVzOFEpMWxsNDBqQUQkJVpRKjpKOSpuXktJaGBtJDMyZzFEMV5nWSdBYiI7ZV0rYmB0RFxJcnQrR0cpME8jVm8qYmltIlFISTRHQjxJUE1lXGYuMFZyIkJRS3JLKWpPU0xlMXVAKEQqQlckayk/NEdjXFttPDU5PTI/Q04oImRCJ2xgRzwvKTwlQyE1MDRFKj9MYkdLK1FmOiJWPTtqUV01cStgYkJIb0BgbkA5NSlQJiJIRXBLZzU5KTxwYl1ASWd0aG9iJ2ssQ0YoSCVfb1hJKGBbQj9zVVcvXWc8TywqUT4qTV9qS2c5bnJcNUk+bDVoJ3MoREshQGdFUjUoX2RzXSNdLFAqNGYkZEpFQF5hRUguV1U3RVktMUJeLlpEaCYrSUYiamByXisqRlp0bGclcj4jM2FlUyVhY0RCZmwrQVc2Lzc3UDE8IWwrQ1xEJVUiNTFGSzFYMVBMOCJXbG4jWUklQFpDQFtoPVxMRjlucVlrciw3ZWJxWylANldIcE5BYnBWUF9ZMSpQTEteP19nKVQ/USJQZy9HN1VOakRhLVYkSylsYFdYPXE9PXNHIXBcT2BvN0F0VC1kN1lxbDRFbj9LKnJOUnVRSz5DKVlJaVE6blN0ZmZWbV84am5uIkpBSihpbktROEEoKS9uclUmXExgTE5WOlhwLC9Qamc6KG9mXWk9IVE8VzdeUDVAIkZRZlVuNT4/L1o6bTFjSUNJQzN1IjdcQXBQcjJILEJIJS9vLnAsO2NTZ20rPU80Tl9EYzAtQU1nTz1WKSpbNlgjVmAxYiRWRllrbzRvRzpJLjA+bm1qUj1jLiVYYVViOVUhXFlaa01lPFNoQ21IMkVbVWJcWipnXjxxVDJKZXJCayNcTlc0QUpKR0RGOCMrYj5cXmE0TU1GRXE6UTY1N2VrZi9FMj5LWFtHZ2tiZDpQQU42YjU9MHFUJlo6RnNpWWlvOyVRWSRsdDA+UkdpWFRRb0lMVnViI2woJnEnLm4jXnAuYDcmNk5wcVtXI1AudUpqOGElNiZiSToiJHAuJlc+KkkyL0NGPz0pUj1RQDBwWEN1b25lanFSPi9zNEBFP1pPIW44V0wrSyFtKzpSVCUsaGEuK2VkQzhJWGJua0xvOk5gSFhmYl1Wc0khU2NXJExVTzIuXmxgUUFnZj45NVYsMGhbV0U9RCNNME1WK3IoNCZeUUxpY2hnODlhZlBbKitoIUpRXWspaHFoV1pERylgOUpxY3VUYGVcXXU5Qy5YLl1wJS9xI2xjY15ubVhfJERyNjIkajg+LUJaI3NFRmosLjs9K1xmQF4ibClyUEo2Mk9OSUFHaktUVm4nVW9AQE0kOWJFL28uOyVGb0tqQ15fLmc9X1Q3J05EOUtxW3JtaFRHXSw4JmE0WFUzPVBRJ2IrWDJyb1glXUlOVTw9QzNlaUUqXVxKcSMmbjMlUyZjYUYvSU89RUkjMmFLLT0wKiRsSEA0TVRXbS9lbTd0bWU3JTwuPVcvWzNjNEUvQW1qbWI5ZCRvWkAqbFA0IU9fIiReZy9jNiQiPS00KG8iNSE7OU87SDlIZGdoQiNDdWlRRUItRzBpaUVnb14sSzZoTm4xb1l0W2ZUKThOSy1IRVAvPitCXUlrLXA6PSczNTZOQ2sycUd0XzRbR2A1KFgqUCY8Z2VvITYmKS51cU1oIVZIXkc5Wk0iYlxUMkp1NkU7bVczI207JSEqPSFAXCdeQSxFK2xAVCJFU1pPUkRaOUdeW1E7UWFQTSpgX1JdajtaKzU5MllBJUZKXD5MaXBAXGoiRD4zPysmQ2czcCRWYHRKNDhdKyE6dVA0cUUlO0prYidVdFFPZT5OTEcwT1ttNVBQMChiRTVIaFNEVCYsJmReblpZcHFrLm8mNDkiJ2pcKzlJLWRiT3NmPFVtVXI0L1tHR1pEOm9EWVNwJFZAPl9HVzRNMDE0MVYyJCliTUooI10rNVhVYVM/bCtoJVYhNkdXbC10VyhCN1kvIlg2Q2VqcDgzVCFxPGRjOylXJCslOWt1V15SViZbSm0+WlQ/TiRITStlWzg4XjVhRlosIVBCJ01PYlQ7cz87b2o+XFhcczY+NVJXIWQlLzktQmRCYWY5OlEsUkktKW8uL1FmNzw7TXQ6YFEnYD5ULCJOV2k3bz0lZjxaI2VsXT0rXUtuSD9pYjpwSyhELCwzT0BmImw9Z2c1cGZfWG5OSF9gbUMoTiEtTTY5a0QjP1ElOUpxZzZWbT0jVFQ0LXBEYkpfInMrPGlSQHQlOUlAITVUcjQpSStvYFxIJnJdTU1SWVAvTGZVayhIJ3JHY2pqYTUuSW5PJCUiQFE3Jj5RW0BaYjFzVSNmTjluV2duUWJxP3VYNDZRJWhoSHQzR1ZcJ1ReXFhPR2FCQSlHO0hrTVU1LGBYWjdfLyphMTxUUEZTTzBBUlg3Z0BzQUtkZEBvTj5kRCJuQTZzL0hTS2VNLEBdcjc7dF4sXVhwcWhDZjUiIVRrXXVeQkdWKkkoRFJDQzFRTE0+QiEjMmdtLV9lTHU4PTNaMilhZzQoIixhKDs3dFU8RC1QVVpjQCpYSDU/XS84RFZPK3BoWTxhRCw9RUQtQzZkJSFtTFw0S2oxZjVAa1VhJjxpPyxZZT9LZS5HSkJpXWFLWTZCNTRVJkd0TidTRC1iY1s/N15bajRLZjc1VE1BWDVUOyZeM2JFZTNHRkEqIlxycDJnNS8vdTVlZ0NRXmZIOmxWbmljVC0rbFg3LD1pRFFTKkU5RzU6a1lIUCs/KE9wQ0JvWTw5PFhCTVVYYWNDRS80dF9uYS9ZYkorIUUwZW5MYTpISi01Ll4rYyFYcGE4JF5DLU5aKEtJMEEvbyV1I0UmPEtBSTI+bk5yOyYhJz51cmo4bTcpX19sIkV1S2NiXFxdaERMYmMpVDEuI0JrbS01aD5NRVBIYUhUZGBTJidvVGY0K2I1PUdJUjkjSDtaMF9PTkwvT1VYKjNCIWI+MWs2Ky1NPnRoWyx1PGtmQlQqQlhJOHV1XmNdZnBTIXNMU0BMNHJ1cG5xcEBnQytZUjxqTE1xZDNWUypBSWNecCEzKGt1c1JmQTYkNml1Z19lMG5JUEVLVzRYVCwzMmBbcCpfSl1qTj5HLi5haT1bblpBdENdanFzJittZ0xdaXVYczByP0M1ay0+cD1fVSw1amIwQHE1J2ZNUmBfTD9fSSgyYzFSSyFKXj9XalhmSW1cR1RgJEQsJ3Q+ZiJzPyFSNHE0Kzl+PmVuZHN0cmVhbQplbmRvYmoKMjEgMCBvYmoKPDwKL0ZpbHRlciBbIC9BU0NJSTg1RGVjb2RlIC9GbGF0ZURlY29kZSBdIC9MZW5ndGggMTM1MAo+PgpzdHJlYW0KR2IhPE45bG87UiY7S1pPTVM5TlUnY2JFU2M9KExGLV5oITpmZDIlND5YQXBYJksuRkw5ZERmITI4PVRFWjd1RCMtNyQhIV0tMVFtRlxBcDZJXyNzaClkYyFfVkFbMjIlKmwkXyYtbGY/K0ouXTJsbWw+Y0g7P11QPVNkUmBgKGl1S2A5byNaI2w3dT0ndF4xInFkPV0wbFQ2aGlNTUdNdVFkPnBpLCQjRHMmSWIwOCJHPmVgMV84cSxubU1MTzMtZ1BDS1Q0Xi1lZTY+P1VYSV5DU0hGbChpUzFhbVU3LiZQQmMkKlAvQWlWTkxwblckVmFWbVRLWkJmIm5mdUAiQEozOCU0MyFVSUZETnRVJC9SR1JLV1NwWjEnJm0wVjRiQSgoU1lIKjMmMkFdU3NsTlQ1dVw0R0dAYDpUS1hDbTAtdWNTR0RmYU1YSmhLLUFHY0ksREVdTnQnOVU6YlU2RW1oTSJtVVxtJEREOEtRRDtmbCJVQyYlREZVOCtVWjtycmw9Sk9ZKlc+NC0uVjBwN1A2ZEktZlslQz9nMG5QcztWb1dOIiJmcjNHPWshWTcwVCQ5YDlRITo1T2VYKFpRY0BKLVhWMWMlbU1yYVE+T01DPjpaKitOaC0nWlwqXjtnQDwiOU5HamUkJVZpPy87TlcqbzYqZUBzbkdYU2YsI1lPaFhjUjMsUiFXSWZRNT1WZXJGXEVzXyZtWTxANnRLPVwkU0oqcCtmLGdjQEpDT1IxcWpLZSVTQ0lxPiNtT2MjbFdnR2JCT0w1TzspdDNkaDUjLT0hQEpcOVleMUFMMnRmPDRdcFZeUDJZSWtYJkxoWltVazQ4bkhkP2Y1bFZiMy9CPSNdNVtKIj9XV0VyMDdLJldvQi9vazVDYXFuc19UOTRpPjQhU3IxQ2A9ZUtYUj87NTdDQkgjMC1jOElGZVRNJGovLk5FZWtmKkpfT0tNKGFBXGAiQ1xqcDNhcSZqSmwnN15PWmNxVzQ9RkYqXnM8czNcV1NDSTslME89OiwsIVtLME8nRisuLnI9QSxMVDE4YzdLYk5xInBlLmYhazMnQVFrcjE2PSFNV3VXPkssKyVYKWxWPEcqNjZgNzg0Y24ydEwlXG4nSV0iKF49bGBVZUExXk9TZEpZOjpUQWs9PSspImVyNEw1RipeJiVXb3AzTGInUnNiMkpoVkNxakA8KVQzIWZiXTFCMzlicVJMcjJSQkNGbGwqSTRTciF0JFQvam9XOzc6J2ZHRyQpcHQ9aTImJ2EmcCJePmVLInIiJylAKWdMIStLaFI1aEkhQEhcV15ALV5oYls8Q0J1MjtLcTZrQmgxckk+LmR1S24xMUhtTThVKylSVzkjVWFrLXUnaicxbi4+WjUrTlAiXylAcShIbywyOCh0WElsYWxpVy9OIy11VlgnRElpO1tbL0FadUE9Tksxb3AiMFYmW1IuamV1OVAmXyhqcVpFJm5wdGJxXSZoM1BjT15cSSwvb25tOkdrZmQ2c3ImSiUiWkcvXioqbnUkQW0iTzlSVW1aPVlbWD1jYjZYN0pqS2gjQFAzMC4+VSRXSFRsMlVucFhVZnQtNjhpQW89am5jdSVMQFtHbStMQkNQOz9TJ2RLb1hrKWFvWnBmMFNncUhkMEd1L2ptZ0Uvb1omaVZrOG5iNXMsQldMQW84ZDE4QCtATFZsJSVZJU1SQGluTmVkJzdyNDRSWS0+RSZiVFtDLjVxUig+aF0uI0xwXVZNIiJiJjpNJW1LQC80VXJZRipZXiYpJFxXUFhEUT5tRl1yckMnIVBBQ34+ZW5kc3RyZWFtCmVuZG9iagp4cmVmCjAgMjIKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDYxIDAwMDAwIG4gCjAwMDAwMDAxMzIgMDAwMDAgbiAKMDAwMDAwMDIzOSAwMDAwMCBuIAowMDAwMDAwMzUxIDAwMDAwIG4gCjAwMDAwMDA0MzQgMDAwMDAgbiAKMDAwMDAwMDYzOSAwMDAwMCBuIAowMDAwMDAwNzU0IDAwMDAwIG4gCjAwMDAwMDA5NTkgMDAwMDAgbiAKMDAwMDAwMTAzNiAwMDAwMCBuIAowMDAwMDAxMjQxIDAwMDAwIG4gCjAwMDAwMDE0NDcgMDAwMDAgbiAKMDAwMDAwMTY1MyAwMDAwMCBuIAowMDAwMDAxODU5IDAwMDAwIG4gCjAwMDAwMDE5MjkgMDAwMDAgbiAKMDAwMDAwMjI0OCAwMDAwMCBuIAowMDAwMDAyMzQxIDAwMDAwIG4gCjAwMDAwMDUyNDkgMDAwMDAgbiAKMDAwMDAwNzE5NyAwMDAwMCBuIAowMDAwMDA4NTE5IDAwMDAwIG4gCjAwMDAwMTEyODcgMDAwMDAgbiAKMDAwMDAxMzk4MyAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9JRCAKWzwyYWE3MTE5YmIxYWE4MzUwZjliNjJkZTdkMDg2YzI3OD48MmFhNzExOWJiMWFhODM1MGY5YjYyZGU3ZDA4NmMyNzg+XQolIFJlcG9ydExhYiBnZW5lcmF0ZWQgUERGIGRvY3VtZW50IC0tIGRpZ2VzdCAob3BlbnNvdXJjZSkKCi9JbmZvIDE0IDAgUgovUm9vdCAxMyAwIFIKL1NpemUgMjIKPj4Kc3RhcnR4cmVmCjE1NDI1CiUlRU9GCg==';
+
+
+// v3.6.6 — parseFileERP + downloadERPTemplate + handleERPImport + getStockERP
+
+// ── Normalisation : insensible casse, accents, NBSP, underscore ─────────
+function erpNorm(str) {
+  if (str == null) return '';
+  return String(str)
+    .toLowerCase()
+    .replace(/°/g, 'o')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[  ]/g, ' ')
+    .replace(/[''"’`´]/g, '')
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// ── Dictionnaire synonymes (valeurs déjà normalisées via erpNorm) ────────
+var ERP_COL_SYNONYMS = {
+  SKU:                     ['sku','code sku','no','numero','code article','reference','ref','article'],
+  EAN:                     ['ean','ean13','code ean','code barres','barcode','gtin'],
+  Designation:             ['designation','libelle','libelle produit','nom produit','description','nom'],
+  Code_Vie:                ['code vie','cycle de vie','statut','vie produit'],
+  Stock_libre:             ['stock libre','stock dispo','stock disponible','disponible','libre'],
+  Stock_Amazon:            ['stock amazon','reserve amazon','amazon stock'],
+  Stock_disponible_Amazon: ['stock disponible amazon','stock physique non reserve','stock physique','dispo amazon','stock unique'],
+  Date_prochain_arrivage:  ['date prochain arrivage','date arrivage','prochain arrivage','date po','date livraison','proch arrivage'],
+  Qte_prochain_arrivage:   ['qte prochain arrivage','qt prochain arrivage','quantite arrivage','qte arrivage','qte po','qte livraison']
+};
+
+function erpMapColumn(headerNorm) {
+  for (var field in ERP_COL_SYNONYMS) {
+    var syns = ERP_COL_SYNONYMS[field];
+    for (var i = 0; i < syns.length; i++) {
+      if (headerNorm === syns[i]) return field;
+    }
+  }
+  return null;
+}
+
+function erpParseNumber(val) {
+  if (val == null || val === '') return null;
+  if (typeof val === 'number') return val;
+  var s = String(val).replace(/[  ]/g, '').replace(',', '.').trim();
+  var n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+function erpParseDate(val) {
+  if (val == null) return null;
+  if (val instanceof Date) return val.toISOString().slice(0, 10);
+  if (typeof val === 'number' && val > 0) {
+    var jsDate = new Date(Date.UTC(1899, 11, 30) + val * 86400000);
+    return isNaN(jsDate.getTime()) ? null : jsDate.toISOString().slice(0, 10);
+  }
+  var s = String(val).trim();
+  if (!s) return null;
+  var d = new Date(s);
+  return isNaN(d.getTime()) ? s : d.toISOString().slice(0, 10);
+}
+
+// ── Parser principal ─────────────────────────────────────────────────────
+function parseFileERP(file) {
+  return new Promise(function(resolve) {
+    var reader = new FileReader();
+    reader.onerror = function() {
+      resolve({ ok: false, rows: [], errors: ['Erreur lecture fichier'], warnings: [], config: null });
+    };
+    reader.onload = function(e) {
+      try {
+        var data = new Uint8Array(e.target.result);
+        var wb = XLSX.read(data, { type: 'array', cellDates: false });
+
+        // 1. Feuille : Stock_Amazon_Pilot en priorité, sinon active (index 0)
+        var sheetName = null;
+        for (var si = 0; si < wb.SheetNames.length; si++) {
+          if (wb.SheetNames[si] === 'Stock_Amazon_Pilot') { sheetName = wb.SheetNames[si]; break; }
+        }
+        if (!sheetName) sheetName = wb.SheetNames[0];
+        var ws = wb.Sheets[sheetName];
+        if (!ws) return resolve({ ok: false, rows: [], errors: ['Aucune feuille trouvée'], warnings: [], config: null });
+
+        // 2. Tableau brut
+        var rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
+        if (!rawRows.length) return resolve({ ok: false, rows: [], errors: ['Fichier vide'], warnings: [], config: null });
+
+        // 3. Détecter ligne header (parmi les 5 premières non vides)
+        var headerRowIdx = -1;
+        for (var ri = 0; ri < Math.min(5, rawRows.length); ri++) {
+          var nonNull = rawRows[ri].filter(function(v) { return v != null && String(v).trim() !== ''; }).length;
+          if (nonNull < 2) continue;
+          var hasKnown = rawRows[ri].some(function(v) { return erpMapColumn(erpNorm(v)) !== null; });
+          if (hasKnown) { headerRowIdx = ri; break; }
+        }
+        if (headerRowIdx === -1) {
+          return resolve({ ok: false, rows: [], errors: ["Impossible de détecter la ligne d'en-tête (aucune colonne reconnue dans les 5 premières lignes)"], warnings: [], config: null });
+        }
+
+        // 4. Mapper colonnes index → field
+        var headers = rawRows[headerRowIdx];
+        var colMap = {};
+        for (var ci = 0; ci < headers.length; ci++) {
+          var field = erpMapColumn(erpNorm(headers[ci]));
+          if (field && !(field in colMap)) colMap[field] = ci;
+        }
+
+        // 5. Détecter configuration stock
+        var hasSep = ('Stock_libre' in colMap) && ('Stock_Amazon' in colMap);
+        var hasCum = 'Stock_disponible_Amazon' in colMap;
+        var warnings = [], errors = [], config = null;
+
+        if (!hasSep && !hasCum) {
+          return resolve({ ok: false, rows: [], errors: ["Le fichier doit contenir au moins l'une de ces colonnes : Stock_libre + Stock_Amazon (séparés) OU Stock_disponible_Amazon (cumulé)"], warnings: [], config: null });
+        }
+        if (hasCum && hasSep) {
+          config = 'cumulated';
+          warnings.push('Plusieurs configurations stock détectées — la colonne cumulée (Stock_disponible_Amazon) a été utilisée');
+        } else {
+          config = hasCum ? 'cumulated' : 'separated';
+        }
+
+        // 6. Parser lignes de données
+        var dataRows = rawRows.slice(headerRowIdx + 1);
+        var rows = [], validCount = 0;
+        for (var di = 0; di < dataRows.length; di++) {
+          var raw = dataRows[di];
+          var skuRaw = (colMap.SKU != null) ? raw[colMap.SKU] : null;
+          if (skuRaw == null || String(skuRaw).trim() === '') continue;
+          var sku = String(skuRaw).trim();
+
+          var row = {
+            sku: sku,
+            ean:         (colMap.EAN != null && raw[colMap.EAN] != null)         ? String(raw[colMap.EAN]).trim()         : null,
+            designation: (colMap.Designation != null && raw[colMap.Designation] != null) ? String(raw[colMap.Designation]).trim() : null,
+            code_vie:    (colMap.Code_Vie != null && raw[colMap.Code_Vie] != null)    ? String(raw[colMap.Code_Vie]).trim()    : null,
+            date_prochain_arrivage: (colMap.Date_prochain_arrivage != null) ? erpParseDate(raw[colMap.Date_prochain_arrivage])   : null,
+            qte_prochain_arrivage:  (colMap.Qte_prochain_arrivage != null)  ? erpParseNumber(raw[colMap.Qte_prochain_arrivage])  : null
+          };
+
+          if (config === 'cumulated') {
+            var s = erpParseNumber(raw[colMap.Stock_disponible_Amazon]);
+            row.stock_disponible_amazon = (s != null) ? Math.max(0, s) : 0;
+            row.stock_libre = null; row.stock_amazon = null;
+          } else {
+            var sl = erpParseNumber(raw[colMap.Stock_libre]);
+            var sa = erpParseNumber(raw[colMap.Stock_Amazon]);
+            row.stock_libre  = (sl != null) ? Math.max(0, sl) : 0;
+            row.stock_amazon = (sa != null) ? Math.max(0, sa) : 0;
+            row.stock_disponible_amazon = row.stock_libre + row.stock_amazon;
+          }
+
+          if (row.stock_disponible_amazon >= 0) validCount++;
+          rows.push(row);
+        }
+
+        // 7. Sanity check >= 80 % lignes avec stock cohérent
+        if (!rows.length) return resolve({ ok: false, rows: [], errors: ['Aucune ligne de données valide trouvée'], warnings: warnings, config: config });
+        var pct = validCount / rows.length;
+        if (pct < 0.8) {
+          return resolve({ ok: false, rows: rows, errors: ['Seulement ' + Math.round(pct * 100) + ' % des lignes ont un stock cohérent (minimum requis : 80 %). Vérifiez le format du fichier.'], warnings: warnings, config: config });
+        }
+
+        resolve({ ok: true, rows: rows, errors: [], warnings: warnings, config: config });
+      } catch (err) {
+        resolve({ ok: false, rows: [], errors: ['Erreur parsing : ' + (err.message || String(err))], warnings: [], config: null });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ── Modèle Excel téléchargeable ──────────────────────────────────────────
+function downloadERPTemplate() {
+  var wb = XLSX.utils.book_new();
+  var hdr = ['SKU','EAN','Designation','Code_Vie','Stock_libre','Stock_Amazon','Stock_disponible_Amazon','Date_prochain_arrivage','Qte_prochain_arrivage'];
+  var ex1 = ['REF-001','3367304009366','Produit A — config (a) stocks séparés','PERM',150,50,'','2026-09-01',500];
+  var ex2 = ['REF-002','3367304009373','Produit B — config (b) stock cumulé',  'PERM','','',320,'',0];
+  var ws1 = XLSX.utils.aoa_to_sheet([hdr, ex1, ex2]);
+  XLSX.utils.book_append_sheet(wb, ws1, 'Stock_Amazon_Pilot');
+  var aide = [
+    ['AIDE — Modèle Stock Amazon Pilot'],[''],
+    ['COLONNES OBLIGATOIRES'],
+    ['SKU','Référence interne ERP (ex : 141431). Obligatoire.'],
+    ['Code_Vie','Statut cycle de vie : PERM, PERM-FIN, NEG, ARRD-NEG, ESSAI-FERM…'],[''],
+    ['STOCK — choisissez UNE des deux configurations'],
+    ['Config (a) stocks séparés','Remplir Stock_libre ET Stock_Amazon. Le parser calcule le total.'],
+    ['Config (b) stock cumulé','Remplir uniquement Stock_disponible_Amazon.'],[''],
+    ['COLONNES OPTIONNELLES'],
+    ['EAN','Code-barres EAN-13.'],['Designation','Libellé produit.'],
+    ['Date_prochain_arrivage','Format AAAA-MM-JJ ou date Excel native.'],
+    ['Qte_prochain_arrivage','Quantité du prochain réapprovisionnement.'],[''],
+    ['SYNONYMES ACCEPTÉS','N° → SKU | Stock Physique non réservé → Stock_disponible_Amazon | Qt prochain arrivage → Qte_prochain_arrivage | Désignation → Designation | Code Vie → Code_Vie']
+  ];
+  var ws2 = XLSX.utils.aoa_to_sheet(aide);
+  XLSX.utils.book_append_sheet(wb, ws2, 'Aide');
+  XLSX.writeFile(wb, 'modele_stock_amazon_pilot.xlsx');
+  showToast('Modèle téléchargé', 'alr-g');
+}
+
+// ── Handler import fichier → prévisualisation ────────────────────────────
+function handleERPImport(files) {
+  var c = cl();
+  if (!c || !files || !files[0]) return;
+  var prev = document.getElementById('erp-import-preview');
+  if (prev) prev.innerHTML = '<div style="padding:12px;color:var(--tx3);font-size:12px">Analyse en cours…</div>';
+  parseFileERP(files[0]).then(function(result) {
+    if (!prev) return;
+    if (!result.ok) {
+      prev.innerHTML = '<div style="padding:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;font-size:12px;color:#b91c1c"><strong>Erreur :</strong> '
+        + result.errors.map(function(e){ return esc(e); }).join('<br>') + '</div>';
+      return;
+    }
+    var warnHtml = result.warnings.length
+      ? '<div style="padding:8px 12px;background:#fefce8;border:1px solid #fde68a;border-radius:6px;font-size:11px;color:#92400e;margin-bottom:8px">⚠ '
+        + result.warnings.map(function(w){ return esc(w); }).join('<br>') + '</div>'
+      : '';
+    var cfgLabel = result.config === 'cumulated' ? 'Stock cumulé (b)' : 'Stocks séparés (a)';
+    var withDate = result.rows.filter(function(r){ return r.date_prochain_arrivage; }).length;
+    prev.innerHTML = warnHtml
+      + '<div style="padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:12px">'
+      + '<div style="font-weight:700;color:#15803d;margin-bottom:6px">✓ Fichier valide — ' + result.rows.length + ' références</div>'
+      + '<div style="color:var(--tx2);line-height:1.8">Configuration : <strong>' + cfgLabel + '</strong><br>'
+      + 'Avec date arrivage : <strong>' + withDate + ' références</strong></div>'
+      + '<button class="btn btn-p" style="margin-top:10px" onclick="confirmERPImport()">'
+      + '✓ Valider l\'import (' + result.rows.length + ' références)</button>'
+      + '</div>';
+    window._erpPendingResult = { clientId: c.id, result: result };
+  });
+}
+
+function confirmERPImport() {
+  var pending = window._erpPendingResult;
+  if (!pending) return;
+  var clientId = pending.clientId, result = pending.result;
+  var now = new Date().toISOString();
+  openDB().then(function(db) {
+    var tx = db.transaction('erp_stock', 'readwrite');
+    var store = tx.objectStore('erp_stock');
+    result.rows.forEach(function(row) {
+      var rec = Object.assign({}, row, { client_id: clientId, imported_at: now, _key: clientId + ':' + row.sku });
+      store.put(rec);
+    });
+    tx.oncomplete = function() {
+      window._erpPendingResult = null;
+      var c = cl();
+      if (c && c.id === clientId) { c.erpStockCount = result.rows.length; c.erpStockImportedAt = now; save(); }
+      var prev = document.getElementById('erp-import-preview');
+      if (prev) prev.innerHTML = '<div style="padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;font-size:12px;color:#15803d;font-weight:600">'
+        + '✓ Import terminé — ' + result.rows.length + ' références chargées (IndexedDB erp_stock)</div>';
+      showToast(result.rows.length + ' références ERP importées', 'alr-g');
+      render();
+    };
+  });
+}
+
+// ── Lecture stock ERP depuis IndexedDB ───────────────────────────────────
+async function getStockERP(clientId, sku) {
+  try {
+    var db = await openDB();
+    var key = clientId + ':' + String(sku);
+    return await new Promise(function(resolve) {
+      var tx = db.transaction('erp_stock', 'readonly');
+      var req = tx.objectStore('erp_stock').get(key);
+      req.onsuccess = function() { resolve(req.result || null); };
+      req.onerror   = function() { resolve(null); };
+    });
+  } catch(e) { return null; }
+}
+
+
+// EN canonique + FR suppletif — agregation multi-pays par ASIN
+// Injection via marker // @parser_vc dans core.js
+
+// ─────────────────────────────────────────────────────────────────
+// vcNorm : normalisation robuste des headers Vendor Central
+// Etend norm() : apostrophes typo ‘’, tirets –—,
+// espaces irreguliers    ​
+// ─────────────────────────────────────────────────────────────────
+function vcNorm(s) {
+  return (s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[‘’´`]/g, "'")
+    .replace(/[–—−―]/g, '-')
+    .replace(/[   ​﻿]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// ─────────────────────────────────────────────────────────────────
+// VC_COL_DICT : 33 champs canoniques EN <-> FR
+// Valeurs EN : chaines originales Amazon
+// Valeurs FR : chaines simplifiees ASCII (vcNorm leve les accents/typo)
+// ─────────────────────────────────────────────────────────────────
+var VC_COL_DICT = {
+  asin:                            { en: ['ASIN'],                                              fr: ['ASIN'] },
+  titre:                           { en: ['Product title'],                                     fr: ['Nom du produit'] },
+  marque:                          { en: ['Brand'],                                             fr: ['Marque'] },
+  marche:                          { en: ['Store code'],                                        fr: ['Code de la boutique'] },
+
+  // Stock commun (Approv + Fab)
+  vendor_confirmation_pct:         { en: ['Vendor confirmation %'],                             fr: ['% de confirmation fournisseur'] },
+  net_received_amount:             { en: ['Net Received'],                                      fr: ['Quantite nette recue'] },
+  net_received_units:              { en: ['Net Received Units'],                                fr: ["Nombre net d'unites recues"] },
+  open_po_qty:                     { en: ['Open Purchase Order Quantity'],                      fr: ['Quantite de bons de commande ouverts', 'Quantite de commande en cours'] },
+  receive_fill_pct:                { en: ['Receive fill %'],                                    fr: ['% de reception'] },
+  vendor_lead_time_days:           { en: ['Overall Vendor Lead Time (days)'],                   fr: ['Delai de livraison global du fournisseur (jours)', "Delai d'approvisionnement global du fournisseur (jours)"] },
+  aged_90_sellable_inventory:      { en: ['Aged 90+ Days Sellable Inventory'],                  fr: ['Stock vendable datant de plus de 90 jours'] },
+  aged_90_sellable_units:          { en: ['Aged 90+ Days Sellable Units'],                      fr: ['Unites vendables datant de plus de 90 jours'] },
+  sellable_on_hand_inventory:      { en: ['Sellable On Hand Inventory'],                        fr: ['Stock disponible a la vente', 'Stock disponible vendable'] },
+  sellable_on_hand_units:          { en: ['Sellable On Hand Units'],                            fr: ['Unites vendables en stock'] },
+  unsellable_on_hand_inventory:    { en: ['Unsellable On Hand Inventory'],                      fr: ['Stock disponible invendable'] },
+  unsellable_on_hand_units:        { en: ['Unsellable On Hand Units'],                          fr: ['Unites invendables en stock'] },
+  sell_through_pct:                { en: ['Sell-through %'],                                    fr: ['% de vente au detail'] },
+  unhealthy_inventory:             { en: ['Unhealthy Inventory'],                               fr: ['Stock malsain', 'Stock en mauvaise sante'] },
+  unhealthy_units:                 { en: ['Unhealthy Units'],                                   fr: ['Unites malsaines', 'Unites en mauvaise sante'] },
+
+  // Stock_Fab uniquement
+  sourceable_oos_pct:              { en: ['Sourceable product OOS %'],                          fr: ['Produits en rupture avec approvisionnement possible', '% des produits en rupture avec approvisionnement possible'] },
+  unfilled_customer_ordered_units: { en: ['Unfilled Customer Ordered Units'],                   fr: ['Unites commandees par les clients non traitees'] },
+
+  // Trafic
+  glance_views:                    { en: ['Featured offer page views'],                         fr: ["Vues de la page de l'offre vedette"] },
+
+  // Ventes commun (Approv + Fab)
+  dispatched_revenue:              { en: ['Dispatched revenue'],                                fr: ["Chiffre d'affaires base sur les expeditions", 'Revenus bases sur les expeditions'] },
+  dispatched_cogs:                 { en: ['Dispatched COGS'],                                   fr: ['COGS expedie'] },
+  dispatched_units:                { en: ['Dispatched units'],                                  fr: ['Unites expediees'] },
+  customer_returns:                { en: ['Customer returns'],                                  fr: ['Retours client', 'Retours du client'] },
+
+  // Ventes_Fab uniquement
+  ordered_revenue:                 { en: ['Ordered revenue'],                                   fr: ["Chiffre d'affaires base sur les commandes", 'Revenus bases sur les commandes'] },
+  ordered_units:                   { en: ['Ordered units'],                                     fr: ['Unites commandees'] },
+};
+
+// ─────────────────────────────────────────────────────────────────
+// buildVCHeaderMap : construit header CSV reel -> fieldKey
+// ─────────────────────────────────────────────────────────────────
+function buildVCHeaderMap(headers) {
+  // Etape 1 : normKey -> fieldKey depuis le dictionnaire (EN + FR)
+  var normToField = {};
+  for (var fk0 in VC_COL_DICT) {
+    var syn0 = VC_COL_DICT[fk0];
+    ['en', 'fr'].forEach(function(lang) {
+      (syn0[lang] || []).forEach(function(term) {
+        var n = vcNorm(term);
+        if (!normToField[n]) normToField[n] = fk0;
+      });
+    });
+  }
+  // Etape 2 : mapper les headers CSV reels -> fieldKey
+  var fieldToHeader = {};
+  headers.forEach(function(h) {
+    var hn = vcNorm(h);
+    var fk = normToField[hn];
+    // Prefix match : "Sellable On Hand Inventory - Prior Period (%)" -> "sellable_on_hand_inventory"
+    if (!fk) {
+      for (var nk in normToField) {
+        if (hn === nk || hn.startsWith(nk + ' ') || hn.startsWith(nk + '-')) {
+          fk = normToField[nk]; break;
+        }
+      }
+    }
+    if (fk && !fieldToHeader[fk]) fieldToHeader[fk] = h;
+  });
+  return fieldToHeader; // { fieldKey: nomHeaderReel }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// detectVCFileType : signature de colonnes -> type de rapport
+// ─────────────────────────────────────────────────────────────────
+function detectVCFileType(headers) {
+  var hnSet = {};
+  headers.forEach(function(h) { hnSet[vcNorm(h)] = true; });
+
+  function hasVCField(fieldKey) {
+    var synset = VC_COL_DICT[fieldKey];
+    if (!synset) return false;
+    return ['en', 'fr'].some(function(lang) {
+      return (synset[lang] || []).some(function(term) { return !!hnSet[vcNorm(term)]; });
+    });
+  }
+
+  var hasOrderedRevenue = hasVCField('ordered_revenue');
+  var hasDispatchedRev  = hasVCField('dispatched_revenue');
+  var hasGlanceViews    = hasVCField('glance_views');
+  var hasSourceableOOS  = hasVCField('sourceable_oos_pct');
+  var hasVendorConfirm  = hasVCField('vendor_confirmation_pct');
+  var hasSellable       = hasVCField('sellable_on_hand_inventory');
+
+  if (hasGlanceViews)                          return 'trafic';
+  if (hasOrderedRevenue)                       return 'ventes_fab';
+  if (hasDispatchedRev)                        return 'ventes_approv';
+  if (hasSellable && hasSourceableOOS)         return 'stock_fab';
+  if (hasSellable && hasVendorConfirm)         return 'stock_approv';
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// parseVCFileMeta : parse la ligne 1 metadata VC (EN + FR)
+// Utilise parseMetadata() de core.js (disponible dans scope - hoiste)
+// ─────────────────────────────────────────────────────────────────
+function parseVCFileMeta(firstLine) {
+  var meta = parseMetadata(firstLine); // core.js
+
+  // Locale : EN -> meta['locale'], FR -> meta['local']
+  var localeRaw = meta['locale'] || meta['local'] || '';
+  var language = null;
+  if (localeRaw.toLowerCase().startsWith('en')) language = 'en';
+  else if (localeRaw.toLowerCase().startsWith('fr')) language = 'fr';
+
+  // Pays : EN -> meta['countries'], FR -> meta['pays']
+  var countriesRaw = meta['countries'] || meta['pays'] || '';
+  var countries = countriesRaw
+    ? countriesRaw.split(';').map(function(c) { return c.trim(); }).filter(Boolean)
+    : [];
+
+  // Vue distributeur
+  var apercu = meta['distributor view'] || meta['apercu du distributeur.']
+    || meta['apercu du distributeur'] || meta['distributor view.'] || '';
+  var distributorView = (
+    apercu.toLowerCase().includes('sourcing') ||
+    apercu.toLowerCase().includes('approvisionnement')
+  ) ? 'appro' : 'fab';
+
+  // Periode
+  var viewRange = meta['viewing range'] || meta['champ de vision.'] || meta['champ de vision'] || '';
+  var periodStart = null, periodEnd = null;
+  var pmatch = viewRange.match(/(\d{2}\/\d{2}\/\d{4})\s*-\s*(\d{2}\/\d{2}\/\d{4})/);
+  if (pmatch) { periodStart = pmatch[1]; periodEnd = pmatch[2]; }
+
+  // Intervalle
+  var intervalMeta = meta['reporting range'] || meta['intervalle des rapports'] || meta['intervalle'] || '';
+
+  // Entreprise
+  var company = meta['businesses'] || meta['entreprises'] || '';
+
+  return {
+    language: language, countries: countries, distributorView: distributorView,
+    periodStart: periodStart, periodEnd: periodEnd,
+    intervalMeta: intervalMeta, company: company
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────
+// parseVCFile : parser principal CSV Vendor Central
+// ─────────────────────────────────────────────────────────────────
+function parseVCFile(text, filename) {
+  var errors = [], warnings = [];
+
+  // Strip BOM UTF-8 (﻿)
+  if (text && text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
+  var lines = (text || '').split('\n');
+  if (lines.length < 2) {
+    return { ok: false, errors: ['Fichier vide ou trop court'], warnings: [] };
+  }
+
+  // ── Metadata ligne 1 ──────────────────────────────────────────
+  var meta = parseVCFileMeta(lines[0]);
+  var language = meta.language;
+
+  // ── Headers ligne 2 : detection format encapsule ──────────────
+  // Encapsule (vieux exports FR multi-pays) : ligne 2 = "ASIN,""Nom du produit"",..."
+  // Standard (EN + nouveaux exports)        : ligne 2 = ASIN,"Product title",...
+  var rawLines = lines.slice(1);
+  var headerLine = rawLines[0] ? rawLines[0].trim() : '';
+  var isEncapsulated = headerLine.startsWith('"ASIN,') || headerLine.startsWith('"asin,');
+
+  var csvText, papaConfig;
+  if (isEncapsulated) {
+    var unescaped = rawLines
+      .filter(function(l) { return l.trim(); })
+      .map(function(l) {
+        var s = l.trim();
+        if (s.startsWith('"')) s = s.slice(1);
+        s = s.replace(/"[;]*$/, '');
+        s = s.replace(/""/g, '"');
+        return s;
+      })
+      .join('\n');
+    csvText = unescaped;
+    papaConfig = { header: true, skipEmptyLines: true, delimiter: ',' };
+    log('Format multi-pays encapsule detecte — desencapsulation activee');
+  } else {
+    csvText = rawLines.join('\n');
+    papaConfig = { header: true, skipEmptyLines: true };
+  }
+
+  var res = Papa.parse(csvText, papaConfig);
+  if (!res || !res.data || !res.data.length) {
+    return { ok: false, errors: ['Aucune donnee parsee (fichier vide ou mal forme)'], warnings: warnings };
+  }
+
+  var headers = res.meta.fields || [];
+
+  // ── Detection langue par heuristique sur headers (fallback) ───
+  if (!language) {
+    var hasProductTitle = headers.some(function(h) { return vcNorm(h) === 'product title'; });
+    var hasNomProduit   = headers.some(function(h) { return vcNorm(h) === 'nom du produit'; });
+    if (hasProductTitle)    language = 'en';
+    else if (hasNomProduit) language = 'fr';
+    else                    language = 'en';
+    warnings.push('Locale absent des metadonnees — langue detectee : ' + language);
+  }
+
+  // ── Detection type de rapport ─────────────────────────────────
+  var vcType = detectVCFileType(headers);
+  if (!vcType) {
+    return {
+      ok: false,
+      errors: ["Format non reconnu — verifier qu'il s'agit d'un export Vendor Central hebdomadaire (Ventes, Trafic ou Stock ASIN)."],
+      warnings: warnings
+    };
+  }
+
+  // ── Construction fieldMap header -> fieldKey ──────────────────
+  var fieldMap = buildVCHeaderMap(headers);
+
+  // ── Detection multi-pays ──────────────────────────────────────
+  var marcheHeader = fieldMap['marche'];
+  var isMultiCountry = !!marcheHeader;
+
+  var countriesDetected = meta.countries.length > 0 ? meta.countries.slice() : [];
+  if (isMultiCountry && countriesDetected.length === 0) {
+    var marcheSet = {};
+    res.data.forEach(function(row) {
+      var v = (row[marcheHeader] || '').trim();
+      if (v) marcheSet[v] = true;
+    });
+    countriesDetected = Object.keys(marcheSet);
+  }
+
+  // ── Periodes ──────────────────────────────────────────────────
+  var periodStart = meta.periodStart;
+  var periodEnd   = meta.periodEnd;
+
+  if (!periodEnd && filename) {
+    var fn = filename.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    var fdm1 = fn.match(/[Dd]atedefin[_\s]+(\d{2}-\d{2}-\d{4})[_\s]+(\d{2}-\d{2}-\d{4})/i);
+    var fdm2 = !fdm1 ? fn.match(/(\d{2}-\d{2}-\d{4})[_\s]+(\d{2}-\d{2}-\d{4})/) : null;
+    var fdmM = fdm1 || fdm2;
+    if (fdmM) {
+      periodStart = fdmM[1].replace(/-/g, '/');
+      periodEnd   = fdmM[2].replace(/-/g, '/');
+    }
+  }
+
+  var periodType = detectPeriodType(periodStart, periodEnd, meta.intervalMeta);
+
+  // ── Champs numeriques a sommer lors de l'agregation ───────────
+  var NUM_SUM = [
+    'net_received_amount', 'net_received_units', 'open_po_qty',
+    'aged_90_sellable_inventory', 'aged_90_sellable_units',
+    'sellable_on_hand_inventory', 'sellable_on_hand_units',
+    'unsellable_on_hand_inventory', 'unsellable_on_hand_units',
+    'unhealthy_inventory', 'unhealthy_units', 'unfilled_customer_ordered_units',
+    'glance_views',
+    'dispatched_revenue', 'dispatched_cogs', 'dispatched_units', 'customer_returns',
+    'ordered_revenue', 'ordered_units'
+  ];
+
+  // ── Parsing + agregation par ASIN ─────────────────────────────
+  var asinMap = {};
+
+  res.data.forEach(function(row) {
+    var asinH = fieldMap['asin'] || 'ASIN';
+    var asin  = (row[asinH] || row['ASIN'] || '').trim();
+    if (!asin || asin.length < 5) return;
+
+    var existing = asinMap[asin];
+    if (!existing) {
+      var entry = { asin: asin };
+      entry.titre  = fieldMap['titre']  ? (row[fieldMap['titre']]  || '') : '';
+      entry.marque = fieldMap['marque'] ? (row[fieldMap['marque']] || '') : '';
+      NUM_SUM.forEach(function(fk) {
+        entry[fk] = fieldMap[fk] ? parseNum(row[fieldMap[fk]]) : 0;
+      });
+      // Champs ratio/texte : premier marche uniquement
+      entry.vendor_confirmation_pct = fieldMap['vendor_confirmation_pct'] ? (row[fieldMap['vendor_confirmation_pct']] || '') : '';
+      entry.receive_fill_pct        = fieldMap['receive_fill_pct']        ? (row[fieldMap['receive_fill_pct']]        || '') : '';
+      entry.vendor_lead_time_days   = fieldMap['vendor_lead_time_days']   ? (row[fieldMap['vendor_lead_time_days']]   || '') : '';
+      entry.sell_through_pct        = fieldMap['sell_through_pct']        ? (row[fieldMap['sell_through_pct']]        || '') : '';
+      entry.sourceable_oos_pct      = fieldMap['sourceable_oos_pct']      ? (row[fieldMap['sourceable_oos_pct']]      || '') : '';
+      asinMap[asin] = entry;
+    } else if (isMultiCountry) {
+      // Accumulation multi-pays : sommer les valeurs numeriques
+      NUM_SUM.forEach(function(fk) {
+        if (fieldMap[fk]) existing[fk] = (existing[fk] || 0) + parseNum(row[fieldMap[fk]]);
+      });
+    }
+  });
+
+  var rows = Object.keys(asinMap).map(function(k) { return asinMap[k]; });
+
+  // ── Sanity check ─────────────────────────────────────────────
+  if (rows.length === 0) {
+    return { ok: false, errors: ['Aucun ASIN valide trouve dans le fichier'], warnings: warnings };
+  }
+
+  var validASINs = rows.filter(function(r) { return /^B0[A-Z0-9]{8}$/i.test(r.asin); }).length;
+  if (validASINs / rows.length < 0.8) {
+    warnings.push('Moins de 80% ASINs au format Amazon standard : ' + validASINs + '/' + rows.length);
+  }
+
+  // Seuil minimal KPI : >= 5% de lignes avec valeur > 0
+  var kpiFieldMap = {
+    trafic: 'glance_views', ventes_approv: 'dispatched_revenue',
+    ventes_fab: 'ordered_revenue', stock_approv: 'sellable_on_hand_inventory',
+    stock_fab: 'sellable_on_hand_inventory'
+  };
+  var kpiField = kpiFieldMap[vcType];
+  if (kpiField && rows.length > 5) {
+    var kpiCount = rows.filter(function(r) { return (r[kpiField] || 0) > 0; }).length;
+    if (kpiCount / rows.length < 0.05) {
+      errors.push('Format non reconnu ou fichier corrompu : ' + kpiCount + '/' + rows.length + ' lignes avec ' + kpiField + ' > 0.');
+      return { ok: false, errors: errors, warnings: warnings };
+    }
+  }
+
+  // ── Market legacy ─────────────────────────────────────────────
+  var mktCodes = (typeof MARKET_CODES !== 'undefined') ? MARKET_CODES : {};
+  var market = meta.countries.length === 1 ? (mktCodes[meta.countries[0]] || '.fr') : '.fr';
+
+  return {
+    ok: true,
+    vcType: vcType,
+    language: language,
+    isMultiCountry: isMultiCountry,
+    rows: rows,
+    countriesDetected: countriesDetected,
+    aggregationApplied: isMultiCountry,
+    errors: errors,
+    warnings: warnings,
+    periodStart: periodStart,
+    periodEnd:   periodEnd,
+    periodType:  periodType,
+    distributorView: meta.distributorView,
+    company:     meta.company,
+    market:      market
+  };
+}
+
 
 let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
@@ -1632,7 +2319,7 @@ let _db = null;
 function openDB() {
   return new Promise((resolve, reject) => {
     if (_db) return resolve(_db);
-    const req = indexedDB.open('AmazonPilot', 3);
+    const req = indexedDB.open('AmazonPilot', 5);  // v5 : ajout smoke_history
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('clients')) {
@@ -1646,10 +2333,61 @@ function openDB() {
         yoyStore.createIndex('clientId', 'clientId', { unique: false });
         yoyStore.createIndex('createdAt', 'createdAt', { unique: false });
       }
+      if (!db.objectStoreNames.contains('erp_stock')) {
+        db.createObjectStore('erp_stock', { keyPath: '_key' });
+      }
+      // v5 — historique mesures smoke par client (brique amorce détection dérive)
+      if (!db.objectStoreNames.contains('smoke_history')) {
+        const sh = db.createObjectStore('smoke_history', { keyPath: 'key' });
+        sh.createIndex('clientId',  'clientId',  { unique: false });
+        sh.createIndex('timestamp', 'timestamp', { unique: false });
+      }
     };
     req.onsuccess = e => { _db = e.target.result; resolve(_db); };
     req.onerror = () => reject(req.error);
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// saveSmokeHistory : enregistre un point de mesure dans IDB smoke_history
+// Appelé à chaque fin de smokeTest(), quel que soit le client.
+// Pas de logique d'évaluation ici — collecte uniquement (v3.6.6.1).
+// ─────────────────────────────────────────────────────────────────────────
+async function saveSmokeHistory(clientId, clientName, measures) {
+  try {
+    const db = await openDB();
+    const ts  = new Date().toISOString();
+    const key = (clientId || 'unknown') + ':' + ts;
+    await new Promise(function(res, rej) {
+      const tx = db.transaction(['smoke_history'], 'readwrite');
+      tx.objectStore('smoke_history').put({
+        key:        key,
+        clientId:   clientId   || 'unknown',
+        clientName: clientName || clientId || 'unknown',
+        timestamp:  ts,
+        measures:   measures || {}
+      });
+      tx.oncomplete = res;
+      tx.onerror = function() { rej(tx.error); };
+    });
+    // Compter les mesures accumulées pour ce client (via index)
+    const clientEntries = await new Promise(function(res) {
+      const tx2 = db.transaction(['smoke_history'], 'readonly');
+      const req2 = tx2.objectStore('smoke_history').index('clientId').getAll(clientId || 'unknown');
+      req2.onsuccess = function() { res(req2.result || []); };
+      req2.onerror  = function() { res([]); };
+    });
+    const nbMesures = clientEntries.length;
+    // Date cible = 1ère mesure + 6 mois
+    const sorted   = clientEntries.slice().sort(function(a, b) { return a.timestamp < b.timestamp ? -1 : 1; });
+    const firstTs  = sorted.length > 0 ? sorted[0].timestamp : ts;
+    const dateCible = new Date(firstTs);
+    dateCible.setMonth(dateCible.getMonth() + 6);
+    const dateCibleStr = dateCible.toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
+    console.info('[INFO] SMOKE_HISTORY: ' + (clientName || clientId) + ' — ' + nbMesures + ' mesures accumulées. Détection de dérive activée dès ' + dateCibleStr + '.');
+  } catch(err) {
+    console.warn('[WARN] saveSmokeHistory:', err);
+  }
 }
 
 function migrateXMLTitles(clients) {
@@ -1901,6 +2639,118 @@ function detectPeriodType(startDate, endDate, intervalMeta) {
 }
 
 function parseCSVFile(text, filename) {
+  // v3.6.6.1 — Délégation au parser universel multilingue parseVCFile()
+  // Maintient la structure de retour legacy pour tous les appelants existants
+  var result = parseVCFile(text, filename);
+
+  if (!result.ok) {
+    log('✗ ' + (filename || '') + ' : ' + (result.errors[0] || 'Format non reconnu'), 'err');
+    return { error: result.errors[0] || 'Format non reconnu' };
+  }
+
+  // Traduction vcType -> type legacy + distributorView
+  var type, distributorView;
+  var vcType = result.vcType;
+  if      (vcType === 'stock_approv')  { type = 'stock';  distributorView = 'appro'; }
+  else if (vcType === 'stock_fab')     { type = 'stock';  distributorView = 'fab';   }
+  else if (vcType === 'ventes_approv') { type = 'ventes'; distributorView = 'appro'; }
+  else if (vcType === 'ventes_fab')    { type = 'ventes'; distributorView = 'fab';   }
+  else if (vcType === 'trafic')        { type = 'trafic'; distributorView = 'fab';   }
+  else { return { error: 'Type non reconnu : ' + vcType }; }
+
+  // Log type + langue detectes
+  var typeLabels = {
+    trafic: 'Trafic ASIN', ventes_approv: 'Ventes ASIN Approvisionnement',
+    ventes_fab: 'Ventes ASIN Fabrication', stock_approv: 'Stock ASIN Approvisionnement',
+    stock_fab: 'Stock ASIN Fabrication'
+  };
+  var langLabel = result.language === 'en' ? 'Anglais (en_GB)' : 'Français (fr_FR)';
+  log('📋 ' + (typeLabels[vcType] || vcType) + ' • ' + langLabel
+    + ' • ' + result.rows.length + ' ASINs'
+    + (result.isMultiCountry ? ' (agrégé ' + result.countriesDetected.length + ' marchés)' : ''), 'ok');
+
+  // Message UI + console multi-pays (v3.6.6.1)
+  if (result.isMultiCountry) {
+    var ctMsg = '🌍 Multi-pays détecté (' + result.countriesDetected.length
+      + ' marchés : ' + result.countriesDetected.join(', ')
+      + '). Agrégation tous marchés effectuée. Stock et CA affichés = somme Europe.';
+    log(ctMsg, 'ok');
+    if (typeof showToast === 'function') {
+      setTimeout(function() { showToast(ctMsg, 'alr-b'); }, 150);
+    }
+  }
+
+  // Traduction rows -> data format legacy
+  var data = result.rows.map(function(row) {
+    var item = {
+      asin:            row.asin,
+      title:           row.titre  || '',
+      brand:           row.marque || '',
+      market:          result.market,
+      periodStart:     result.periodStart,
+      periodEnd:       result.periodEnd,
+      periodType:      result.periodType,
+      distributorView: distributorView
+    };
+    if (type === 'ventes') {
+      item.orderedRevenue = row.ordered_revenue    || 0;
+      item.shippedRevenue = row.dispatched_revenue || 0;
+      // revenue : Fab -> expedie, Appro -> commande si dispo sinon expedie (compat v3.1.72)
+      item.revenue = distributorView === 'fab'
+        ? item.shippedRevenue
+        : (item.orderedRevenue > 0 ? item.orderedRevenue : item.shippedRevenue);
+      item.orderedUnits = row.ordered_units    || 0;
+      item.shippedUnits = row.dispatched_units || 0;
+      item.units = distributorView === 'fab'
+        ? item.orderedUnits
+        : (item.orderedUnits > 0 ? item.orderedUnits : item.shippedUnits);
+      item.returns      = row.customer_returns || 0;
+      item.revenueDelta = '';
+      item.revenueYoY   = '';
+      item.unitsDelta   = '';
+    }
+    if (type === 'trafic') {
+      item.glanceViews = row.glance_views || 0;
+      item.gvDelta     = '';
+      item.gvYoY       = '';
+    }
+    if (type === 'stock') {
+      item.sellableStock   = row.sellable_on_hand_inventory   || 0;
+      item.sellableUnits   = row.sellable_on_hand_units       || 0;
+      item.unsellableUnits = row.unsellable_on_hand_units     || 0;
+      item.unhealthyStock  = row.unhealthy_inventory          || 0;
+      item.unhealthyUnits  = row.unhealthy_units              || 0;
+      item.openPOQty       = row.open_po_qty                  || 0;
+      item.oosPct          = row.sourceable_oos_pct           || '';
+      item.confirmPct      = row.vendor_confirmation_pct      || '';
+      item.retailPct       = row.sell_through_pct             || '';
+    }
+    return item;
+  });
+
+  return {
+    type:              type,
+    market:            result.market,
+    distributorView:   distributorView,
+    periodStart:       result.periodStart,
+    periodEnd:         result.periodEnd,
+    periodType:        result.periodType,
+    company:           result.company,
+    rowCount:          data.length,
+    data:              data,
+    filename:          filename,
+    // Champs enrichis v3.6.6.1
+    language:          result.language,
+    isMultiCountry:    result.isMultiCountry,
+    countriesDetected: result.countriesDetected,
+    vcType:            vcType
+  };
+}
+
+// _parseCSVFile_LEGACY : corps original remplacé en v3.6.6.1 par le wrapper parseVCFile()
+// Conservé ci-dessous jusqu'à validation complète — à supprimer en v3.6.7
+/* eslint-disable */
+function _parseCSVFile_LEGACY_UNUSED(text, filename) {
   const lines = text.split('\n');
   if (lines.length < 2) return { error: 'Fichier vide ou invalide' };
   const meta = parseMetadata(lines[0]);
@@ -4892,6 +5742,26 @@ function renderImport() {
   h += '</div>';
 
   h += '</div>';  // fin .cd Buy Box
+
+  // ══════════════════════════════════════════════════════
+  // ÉTAPE 4 — Données stock ERP (modèle Amazon Pilot)
+  // ══════════════════════════════════════════════════════
+  var erpCount = c.erpStockCount || 0;
+  var erpLoaded = erpCount > 0;
+  h += '<div class="cd">';
+  h += '<div class="cd-t space">';
+  h += '<span>4 — Données stock ERP <span style="font-size:10px;font-weight:400;color:var(--tx3)">(modèle Amazon Pilot)</span></span>';
+  h += erpLoaded
+    ? '<span class="pill pill-g">✓ ' + erpCount.toLocaleString('fr-FR') + ' références</span>'
+    : '<span class="pill pill-gr">Non chargé</span>';
+  h += '</div>';
+  h += '<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Importez les stocks et arrivages ERP pour alimenter les modules Appros, Prévisionnel et Diagnostic CA. Téléchargez d\'abord le modèle, remplissez-le depuis votre ERP, puis importez-le ici.</p>';
+  h += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
+  h += '<button class="btn btn-sm" onclick="downloadERPTemplate()">\u{1F4E5} Télécharger le modèle (.xlsx)</button>';
+  h += '<label class="btn btn-sm" style="cursor:pointer">\u{1F4E4} ' + (erpLoaded ? 'Recharger les stocks ERP' : 'Importer les stocks ERP (.xlsx)') + '<input type="file" accept=".xlsx" style="display:none" onchange="handleERPImport(this.files)"/></label>';
+  h += '</div>';
+  h += '<div id="erp-import-preview" style="margin-top:10px"></div>';
+  h += '</div>';
 
   h += `</div>`;
   return h;
@@ -9601,66 +10471,63 @@ function handleMatriceTarif(input) {
   input.value = '';
 }
 
-// ── Import stock ERP (xlsx Cogex) ────────────────────────────
+// ── Import stock ERP (xlsx Cogex / universel v3.6.6) ─────────
 function handleErpStock(input) {
   const file = input.files[0];
   if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      const wb = XLSX.read(e.target.result, { type: 'array' });
+  input.value = '';
 
-      // Chercher l'onglet pertinent (insensible à la casse/accents)
-      const sheetName = wb.SheetNames.find(function(n) {
-        return n.toLowerCase().replace(/\s/g,'').includes('stockdispo');
-      }) || wb.SheetNames[0];
-      const ws = wb.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
-      if (!rows.length) { alert('Onglet introuvable ou vide.'); return; }
-
-      // Détection du format :
-      // Format A (ancien) : colonnes "N° Article", "Stock dispo réel à date"...
-      // Format B (nouveau ERP Cogex) : colonnes "N°", "Stock physique", "Stock dispo sur 6 mois"...
-      const firstRow = rows[0];
-      const isFormatB = firstRow.hasOwnProperty('N°') && firstRow.hasOwnProperty('Stock physique');
-
+  // 1. Parser universel (v3.6.6) : reconnaît N°, Stock Physique non réservé,
+  //    header décalé, synonymes, config séparé/cumulé, etc.
+  parseFileERP(file).then(function(result) {
+    if (result.ok && result.rows.length > 0) {
+      const c = cl();
+      if (!c) return;
       const bysku = {};
+      result.rows.forEach(function(row) {
+        const sku = String(row.sku).padStart(6, '0');
+        const s0  = row.stock_disponible_amazon || 0;
+        bysku[sku] = {
+          ean:           row.ean  || '',
+          label:         row.designation || '',
+          codeVie:       row.code_vie    || '',
+          stockPhysique: s0,
+          stock6m:       s0,
+          s0:  s0,
+          s1m: s0,
+          s3m: s0,
+          dateArrivage:  row.date_prochain_arrivage || null,
+          qteArrivage:   row.qte_prochain_arrivage  || 0,
+        };
+      });
+      c.erpStock = bysku;
+      c.erpStockDate = new Date().toISOString().slice(0,10);
+      c.erpStockFormat = result.config === 'cumulated' ? 'B' : 'A';
+      save();
+      const count = Object.keys(bysku).length;
+      log('✓ Stock ERP importé : ' + count + ' références (parser universel)', 'ok');
+      render();
+      const toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:14px 18px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:999;display:flex;align-items:center;gap:12px';
+      toast.innerHTML = '<span style="font-size:20px">📦</span><div><strong>' + count + ' références</strong> chargées (stock ERP)<br><span style="font-size:11px;color:#6B7280">MAJ ' + (c.erpStockDate||'') + '</span></div>';
+      document.body.appendChild(toast);
+      setTimeout(function() { toast.remove(); }, 4000);
+      return;
+    }
 
-      if (isFormatB) {
-        // ── Format B — Export ERP Cogex ─────────────────────────────
-        // Colonnes : N°, Désignation, Code vie, Gencod,
-        //            Stock physique, Stock dispo sur 6 mois,
-        //            Date prochain arrivage, Qté prochain arrivage
-        rows.forEach(function(row) {
-          const skuRaw = row['N°'] != null ? String(row['N°']).trim() : null;
-          if (!skuRaw) return;
-          // Normaliser en 6 chiffres (080017 au lieu de 80017)
-          const sku = skuRaw.padStart(6, '0');
-          const stockPhys = parseFloat(row['Stock physique']) || 0;
-          const stock6m   = parseFloat(row['Stock dispo sur 6 mois']) || 0;
-          // Date arrivage : peut être une date JS ou une chaîne
-          let dateArrivage = null;
-          const rawDate = row['Date prochain arrivage'];
-          if (rawDate) {
-            const d = new Date(rawDate);
-            if (!isNaN(d.getTime())) dateArrivage = d.toISOString().slice(0,10);
-          }
-          bysku[sku] = {
-            ean:           row['Gencod'] != null ? String(row['Gencod']).trim() : '',
-            label:         row['Désignation'] || '',
-            codeVie:       row['Code vie'] || '',
-            stockPhysique: Math.max(0, stockPhys),  // ignorer les négatifs
-            stock6m:       Math.max(0, stock6m),
-            dateArrivage:  dateArrivage,
-            qteArrivage:   parseInt(row['Qté prochain arrivage']) || 0,
-            // Compatibilité avec Format A pour calcAppro
-            s0:  Math.max(0, stockPhys),
-            s1m: Math.max(0, stock6m),
-            s3m: Math.max(0, stock6m),
-          };
-        });
-      } else {
-        // ── Format A (ancien) — Stock dispo réel par horizons ───────
+    // 2. Fallback : parser legacy Format A (colonnes "N° Article", horizons dispo)
+    //    Conservé pour compatibilité ascendante avec anciens exports Cogex.
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array' });
+        const sheetName = wb.SheetNames.find(function(n) {
+          return n.toLowerCase().replace(/\s/g,'').includes('stockdispo');
+        }) || wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
+        if (!rows.length) { alert('Onglet introuvable ou vide.'); return; }
+
         const COL_SKU    = 'N° Article';
         const COL_EAN    = 'Art. Gencod Référence';
         const COL_LABEL  = 'Article';
@@ -9671,6 +10538,7 @@ function handleErpStock(input) {
         const COL_S2M    = 'Stock dispo réel à date +2 mois';
         const COL_S3M    = 'Stock dispo réel à date +3 mois';
 
+        const bysku = {};
         rows.forEach(function(row) {
           const sku = row[COL_SKU] != null ? String(row[COL_SKU]).trim() : null;
           if (!sku) return;
@@ -9681,7 +10549,7 @@ function handleErpStock(input) {
               ean:           row[COL_EAN] != null ? String(row[COL_EAN]).trim() : '',
               label:         row[COL_LABEL] || '',
               marque:        row[COL_MARQUE] || '',
-              stockPhysique: parseFloat(row[COL_S0]) || 0,
+              stockPhysique: parseFloat(row[COL_S0])  || 0,
               stock6m:       parseFloat(row[COL_S3M]) || 0,
               s0:            parseFloat(row[COL_S0])  || 0,
               s15:           parseFloat(row[COL_S15]) || 0,
@@ -9692,30 +10560,32 @@ function handleErpStock(input) {
           }
         });
         Object.keys(bysku).forEach(function(k) { delete bysku[k]._annee; });
-      }
 
-      const c = cl();
-      if (!c) return;
-      c.erpStock = bysku;
-      c.erpStockDate = new Date().toISOString().slice(0,10);
-      c.erpStockFormat = isFormatB ? 'B' : 'A';
-      save();
-      const count = Object.keys(bysku).length;
-      const fmt = isFormatB ? 'Format B (stock + arrivages)' : 'Format A (horizons dispo)';
-      log('✓ Stock ERP importé : ' + count + ' références — ' + fmt, 'ok');
-      render();
-      const toast = document.createElement('div');
-      toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:14px 18px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:999;display:flex;align-items:center;gap:12px';
-      toast.innerHTML = '<span style="font-size:20px">📦</span><div><strong>' + count + ' références</strong> chargées (stock ERP)<br><span style="font-size:11px;color:#6B7280">' + fmt + ' — MAJ ' + (c.erpStockDate||'') + '</span></div>';
-      document.body.appendChild(toast);
-      setTimeout(function() { toast.remove(); }, 4000);
-    } catch(err) {
-      alert('Erreur lecture fichier ERP : ' + err.message);
-      log('✗ Import ERP : ' + err.message, 'err');
-    }
-  };
-  reader.readAsArrayBuffer(file);
-  input.value = '';
+        const c = cl();
+        if (!c) return;
+        if (!Object.keys(bysku).length) {
+          alert('Aucune référence reconnue dans ce fichier.\nVérifiez que la colonne SKU s\'appelle "N° Article" (Format A) ou une variante reconnue (N°, SKU, Code article…).');
+          return;
+        }
+        c.erpStock = bysku;
+        c.erpStockDate = new Date().toISOString().slice(0,10);
+        c.erpStockFormat = 'A';
+        save();
+        const count = Object.keys(bysku).length;
+        log('✓ Stock ERP importé : ' + count + ' références (Format A legacy)', 'ok');
+        render();
+        const toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:14px 18px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:999;display:flex;align-items:center;gap:12px';
+        toast.innerHTML = '<span style="font-size:20px">📦</span><div><strong>' + count + ' références</strong> chargées (stock ERP)<br><span style="font-size:11px;color:#6B7280">Format A legacy — MAJ ' + (c.erpStockDate||'') + '</span></div>';
+        document.body.appendChild(toast);
+        setTimeout(function() { toast.remove(); }, 4000);
+      } catch(err) {
+        alert('Erreur lecture fichier ERP : ' + err.message);
+        log('✗ Import ERP : ' + err.message, 'err');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
 }
 
 // Export CSV plan de réappro

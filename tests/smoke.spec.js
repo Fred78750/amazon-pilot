@@ -59,8 +59,28 @@ test('V1 — Fonctions critiques presentes', async ({ page }) => {
       'smokeTest','renderSmokeResult',
       // YoY (v3.6.5)
       'renderYoY','yoyLaunchAnalysis',
+      // ERP Parser (v3.6.6)
+      'parseFileERP','downloadERPTemplate','handleERPImport','getStockERP',
+      // VC Parser (v3.6.6.1)
+      'parseVCFile','vcNorm','buildVCHeaderMap','detectVCFileType',
+      // Smoke history (v3.6.6.1)
+      'saveSmokeHistory',
     ];
     const missing = windowFns.filter(f => typeof window[f] !== 'function');
+
+    // VC_COL_DICT est une var globale (object), pas une function
+    if (typeof window.VC_COL_DICT !== 'object' || window.VC_COL_DICT === null)
+      missing.push('VC_COL_DICT (object attendu)');
+    if (!window.VC_COL_DICT || !window.VC_COL_DICT.asin || !window.VC_COL_DICT.ordered_revenue)
+      missing.push('VC_COL_DICT.asin / VC_COL_DICT.ordered_revenue manquants');
+
+    // SMOKE_REF_BY_CLIENT est une const (non dans window) — vérifier via eval
+    try {
+      const hasByClient = eval('typeof SMOKE_REF_BY_CLIENT') !== 'undefined'
+                       && eval('typeof SMOKE_REF_BY_CLIENT') === 'object'
+                       && eval('"cogex" in SMOKE_REF_BY_CLIENT');
+      if (!hasByClient) missing.push('SMOKE_REF_BY_CLIENT (cogex entry manquant)');
+    } catch(e) { missing.push('SMOKE_REF_BY_CLIENT (eval error: ' + e.message + ')'); }
 
     // cl est une const arrow function — non dans window, tester via eval
     try {
@@ -151,4 +171,393 @@ test('V4 — SMOKE_REF valeurs et dates expiration correctes', async ({ page }) 
   expect(ref.asinMin).toBeGreaterThanOrEqual(1500);
   expect(ref.asinRef).toBe('B009G3EMDI');
   console.log('  OK SMOKE_REF CA2024=' + ref.ca2024 + ' CA2025=' + ref.ca2025);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V5 — Parser ERP universel (v3.6.6)
+// Helper : créer un File XLSX en mémoire depuis un tableau de tableaux
+// ─────────────────────────────────────────────────────────────────────────
+
+// V5a — Template + config (b) stock cumulé (Gers-like)
+test('V5a — ERP parser : template + config (b) stock cumule', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(async () => {
+    // Créer un XLSX en mémoire : config (b) stock cumulé, synonymes Gers
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['N°', 'EAN', 'Désignation', 'Code Vie', 'Stock Physique non réservé', 'Date prochain arrivage', 'Qt prochain arrivage'],
+      [141431, '3367304009366', 'PRODUIT A', 'PERM', 60, '2026-08-03', 1368],
+      [141432, '3367304009373', 'PRODUIT B', 'PERM', 0, '', 0],
+      [141433, '3367304009380', 'PRODUIT C', 'NEG', 36, '2026-07-06', 1920],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Références avec prevs amazon');
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const file = new File([buf], 'test_gers.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+    return parseFileERP(file);
+  });
+
+  expect(result.ok, 'Parser config (b) doit retourner ok=true : ' + JSON.stringify(result.errors)).toBe(true);
+  expect(result.config).toBe('cumulated');
+  expect(result.rows.length).toBe(3);
+  expect(result.rows[0].sku).toBe('141431');
+  expect(result.rows[0].stock_disponible_amazon).toBe(60);
+  expect(result.rows[1].stock_disponible_amazon).toBe(0);
+  expect(result.rows[0].date_prochain_arrivage).toBe('2026-08-03');
+  expect(result.warnings.length).toBe(0);
+  console.log('  OK ERP config (b) — ' + result.rows.length + ' lignes, config=' + result.config);
+});
+
+// V5b — Config (a) stocks séparés
+test('V5b — ERP parser : config (a) stocks separes', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(async () => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['SKU', 'EAN', 'Designation', 'Code_Vie', 'Stock_libre', 'Stock_Amazon', 'Date_prochain_arrivage', 'Qte_prochain_arrivage'],
+      ['REF-001', '1234567890123', 'Produit Test', 'PERM', 150, 50, '2026-09-01', 500],
+      ['REF-002', '9876543210987', 'Produit Test 2', 'PERM-FIN', 0, 0, '', 0],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Stock_Amazon_Pilot');
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const file = new File([buf], 'test_sep.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    return parseFileERP(file);
+  });
+
+  expect(result.ok, 'Parser config (a) doit retourner ok=true').toBe(true);
+  expect(result.config).toBe('separated');
+  expect(result.rows.length).toBe(2);
+  expect(result.rows[0].stock_libre).toBe(150);
+  expect(result.rows[0].stock_amazon).toBe(50);
+  expect(result.rows[0].stock_disponible_amazon).toBe(200);
+  console.log('  OK ERP config (a) — stocks separes, total=' + result.rows[0].stock_disponible_amazon);
+});
+
+// V5c — Pas de colonne stock → erreur bloquante
+test('V5c — ERP parser : absence colonne stock -> erreur bloquante', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(async () => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['SKU', 'EAN', 'Designation', 'Code_Vie'],
+      ['REF-001', '1234567890123', 'Produit Test', 'PERM'],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Stock_Amazon_Pilot');
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const file = new File([buf], 'test_nostock.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    return parseFileERP(file);
+  });
+
+  expect(result.ok).toBe(false);
+  expect(result.errors.length).toBeGreaterThan(0);
+  expect(result.errors[0]).toContain('Stock_libre');
+  console.log('  OK ERP erreur attendue : ' + result.errors[0].substring(0, 60));
+});
+
+// V5d — Synonymes inhabituels mappés correctement
+test('V5d — ERP parser : synonymes inhabituels', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(async () => {
+    const wb = XLSX.utils.book_new();
+    // Synonymes : "Code article" → SKU, "Dispo Amazon" → Stock_disponible_Amazon, "Code Vie" → Code_Vie
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['Code article', 'Dispo Amazon', 'Code Vie', 'Qt prochain arrivage'],
+      ['ART-001', 99, 'PERM', 200],
+      ['ART-002', 0,  'FIN_VIE', 0],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'MonExport');
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const file = new File([buf], 'test_syn.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    return parseFileERP(file);
+  });
+
+  expect(result.ok, 'Parser synonymes doit retourner ok=true : ' + JSON.stringify(result.errors)).toBe(true);
+  expect(result.rows.length).toBe(2);
+  expect(result.rows[0].sku).toBe('ART-001');
+  expect(result.rows[0].stock_disponible_amazon).toBe(99);
+  expect(result.rows[0].qte_prochain_arrivage).toBe(200);
+  console.log('  OK ERP synonymes — ' + result.rows.length + ' lignes mappées');
+});
+
+// V5e — Caractères pièges (NBSP   dans nombres)
+test('V5e — ERP parser : caracteres pieges NBSP dans nombres', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(async () => {
+    const wb = XLSX.utils.book_new();
+    // Stock avec séparateur milliers espace insécable étroit ( )
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['SKU', 'Stock_disponible_Amazon', 'Code_Vie'],
+      ['REF-X', '1 234', 'PERM'],
+      ['REF-Y', '56 789', 'PERM'],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Stock_Amazon_Pilot');
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const file = new File([buf], 'test_nbsp.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    return parseFileERP(file);
+  });
+
+  expect(result.ok, 'Parser NBSP doit retourner ok=true : ' + JSON.stringify(result.errors)).toBe(true);
+  expect(result.rows[0].stock_disponible_amazon).toBe(1234);
+  expect(result.rows[1].stock_disponible_amazon).toBe(56789);
+  console.log('  OK ERP NBSP strip — 1234 et 56789 parsés correctement');
+});
+
+// V5f — getStockERP retourne null pour clé inexistante
+test('V5f — getStockERP retourne null pour cle inexistante', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(async () => {
+    return getStockERP('client-inexistant', 'SKU-INEXISTANT');
+  });
+
+  expect(result).toBeNull();
+  console.log('  OK getStockERP null pour cle inexistante');
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V6 — Parser VC multilingue (v3.6.6.1)
+// CSV inline : ligne 0 vide (metadata absente) → heuristique headers
+// ─────────────────────────────────────────────────────────────────────────
+
+// V6a — parseVCFile EN ventes_fab : detect type, mapping, 3 ASINs
+test('V6a — VC parser EN ventes_fab : type + champs corrects', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(() => {
+    // Ligne 0 vide → metadata absente → heuristique langue par headers
+    const csv = [
+      '',
+      'ASIN,Product title,Brand,Ordered revenue,Ordered units,Dispatched revenue,Dispatched units,Customer returns',
+      'B012345678,"Product A","Brand X",12345.67,100,11000.00,90,5',
+      'B098765432,"Product B","Brand X",6789.00,50,6000.00,45,2',
+      'B0AABBCCDD,"Product C","Brand Y",500.00,10,450.00,9,0',
+    ].join('\n');
+    return parseVCFile(csv, 'test_ventes_fab.csv');
+  });
+
+  expect(result.ok, 'EN ventes_fab ok=true attendu : ' + JSON.stringify(result.errors)).toBe(true);
+  expect(result.vcType).toBe('ventes_fab');
+  expect(result.language).toBe('en');
+  expect(result.isMultiCountry).toBe(false);
+  expect(result.rows.length).toBe(3);
+  const r0 = result.rows.find(r => r.asin === 'B012345678');
+  expect(r0, 'ASIN B012345678 absent').toBeTruthy();
+  expect(r0.ordered_revenue).toBeCloseTo(12345.67, 1);
+  expect(r0.ordered_units).toBe(100);
+  expect(r0.dispatched_revenue).toBeCloseTo(11000, 1);
+  expect(r0.customer_returns).toBe(5);
+  console.log('  OK V6a ventes_fab EN — ' + result.rows.length + ' ASINs, vcType=' + result.vcType);
+});
+
+// V6b — parseVCFile multi-pays aggregation : 2 marchés × 2 ASINs → 2 lignes sommées
+test('V6b — VC parser multi-pays : agregation ordered_revenue + ordered_units', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(() => {
+    // Store code column → isMultiCountry=true, aggregation active
+    const csv = [
+      'locale=[en_GB];countries=[FR;DE];distributor view=[Manufacturing View]',
+      'ASIN,Product title,Brand,Store code,Ordered revenue,Ordered units',
+      'B012345678,"Product A","Brand X",FR,1000.00,10',
+      'B012345678,"Product A","Brand X",DE,2000.00,20',
+      'B098765432,"Product B","Brand Y",FR,500.00,5',
+      'B098765432,"Product B","Brand Y",DE,750.00,8',
+    ].join('\n');
+    return parseVCFile(csv, 'test_multi.csv');
+  });
+
+  expect(result.ok, 'multi-pays ok=true attendu : ' + JSON.stringify(result.errors)).toBe(true);
+  expect(result.isMultiCountry).toBe(true);
+  expect(result.aggregationApplied).toBe(true);
+  expect(result.rows.length).toBe(2);   // 1 ligne / ASIN après agrégation
+  const rA = result.rows.find(r => r.asin === 'B012345678');
+  const rB = result.rows.find(r => r.asin === 'B098765432');
+  expect(rA, 'B012345678 absent').toBeTruthy();
+  expect(rA.ordered_revenue).toBeCloseTo(3000, 1);   // 1000 + 2000
+  expect(rA.ordered_units).toBe(30);                  // 10 + 20
+  expect(rB.ordered_revenue).toBeCloseTo(1250, 1);   // 500 + 750
+  expect(rB.ordered_units).toBe(13);                  // 5 + 8
+  console.log('  OK V6b multi-pays — ' + result.rows.length + ' ASINs agrégés, FR+DE sommés');
+});
+
+// V6c — parseVCFile type non reconnu → erreur bloquante (anti-parser silencieux)
+test('V6c — VC parser type inconnu : erreur bloquante ok=false', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(() => {
+    const csv = [
+      '',
+      'SKU,EAN,Designation,Code Vie',
+      'REF-001,1234567890123,Produit Test,PERM',
+      'REF-002,9876543210987,Produit Test 2,NEG',
+    ].join('\n');
+    return parseVCFile(csv, 'erp_export.csv');
+  });
+
+  expect(result.ok).toBe(false);
+  expect(result.errors.length).toBeGreaterThan(0);
+  expect(result.errors[0].toLowerCase()).toMatch(/vendor central|format non reconnu/i);
+  console.log('  OK V6c type inconnu bloqué : ' + result.errors[0].substring(0, 70));
+});
+
+// V6d — parseVCFile FR headers (accents natifs Amazon → vcNorm → match dict ASCII)
+test('V6d — VC parser FR headers accentes : mapping correct', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(() => {
+    // Headers FR avec accents natifs Amazon Vendor Central
+    const csv = [
+      "locale=[fr_FR];distributor view=[Vue de fabrication]",
+      "ASIN,Nom du produit,Marque,Chiffre d’affaires basé sur les commandes,Unités commandées,Chiffre d’affaires basé sur les expéditions,Unités expédiées",
+      'B012345678,"Produit A","Marque X",9999.99,80,8800.00,72',
+      'B098765432,"Produit B","Marque Y",4321.00,35,4000.00,30',
+    ].join('\n');
+    return parseVCFile(csv, 'ventes_fr.csv');
+  });
+
+  expect(result.ok, 'FR headers ok=true attendu : ' + JSON.stringify(result.errors)).toBe(true);
+  expect(result.vcType).toBe('ventes_fab');
+  expect(result.language).toBe('fr');
+  expect(result.rows.length).toBe(2);
+  const r0 = result.rows.find(r => r.asin === 'B012345678');
+  expect(r0, 'B012345678 absent').toBeTruthy();
+  expect(r0.ordered_revenue).toBeCloseTo(9999.99, 1);
+  expect(r0.ordered_units).toBe(80);
+  console.log('  OK V6d FR headers — vcNorm accentués → match dict ASCII, vcType=' + result.vcType);
+});
+
+// V6e — detectVCFileType unit : trafic, ventes_fab, stock_fab, null
+test('V6e — detectVCFileType : signature colonnes -> type correct', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const results = await page.evaluate(() => {
+    return {
+      trafic:      detectVCFileType(['ASIN','Product title','Featured offer page views','Ordered units']),
+      ventes_fab:  detectVCFileType(['ASIN','Product title','Ordered revenue','Ordered units','Dispatched revenue']),
+      ventes_app:  detectVCFileType(['ASIN','Product title','Dispatched revenue','Dispatched units']),
+      stock_fab:   detectVCFileType(['ASIN','Sellable On Hand Inventory','Sellable On Hand Units','Sourceable product OOS %']),
+      stock_app:   detectVCFileType(['ASIN','Sellable On Hand Inventory','Vendor confirmation %']),
+      inconnu:     detectVCFileType(['SKU','EAN','Designation']),
+    };
+  });
+
+  expect(results.trafic).toBe('trafic');
+  expect(results.ventes_fab).toBe('ventes_fab');
+  expect(results.ventes_app).toBe('ventes_approv');
+  expect(results.stock_fab).toBe('stock_fab');
+  expect(results.stock_app).toBe('stock_approv');
+  expect(results.inconnu).toBeNull();
+  console.log('  OK V6e detectVCFileType — 5 types + null correct');
+});
+
+// V6f — vcNorm : accents, apostrophes typo, espaces irréguliers
+test('V6f — vcNorm : normalisation accents + apostrophes + espaces', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const results = await page.evaluate(() => {
+    // apostrophe courbe \u2019, accents \u00e9/\u00e0, tiret cadatin \u2013, NBSP \u00a0
+    return {
+      accent:    vcNorm("Chiffre d\u2019affaires bas\u00e9 sur les commandes"),
+      nbsp:      vcNorm("Vues de la page\u00a0"),
+      tiret:     vcNorm("Sell\u2013through %"),
+      majuscule: vcNorm("ORDERED REVENUE"),
+      combined:  vcNorm("  Unit\u00e9s command\u00e9es  "),
+    };
+  });
+
+  // \u2019 apostrophe courbe -> ASCII '  +  accents NFD supprim\u00e9s
+  expect(results.accent).toBe("chiffre d'affaires base sur les commandes");
+  // \u00a0 NBSP -> espace simple
+  expect(results.nbsp).toBe('vues de la page');
+  // \u2013 tiret cadratin -> -
+  expect(results.tiret).toBe('sell-through %');
+  expect(results.majuscule).toBe('ordered revenue');
+  expect(results.combined).toBe('unites commandees');
+  console.log('  OK V6f vcNorm -- accents/apostrophes/espaces normalises');
+});
+
+// V6g — parseVCFile EN stock_fab : sellable + OOS détectés
+test('V6g — VC parser EN stock_fab : sellable_on_hand + sourceable_oos', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(() => {
+    const csv = [
+      '',
+      'ASIN,Product title,Brand,Sellable On Hand Inventory,Sellable On Hand Units,Unsellable On Hand Units,Sourceable product OOS %,Unhealthy Inventory',
+      'B012345678,"Product A","Brand X",25000.00,500,10,"12 %",3000.00',
+      'B098765432,"Product B","Brand Y",0,0,5,"85 %",0',
+      'B0AABBCCDD,"Product C","Brand Z",8500.00,120,2,"0 %",500.00',
+    ].join('\n');
+    return parseVCFile(csv, 'stock_fab.csv');
+  });
+
+  expect(result.ok, 'EN stock_fab ok=true : ' + JSON.stringify(result.errors)).toBe(true);
+  expect(result.vcType).toBe('stock_fab');
+  expect(result.rows.length).toBe(3);
+  const r0 = result.rows.find(r => r.asin === 'B012345678');
+  expect(r0.sellable_on_hand_inventory).toBeCloseTo(25000, 0);
+  expect(r0.sellable_on_hand_units).toBe(500);
+  expect(r0.unhealthy_inventory).toBeCloseTo(3000, 0);
+  expect(r0.sourceable_oos_pct).toBe('12 %');  // ratio : premier marché
+  console.log('  OK V6g stock_fab — vcType=stock_fab, sellable+OOS mappés');
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V7 — smoke_history : IDB v5 store présent + 1 mesure enregistrée
+// Valide AJOUT 2 : collecte historique smoke par client
+// ─────────────────────────────────────────────────────────────────────────
+test('V7 — smoke_history : IDB v5 store + saveSmokeHistory ecrit une mesure', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(async () => {
+    // ── Partie A : vérifier le store IDB v5 ────────────────────────────
+    const storeCheck = await new Promise((resolve) => {
+      const req = indexedDB.open('AmazonPilot', 5);
+      req.onsuccess = () => {
+        const db = req.result;
+        resolve({
+          dbVersion: db.version,
+          hasStore: db.objectStoreNames.contains('smoke_history'),
+          allStores: Array.from(db.objectStoreNames),
+        });
+      };
+      req.onerror = () => resolve({ dbVersion: -1, hasStore: false, error: 'open failed' });
+    });
+    if (!storeCheck.hasStore) return { ...storeCheck, count: 0, writeOk: false };
+
+    // ── Partie B : appel direct saveSmokeHistory (unit test) ───────────
+    // Appel sans passer par smokeTest — teste uniquement la brique IDB
+    if (typeof saveSmokeHistory !== 'function') {
+      return { ...storeCheck, count: 0, writeOk: false, error: 'saveSmokeHistory undefined' };
+    }
+    await saveSmokeHistory('smoketest_v7', 'SMOKE TEST V7', {
+      CA_2024: 0, CA_2025: 0, CA_semaine: 500, nb_asins: 1, nb_units: 5
+    });
+    await new Promise(r => setTimeout(r, 300));
+
+    // ── Partie C : compter les entrées ────────────────────────────────
+    const count = await new Promise((resolve) => {
+      const req2 = indexedDB.open('AmazonPilot', 5);
+      req2.onsuccess = () => {
+        const db2 = req2.result;
+        const tx = db2.transaction(['smoke_history'], 'readonly');
+        const cr = tx.objectStore('smoke_history').count();
+        cr.onsuccess = () => resolve(cr.result);
+        cr.onerror   = () => resolve(-1);
+      };
+      req2.onerror = () => resolve(-1);
+    });
+
+    return { ...storeCheck, count, writeOk: count >= 1 };
+  });
+
+  expect(result.hasStore,  'Store smoke_history absent (IDB v5 migration échouée)').toBe(true);
+  expect(result.dbVersion, 'IDB version attendue 5').toBe(5);
+  expect(result.writeOk,   'saveSmokeHistory n\'a pas écrit de mesure (count=' + result.count + ')').toBe(true);
+  console.log('  OK V7 smoke_history — IDB v' + result.dbVersion + ', stores=' + result.allStores.join(',') + ', count=' + result.count);
 });

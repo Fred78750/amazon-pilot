@@ -1,3 +1,9 @@
+// Amazon Pilot — Smoke Test (v3.6.6.1)
+// V9 conditionnel par client + collecte historique smoke_history (IDB v5)
+
+// ─────────────────────────────────────────────────────────────────────────
+// SMOKE_REF : valeurs globales de référence (rétro-compatibilité tests V4)
+// ─────────────────────────────────────────────────────────────────────────
 const SMOKE_REF = {
   ca2024:  { val: 1547729, tol: 0.02, expiry: '2026-12-31', label: 'CA 2024' }, // recalibré 2026-05-18 après reimport Cogex
   ca2025:  { val: 1166183, tol: 0.02, expiry: '2027-12-31', label: 'CA 2025' }, // recalibré 2026-05-18 après reimport Cogex
@@ -5,20 +11,40 @@ const SMOKE_REF = {
   asinRef: { asin: 'B009G3EMDI', label: 'ASIN B009G3EMDI cohérence pipeline' }
 };
 
+// ─────────────────────────────────────────────────────────────────────────
+// SMOKE_REF_BY_CLIENT : calibration par client
+// Clients absents → V9 silencieux (info console + skip, pas d'alerte rouge)
+// Calibration future via accumulation historique smoke_history (~6 mois min)
+// ─────────────────────────────────────────────────────────────────────────
+const SMOKE_REF_BY_CLIENT = {
+  'cogex': {
+    CA_2024:  { value: 1547729, tolerance: 0.02, expiry: '2026-12-31', label: 'CA 2024' },
+    CA_2025:  { value: 1166183, tolerance: 0.02, expiry: '2027-12-31', label: 'CA 2025' },
+    asinMin:  { value: 1500,  label: 'ASINs catalogue >= 1500' },
+    asinRef:  { asin: 'B009G3EMDI', label: 'ASIN réf. B009G3EMDI' },
+  },
+  // Gers, autres clients : calibration à venir après 6+ mois d'historique
+};
+
 async function smokeTest(silent) {
   const now = new Date();
   const results = { vital: [], important: [], ts: now.toISOString(), version: APP_VERSION };
   const pass = (lvl, id, lbl) => results[lvl].push({ id, label: lbl, ok: true });
   const fail = (lvl, id, lbl, msg) => results[lvl].push({ id, label: lbl, ok: false, msg });
-  const refExpired = (ref) => ref.expiry && new Date(ref.expiry) < now;
+  const refExpiredByDate = (expiry) => expiry && new Date(expiry) < now;
   const inTol = (v, ref, tol) => v >= ref * (1-tol) && v <= ref * (1+tol);
   const getErr = () => { const e = document.querySelector('.alr-r'); return e && e.textContent.includes('Erreur') ? e.textContent.slice(0,80) : null; };
 
   // V1 — Client actif
   const c = typeof cl === 'function' ? cl() : null;
-  if (c && c.name && c.asins && c.asins.length >= SMOKE_REF.asinMin.val)
+  // Calibration client : lookup SMOKE_REF_BY_CLIENT par c.id (lowercase)
+  const clientId  = c?.id ? String(c.id).toLowerCase().trim() : null;
+  const clientCal = clientId ? (SMOKE_REF_BY_CLIENT[clientId] || null) : null;
+  // Seuil ASINs : calibré si connu, sinon 1 ASIN minimum
+  const asinMinReq = clientCal?.asinMin?.value || 1;
+  if (c && c.name && c.asins && c.asins.length >= asinMinReq)
     pass('vital','V1', 'Client actif : ' + c.name + ' (' + c.asins.length + ' ASINs)');
-  else fail('vital','V1','Client actif', !c ? 'Aucun client' : 'Seulement ' + (c?.asins?.length||0) + ' ASINs');
+  else fail('vital','V1','Client actif', !c ? 'Aucun client' : 'Seulement ' + (c?.asins?.length||0) + ' ASINs (min ' + asinMinReq + ')');
 
   // V2 — Tableau de bord
   try {
@@ -55,14 +81,15 @@ async function smokeTest(silent) {
 
   // V5 — Buy Box Phase 2 (carnet d'enquête v3.6.1 — dossier sans crash)
   try {
+    const refAsin = clientCal?.asinRef?.asin || SMOKE_REF.asinRef.asin;
     window._buyboxView = null; window._buyboxAsin = null; // reset état UI
-    if (typeof buyboxOpenCase === 'function' && c) buyboxOpenCase(c, SMOKE_REF.asinRef.asin);
-    window._buyboxView = 'case'; window._buyboxAsin = SMOKE_REF.asinRef.asin;
+    if (typeof buyboxOpenCase === 'function' && c) buyboxOpenCase(c, refAsin);
+    window._buyboxView = 'case'; window._buyboxAsin = refAsin;
     if (typeof render === 'function') render();
     await new Promise(r => setTimeout(r, 400));
     const e = getErr();
     const hasCase = document.body.innerHTML.includes('Carnet d\'enquête') || document.body.innerHTML.includes('Hypothèses');
-    if (!e && hasCase) pass('vital','V5','Buy Box Phase 2 ouvert (' + SMOKE_REF.asinRef.asin + ')');
+    if (!e && hasCase) pass('vital','V5','Buy Box Phase 2 ouvert (' + refAsin + ')');
     else fail('vital','V5','Buy Box Phase 2', e || 'DOM Carnet enquête absent');
     // Remettre sur vue liste avant de continuer
     window._buyboxView = 'list'; window._buyboxAsin = null;
@@ -99,62 +126,63 @@ async function smokeTest(silent) {
     else fail('vital','V8','Agent SEO', e || 'Contenu SEO absent');
   } catch(ex) { fail('vital','V8','Agent SEO', ex.message); }
 
-  // V9a — CA 2024
-  if (!refExpired(SMOKE_REF.ca2024)) {
-    const v = Math.round(c?.annualData?.['2024']?.ventes?.totalCA||0);
-    if (v === 0) pass('vital','V9a','CA 2024 : non importé (optionnel)');
-    else if (inTol(v, SMOKE_REF.ca2024.val, SMOKE_REF.ca2024.tol))
-      pass('vital','V9a','CA 2024 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
-    else fail('vital','V9a','CA 2024 dévié','Attendu ~' + SMOKE_REF.ca2024.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
-  }
-
-  // V9b — CA 2025
-  if (!refExpired(SMOKE_REF.ca2025)) {
-    const v = Math.round(c?.annualData?.['2025']?.ventes?.totalCA||0);
-    if (v === 0) pass('vital','V9b','CA 2025 : non importé (optionnel)');
-    else if (inTol(v, SMOKE_REF.ca2025.val, SMOKE_REF.ca2025.tol))
-      pass('vital','V9b','CA 2025 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
-    else fail('vital','V9b','CA 2025 dévié','Attendu ~' + SMOKE_REF.ca2025.val.toLocaleString('fr-FR') + ' ±1%, obtenu ' + v.toLocaleString('fr-FR'));
-  }
-
-  // V9c — ASINs catalogue
-  const asinCnt = c?.asins?.length||0;
-  if (asinCnt >= SMOKE_REF.asinMin.val) pass('vital','V9c','Catalogue : ' + asinCnt + ' ASINs');
-  else fail('vital','V9c','Catalogue ASINs', asinCnt + ' < minimum ' + SMOKE_REF.asinMin.val);
-
-  // V9d — ASIN de référence : invariants pipeline (PAS la santé business)
-  // v3.1.70 — On vérifie que l'import n'a pas cassé la cohérence des données,
-  //          pas que le CA est dans une fourchette (volatile par nature)
-  const refA = c?.asins?.find(a => a.asin === SMOKE_REF.asinRef.asin);
-  if (!refA) {
-    fail('vital','V9d','ASIN réf. ABSENT du catalogue après import', SMOKE_REF.asinRef.asin);
+  // ── V9 — Tests calibrés par client ────────────────────────────────────
+  // Si client non calibré dans SMOKE_REF_BY_CLIENT → skip silencieux
+  if (!clientCal) {
+    console.info('[INFO] SMOKE_REF non calibré pour ce client (' + (c?.name || clientId || 'inconnu') +
+      '). Test en phase d\'apprentissage — historique en cours de constitution.');
   } else {
-    const rev = Math.round(refA.revenue || 0);
-    const units = refA.units || refA.orderedUnits || 0;
-    const checks = [];
-
-    // Invariant 1 : cohérence units/revenue (l'un sans l'autre = parser cassé)
-    // Seuil rev>500 pour éviter faux positif sur commandes non encore expédiées (orderedRevenue>0, shippedUnits=0)
-    if (units > 0 && rev === 0) checks.push('units=' + units + ' mais revenue=0 (parser CA cassé ?)');
-    if (rev > 500 && units === 0) checks.push('revenue=' + rev + '€ mais units=0 (parser units cassé ?)');
-
-    // Invariant 2 : ratio prix unitaire dans [0,1€ ; 1000€]
-    // Détecte erreur virgule décimale, unité monétaire, ou colonne mal mappée
-    if (rev > 0 && units > 0) {
-      const prixUnit = rev / units;
-      if (prixUnit < 0.1) checks.push('prix unitaire ' + prixUnit.toFixed(2) + '€ anormalement bas');
-      if (prixUnit > 1000) checks.push('prix unitaire ' + prixUnit.toFixed(2) + '€ anormalement haut');
+    // V9a — CA 2024
+    if (clientCal.CA_2024 && !refExpiredByDate(clientCal.CA_2024.expiry)) {
+      const v = Math.round(c?.annualData?.['2024']?.ventes?.totalCA||0);
+      if (v === 0) pass('vital','V9a','CA 2024 : non importé (optionnel)');
+      else if (inTol(v, clientCal.CA_2024.value, clientCal.CA_2024.tolerance))
+        pass('vital','V9a','CA 2024 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
+      else fail('vital','V9a','CA 2024 dévié','Attendu ~' + clientCal.CA_2024.value.toLocaleString('fr-FR') + ' ±2%, obtenu ' + v.toLocaleString('fr-FR'));
     }
 
-    // Invariant 3 : title et brand non vides (sinon c'est un row tronqué à l'import)
-    if (!refA.title) checks.push('title vide');
-    if (!refA.brand) checks.push('brand vide');
+    // V9b — CA 2025
+    if (clientCal.CA_2025 && !refExpiredByDate(clientCal.CA_2025.expiry)) {
+      const v = Math.round(c?.annualData?.['2025']?.ventes?.totalCA||0);
+      if (v === 0) pass('vital','V9b','CA 2025 : non importé (optionnel)');
+      else if (inTol(v, clientCal.CA_2025.value, clientCal.CA_2025.tolerance))
+        pass('vital','V9b','CA 2025 stable : ' + v.toLocaleString('fr-FR') + ' EUR');
+      else fail('vital','V9b','CA 2025 dévié','Attendu ~' + clientCal.CA_2025.value.toLocaleString('fr-FR') + ' ±2%, obtenu ' + v.toLocaleString('fr-FR'));
+    }
 
-    if (checks.length === 0) {
-      const detail = rev === 0 ? 'pas de vente cette semaine (OK)' : rev + '€ / ' + units + 'u (cohérent)';
-      pass('vital','V9d','ASIN réf. ' + SMOKE_REF.asinRef.asin + ' : ' + detail);
-    } else {
-      fail('vital','V9d','ASIN réf. cohérence pipeline', checks.join(' | '));
+    // V9c — ASINs catalogue
+    if (clientCal.asinMin) {
+      const asinCnt = c?.asins?.length||0;
+      if (asinCnt >= clientCal.asinMin.value) pass('vital','V9c','Catalogue : ' + asinCnt + ' ASINs');
+      else fail('vital','V9c','Catalogue ASINs', asinCnt + ' < minimum ' + clientCal.asinMin.value);
+    }
+
+    // V9d — ASIN de référence : invariants pipeline (PAS la santé business)
+    // v3.1.70 — cohérence units/revenue, ratio prix, title/brand non vides
+    if (clientCal.asinRef) {
+      const refA = c?.asins?.find(a => a.asin === clientCal.asinRef.asin);
+      if (!refA) {
+        fail('vital','V9d','ASIN réf. ABSENT du catalogue après import', clientCal.asinRef.asin);
+      } else {
+        const rev   = Math.round(refA.revenue || 0);
+        const units = refA.units || refA.orderedUnits || 0;
+        const checks = [];
+        if (units > 0 && rev === 0) checks.push('units=' + units + ' mais revenue=0 (parser CA cassé ?)');
+        if (rev > 500 && units === 0) checks.push('revenue=' + rev + '€ mais units=0 (parser units cassé ?)');
+        if (rev > 0 && units > 0) {
+          const prixUnit = rev / units;
+          if (prixUnit < 0.1) checks.push('prix unitaire ' + prixUnit.toFixed(2) + '€ anormalement bas');
+          if (prixUnit > 1000) checks.push('prix unitaire ' + prixUnit.toFixed(2) + '€ anormalement haut');
+        }
+        if (!refA.title) checks.push('title vide');
+        if (!refA.brand) checks.push('brand vide');
+        if (checks.length === 0) {
+          const detail = rev === 0 ? 'pas de vente cette semaine (OK)' : rev + '€ / ' + units + 'u (cohérent)';
+          pass('vital','V9d','ASIN réf. ' + clientCal.asinRef.asin + ' : ' + detail);
+        } else {
+          fail('vital','V9d','ASIN réf. cohérence pipeline', checks.join(' | '));
+        }
+      }
     }
   }
 
@@ -228,6 +256,22 @@ async function smokeTest(silent) {
   };
   try { localStorage.setItem('ap-smoketest-last', JSON.stringify(results)); } catch(e) {}
   if (!silent) renderSmokeResult(results);
+
+  // ── AJOUT 2 — Collecte historique smoke (IDB smoke_history) ──────────
+  // Enregistrement systématique, quel que soit le client (calibré ou non)
+  if (typeof saveSmokeHistory === 'function' && c && c.id) {
+    const measures = {
+      CA_2024:    Math.round(c?.annualData?.['2024']?.ventes?.totalCA || 0),
+      CA_2025:    Math.round(c?.annualData?.['2025']?.ventes?.totalCA || 0),
+      CA_semaine: Math.round((c?.asins || []).reduce(function(s, a) {
+        return s + (typeof getRevenue === 'function' ? (getRevenue(a, c) || 0) : (a.revenue || 0));
+      }, 0)),
+      nb_asins:   (c?.asins || []).length,
+      nb_units:   Math.round((c?.asins || []).reduce(function(s, a) { return s + (a.units || 0); }, 0)),
+    };
+    saveSmokeHistory(c.id, c.name || c.id, measures);
+  }
+
   return results;
 }
 
