@@ -26,6 +26,16 @@ const YOY_MIN_DAYS = 60;
 // Seuils adaptatifs (titre + couleur selon delta)
 const YOY_THRESHOLD_PCT = 3; // ±3% → stable
 
+// ── v3.6.7 — Seuils warnings YoY + éveil 80/20 ────────────────
+const YOY_WARNING_THRESHOLDS = {
+  W1_CA_BAISSE_PCT:        20,   // W1 : CA période A < référence − 20 %
+  W2_CONC_DELTA_PTS:       10,   // W2 : concentration Top10 A > Top10 Réf + 10 pts
+  W3_CATALOGUE_BAISSE_PCT: 30,   // W3 : nb ASINs vendus A < référence − 30 %
+  EVEIL_SEUIL_EUR_MOIS:  5000,   // Éveil 80/20 : seuil d'affichage (€/mois)
+  EVEIL_ASINS_MIN:         10,   // Éveil 80/20 : nb ASINs en érosion minimum
+  EVEIL_MONTANT_MIN:     1000    // Garde-fou : ne pas afficher si érosion < 1 000 €/mois
+};
+
 // Colonnes CSV Vendor Central attendues (mapping noms → clé interne)
 // Vendor Central France exporte avec ces intitulés exacts
 const YOY_COL_MAP = {
@@ -247,6 +257,189 @@ function renderYoYProgress() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// WARNINGS v3.6.7 — Calcul + rendu cartes d'alerte + éveil 80/20
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * calcYoYWarnings(d, t)
+ * Évalue W1/W2/W3 sur les dimensions déjà calculées.
+ * Retourne un tableau de warnings déclenchés (vide si aucun seuil franchi).
+ */
+function calcYoYWarnings(d, t) {
+  var warnings = [];
+  var dim1 = d.dim1 || {};
+  var dim7 = d.dim7 || {};
+  var dim9 = d.dim9 || {};
+  var thr  = YOY_WARNING_THRESHOLDS;
+
+  // ── W1 — Baisse CA significative ─────────────────────────────
+  if (dim1.deltaCAPct != null && dim1.deltaCAPct < -(thr.W1_CA_BAISSE_PCT)) {
+    var pctAbs = Math.abs(dim1.deltaCAPct).toFixed(1).replace('.', ',');
+    var asinIdsW1 = (dim7.enBaisse || []).map(function(a){ return a.asin; });
+    warnings.push({
+      id: 'W1', level: 'critique',
+      label: 'Votre CA baisse de ' + pctAbs + ' % — situation à investiguer',
+      detail: 'Le CA période A est inférieur de plus de ' + thr.W1_CA_BAISSE_PCT + ' % à la référence.',
+      asinIds: asinIdsW1,
+      ctaLabel: 'Enquêter →',
+      filterLabel: 'W1 — ASINs CA en baisse'
+    });
+  }
+
+  // ── W2 — Concentration accrue ─────────────────────────────────
+  var concA10  = dim9.concA   && dim9.concA.top10   != null ? dim9.concA.top10   : null;
+  var concRef10 = dim9.concRef && dim9.concRef.top10 != null ? dim9.concRef.top10 : null;
+  if (concA10 !== null && concRef10 !== null && (concA10 - concRef10) > thr.W2_CONC_DELTA_PTS) {
+    var delta10Str = (concA10 - concRef10).toFixed(1).replace('.', ',');
+    var concA10Str  = concA10.toFixed(1).replace('.', ',');
+    var concR10Str  = concRef10.toFixed(1).replace('.', ',');
+    // Top 10 ASIN IDs de la période A : enHausse + stables triés par CA période A
+    var asinIdsW2 = (dim7.enHausse || []).concat(dim7.stables || [])
+      .sort(function(a,b){ return b.caAPerDay - a.caAPerDay; })
+      .slice(0, 10).map(function(a){ return a.asin; });
+    warnings.push({
+      id: 'W2', level: 'attention',
+      label: 'Concentration accrue : +' + delta10Str + ' pts sur le Top 10 — fragilité catalogue',
+      detail: 'Part Top 10 : ' + concR10Str + ' % (réf.) → ' + concA10Str + ' % (période A).',
+      asinIds: asinIdsW2,
+      ctaLabel: 'Enquêter →',
+      filterLabel: 'W2 — Top 10 concentration accrue'
+    });
+  }
+
+  // ── W3 — Catalogue actif contracté ───────────────────────────
+  var nbA   = (dim7.apparus||[]).length + (dim7.stables||[]).length
+            + (dim7.enBaisse||[]).length + (dim7.enHausse||[]).length;
+  var nbRef = (dim7.disparus||[]).length + (dim7.stables||[]).length
+            + (dim7.enBaisse||[]).length + (dim7.enHausse||[]).length;
+  if (nbRef > 0 && nbA < nbRef * (1 - thr.W3_CATALOGUE_BAISSE_PCT / 100)) {
+    var pctBaisseW3 = Math.round((1 - nbA / nbRef) * 100);
+    var nbDisparus  = (dim7.disparus || []).length;
+    var asinIdsW3   = (dim7.disparus || []).map(function(a){ return a.asin; });
+    warnings.push({
+      id: 'W3', level: 'critique',
+      label: 'Catalogue contracté de ' + pctBaisseW3 + ' % — ' + nbDisparus + ' ASINs disparus',
+      detail: 'ASINs actifs : ' + nbRef + ' (réf.) → ' + nbA + ' (période A).',
+      asinIds: asinIdsW3,
+      ctaLabel: 'Enquêter →',
+      filterLabel: 'W3 — ASINs disparus du catalogue'
+    });
+  }
+
+  return warnings;
+}
+
+/**
+ * renderYoYWarningCards(warnings, analysis)
+ * Retourne le HTML des cartes d'alerte (rouge/orange) avec CTA "Enquêter →".
+ */
+function renderYoYWarningCards(warnings, analysis) {
+  if (!warnings || !warnings.length) return '';
+  var html = '<div class="yoy-warnings" style="margin-bottom:24px">';
+  warnings.forEach(function(w) {
+    var isCrit      = w.level === 'critique';
+    var borderColor = isCrit ? '#b91c1c' : '#d97706';
+    var bgColor     = isCrit ? 'rgba(185,28,28,0.06)' : 'rgba(217,119,6,0.06)';
+    var icon        = isCrit ? '🔴' : '🟠';
+    var asinIdsJson = JSON.stringify(w.asinIds || []);
+    // Échapper les apostrophes pour l'attribut onclick inline
+    var filterLabelJs = (w.filterLabel || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    html += '<div style="border:1.5px solid ' + borderColor + ';border-radius:10px;padding:14px 16px;'
+          + 'background:' + bgColor + ';display:flex;align-items:center;gap:14px;margin-bottom:10px;flex-wrap:wrap">'
+      + '<div style="font-size:20px;flex-shrink:0">' + icon + '</div>'
+      + '<div style="flex:1;min-width:200px">'
+      + '<div style="font-weight:700;color:' + borderColor + ';font-size:13px;margin-bottom:3px">' + esc(w.label) + '</div>'
+      + '<div style="font-size:11px;color:var(--tx3)">' + esc(w.detail) + '</div>'
+      + '</div>'
+      + '<button class="btn btn-sm" style="flex-shrink:0;border-color:' + borderColor + ';color:' + borderColor + '" '
+      + 'onclick="goToAsinsYoY(' + asinIdsJson + ',\'' + filterLabelJs + '\')">'
+      + esc(w.ctaLabel) + '</button>'
+      + '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+/**
+ * calcEveil8020(c)
+ * Calcule l'érosion silencieuse de la longue traîne sur c.asins[].
+ * Retourne {asins, nbAsins, montant} si le seuil est franchi, null sinon.
+ */
+function calcEveil8020(c) {
+  if (!c || !c.asins || !c.asins.length) return null;
+  var thr = YOY_WARNING_THRESHOLDS;
+  // Utiliser les fonctions de core.js si disponibles (contexte browser)
+  var getRevFn   = typeof getRevenue === 'function' ? getRevenue : function(a){ return a.orderedRevenue || a.shippedRevenue || 0; };
+  var parseNumFn = typeof parseNum   === 'function' ? parseNum   : parseFloat;
+
+  // Trier par CA décroissant
+  var sorted = c.asins.slice().sort(function(a,b){ return (getRevFn(b,c)||0) - (getRevFn(a,c)||0); });
+  var totalCA = sorted.reduce(function(s,a){ return s + (getRevFn(a,c)||0); }, 0);
+  if (totalCA <= 0) return null;
+
+  // Identifier la longue traîne = ASINs au-delà du seuil 80 % du CA
+  var cumulCA = 0;
+  var threshold80 = totalCA * 0.80;
+  var longueTraine = [];
+  for (var i = 0; i < sorted.length; i++) {
+    cumulCA += (getRevFn(sorted[i],c)||0);
+    if (cumulCA >= threshold80) {
+      longueTraine = sorted.slice(i + 1);
+      break;
+    }
+  }
+  if (!longueTraine.length) return null;
+
+  // Garder les ASINs en érosion (revenueDelta négatif)
+  var enErosion = longueTraine.filter(function(a){ return parseNumFn(a.revenueDelta) < 0; });
+  if (enErosion.length < thr.EVEIL_ASINS_MIN) return null;
+
+  // Érosion hebdo → mensuelle
+  var erosionHebdo = enErosion.reduce(function(s,a){
+    var rev   = getRevFn(a,c) || 0;
+    var delta = Math.abs(parseNumFn(a.revenueDelta) || 0);
+    return s + (rev * delta / 100);
+  }, 0);
+  var erosionMois = Math.round(erosionHebdo * 4.33);
+
+  // Gardes-fous anti-bruit
+  if (erosionMois < thr.EVEIL_MONTANT_MIN)    return null;
+  if (erosionMois < thr.EVEIL_SEUIL_EUR_MOIS) return null;
+
+  return { asins: enErosion, nbAsins: enErosion.length, montant: erosionMois };
+}
+
+/**
+ * renderEveil8020Block(c) — CTA 12
+ * Retourne le HTML du pavé d'éveil longue traîne (Dashboard + Revue Hebdo).
+ * Retourne '' si l'érosion est sous seuil.
+ */
+function renderEveil8020Block(c) {
+  var data = calcEveil8020(c);
+  if (!data) return '';
+  var asinIds      = data.asins.map(function(a){ return a.asin; });
+  var asinIdsJson  = JSON.stringify(asinIds);
+  var montantFmt   = data.montant.toLocaleString('fr-FR') + ' €/mois';
+  var filterLabel  = 'Longue traîne en érosion';
+  var filterLabelJs = filterLabel.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  return '<div class="cd" style="border-left:4px solid #d97706;background:rgba(217,119,6,0.05);padding:12px 16px;margin-bottom:16px">'
+    + '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+    + '<div style="flex:1;min-width:180px">'
+    + '<div style="font-weight:700;font-size:13px;color:#d97706">'
+    + '🔍 ' + data.nbAsins + ' ASINs longue traîne en érosion</div>'
+    + '<div style="font-size:12px;color:var(--tx2);margin-top:3px">'
+    + 'Perte estimée : <strong>' + montantFmt + '</strong></div>'
+    + '</div>'
+    + '<button class="btn btn-sm" style="flex-shrink:0;border-color:#d97706;color:#d97706" '
+    + 'onclick="goToAsinsYoY(' + asinIdsJson + ',\'' + filterLabelJs + '\')">'
+    + 'Voir les ASINs en érosion →</button>'
+    + '</div>'
+    + '</div>';
+}
+// Export pour core.js (chargé avant yoy.js dans le bundle, donc window ici)
+window.renderEveil8020Block = renderEveil8020Block;
+
 // ÉCRAN DE RÉSULTAT (placeholder CP1 — contenu CP2+)
 // ═══════════════════════════════════════════════════════════════
 
@@ -840,6 +1033,10 @@ function renderYoYResult() {
     + tplConclusion(d, sign, clientName)
     + '</div>';
 
+  // ── v3.6.7 — Warnings YoY ────────────────────────────────────────
+  const _warnings = calcYoYWarnings(d, t);
+  const _warningCardsHtml = _warnings.length ? renderYoYWarningCards(_warnings, a) : '';
+
   return `<div style="max-width:960px;margin:0 auto;padding:24px 20px" class="yoy-result-root">
 
     <!-- En-tête -->
@@ -911,6 +1108,7 @@ function renderYoYResult() {
       </div>
 
     </div>
+    ${_warningCardsHtml}
     <!-- 6 sections analytiques -->
     ${sec('s1', s1Title, s1Table, s1Lecture, s1Verdict)}
     ${sec('s2', s2Title, s2Table, s2Lecture, s2Verdict)}
