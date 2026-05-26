@@ -106,6 +106,8 @@ let asinSortDir = 'desc'; // direction tri colonne
 let asinLimit  = 50;
 let asinView   = 'all';    // 'all' | 'lowstock' | 'declining' | 'growing' | 'seg-a' | 'seg-b' | 'seg-c'
 let asinViewAsins = null;  // liste des ASINs filtrés par la vue active (null = pas de filtre)
+let asinViewCustomIds = null; // v3.6.7 — liste ASIN IDs pour filtre YoY (CTA 11 / CTA 12)
+let asinViewLabel = '';       // v3.6.7 — libellé du badge filtre YoY
 let asinSearch = ''; // recherche texte ASIN/SKU/titre
 let _searchTimer = null;
 function debouncedRender() {
@@ -4204,6 +4206,9 @@ function renderWeeklyReview() {
     </div>
   </div>`;
 
+  // v3.6.7 — Pavé éveil 80/20 longue traîne (CTA 12)
+  h += typeof renderEveil8020Block === 'function' ? renderEveil8020Block(c) : '';
+
   // ── Bannière congés active ──
   if (away) {
     const retourDate = awayUntilDate.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -4704,6 +4709,9 @@ function renderDashboard() {
   h += `<div class="kpi${declineN>0?' al':''}"><div class="kpi-lb">CA en baisse</div><div class="kpi-v">${declineN}</div>${dashPeriodTag}</div>`;
   h += `<div class="kpi${lowStockN>0?' warn':''}"><div class="kpi-lb">Stock faible</div><div class="kpi-v">${lowStockN}</div></div>`;
   h += `</div>`;
+
+  // v3.6.7 — Pavé éveil 80/20 longue traîne (CTA 12)
+  h += typeof renderEveil8020Block === 'function' ? renderEveil8020Block(c) : '';
 
   if (!dashWeeklyActiveMkt) dashWeeklyActiveMkt = c.mainMarket || '.fr';
   const _dwMkts = c.markets && c.markets.length ? c.markets : [c.mainMarket || '.fr'];
@@ -5271,6 +5279,17 @@ function renderAsins() {
       h += '<button class="btn btn-sm" onclick="exportViewXlsx()">⬇ XLSX (' + (asinViewAsins?.length || 0) + ')</button>';
       h += '<button class="btn btn-sm" onclick="exportViewCsv()">⬇ CSV</button>';
       h += '</div></div>';
+    }
+    // v3.6.7 — Badge filtre YoY (CTA 11 / CTA 12)
+    if (asinView === 'yoy-warning' && asinViewLabel) {
+      const nbYoY = asinViewAsins ? asinViewAsins.length : 0;
+      const labelNote = nbYoY === 0
+        ? ' — <em style="color:var(--tx3)">Ces ASINs ne figurent pas dans le catalogue actif</em>'
+        : '';
+      h += '<div style="padding:10px 14px;background:rgba(217,119,6,0.08);border:1px solid #d97706;border-radius:var(--rdl);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">';
+      h += '<div style="flex:1"><div style="font-weight:600;font-size:13px;color:#d97706">🔍 Filtré par : ' + esc(asinViewLabel) + ' (' + nbYoY + ' ASINs)' + labelNote + '</div></div>';
+      h += '<button class="btn btn-xs" style="color:var(--tx3)" onclick="asinView=\'all\';asinViewAsins=null;asinViewCustomIds=null;asinViewLabel=\'\';asinSort=\'ca_desc\';render()">✕ Retirer le filtre</button>';
+      h += '</div>';
     }
 
     // ── Filtres enrichis ──────────────────────────────────────────
@@ -9812,12 +9831,23 @@ function goFilteredAsins(preset) {
   } else if (preset === 'seg-c') {
     asinSort = 'ca_desc';
     asinViewAsins = allAsins.filter(a => calcSegment(a, totalCA, c) === 'C').map(a => a.asin);
+  } else if (preset === 'yoy-warning') {
+    // v3.6.7 — CTA 11 / CTA 12 : filtre YoY par liste d'ASIN IDs
+    asinSort = 'baisse';
+    asinViewAsins = (asinViewCustomIds && asinViewCustomIds.length) ? asinViewCustomIds.slice() : [];
   } else {
     asinSort = 'ca_desc';
     asinViewAsins = null;
   }
   render();
 }
+// v3.6.7 — CTA 11 / CTA 12 : navigation vers Analyse ASINs avec filtre YoY
+function goToAsinsYoY(asinIds, label) {
+  asinViewCustomIds = Array.isArray(asinIds) && asinIds.length ? asinIds : [];
+  asinViewLabel     = label || 'Filtré par YoY';
+  goFilteredAsins('yoy-warning');
+}
+
 function selClient(id) { activeId = id; screen = 'dashboard'; selectedAsin = null; aiResult = ''; render(); }
 function startOnboarding() { newClient = freshClient(); wizStep = 0; screen = 'onboarding'; render(); }
 function wizGo(step) { wizStep = step; render(); }
