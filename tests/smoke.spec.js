@@ -320,6 +320,134 @@ test('V5f — getStockERP retourne null pour cle inexistante', async ({ page }) 
 });
 
 // ─────────────────────────────────────────────────────────────────────────
+// V5g — ERP parser : format Gers nouveau (feuille Extraction, colonnes Gers)
+// v3.6.7.1 — SKU/Code Barre.../Stock dispo/Résa Amz/Dispo totale
+// ─────────────────────────────────────────────────────────────────────────
+test('V5g — ERP parser Gers nouveau format : feuille Extraction + colonnes Gers', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(async () => {
+    // Reproduire exactement le format du fichier 202605_Dispo_Amazon_Mai_26.xlsx
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      // Header en ligne 0 (index 0) — pas de ligne metadata
+      ['SKU', 'Code Barre / gencode / GTIN13', 'Désignation', 'Code vie', 'Code univers',
+       'Stock dispo', 'Résa Amz', 'Dispo totale', 'Quantité prochain arrivage', 'Date prochain arrivage'],
+      [140467, 3367301404676, 'EGOUTT PIN FIL MET PEINT 40X24', 'PERM', null,  538,  0, 538, 0,    null],
+      [141393, 3367304008987, 'UST SPATUL RACLETTE X6 HET',      'PERM', null,    0,  0,   0, 0,    null],
+      [141431, 3367304009366, 'CVLE ANTI GRAS INOX D16/18/20',   'PERM', null,    0, 60,  60, 1368, 46237],
+      [141432, 3367304009373, 'CVLE ANTI GRAS INOX D22/24/26',   'PERM', null,    0, 324, 324, 1728, 46296],
+      [141433, 3367304009380, 'CVLE ANTI GRAS INOX D28/30/32',   'PERM', null,  580,  36, 616, 1920, 46203],
+    ]);
+    // Feuille nommée "Extraction" (nom réel du fichier Gers)
+    XLSX.utils.book_append_sheet(wb, ws, 'Extraction');
+    const buf  = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const file = new File([buf], '202605_Dispo_Amazon_Mai_26.xlsx',
+      { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    return parseFileERP(file);
+  });
+
+  expect(result.ok,     'Parser format Gers doit retourner ok=true : ' + JSON.stringify(result.errors)).toBe(true);
+  expect(result.config, 'Config doit etre cumulated (Dispo totale present)').toBe('cumulated');
+  expect(result.rows.length, 'Doit charger 5 lignes').toBe(5);
+  // SKU en nombre → converti en string
+  expect(result.rows[0].sku,  'SKU ligne 1').toBe('140467');
+  expect(result.rows[0].stock_disponible_amazon, 'Dispo totale ligne 1 = 538').toBe(538);
+  expect(result.rows[2].sku,  'SKU ligne 3').toBe('141431');
+  expect(result.rows[2].stock_disponible_amazon, 'Dispo totale ligne 3 = 60').toBe(60);
+  // EAN mappé
+  expect(result.rows[0].ean, 'EAN ligne 1').toBe('3367301404676');
+  console.log('  OK V5g ERP Gers nouveau — ' + result.rows.length + ' lignes, config=' + result.config);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V5h — ERP parser : header en ligne 1 (index 0) détecté correctement
+// ─────────────────────────────────────────────────────────────────────────
+test('V5h — ERP parser : header index 0 detecte (pas de ligne metadata)', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(async () => {
+    const wb = XLSX.utils.book_new();
+    // Header directement en ligne 0, pas de ligne vide ou metadata avant
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['SKU', 'Stock dispo', 'Résa Amz', 'Dispo totale'],
+      ['REF-001', 100, 20, 120],
+      ['REF-002', 50,  10,  60],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Extraction');
+    const buf  = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const file = new File([buf], 'test_header_idx0.xlsx',
+      { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    return parseFileERP(file);
+  });
+
+  expect(result.ok,            'Header index 0 doit etre detecte').toBe(true);
+  expect(result.rows.length,   '2 lignes data attendues').toBe(2);
+  expect(result.rows[0].sku,   'SKU ligne 1').toBe('REF-001');
+  expect(result.rows[0].stock_disponible_amazon, 'Dispo totale = 120').toBe(120);
+  console.log('  OK V5h — header index 0 detecte, ' + result.rows.length + ' lignes');
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V5i — ERP parser : mapping "Dispo totale" → stock_total (config cumulated)
+// Vérifier que c'est la valeur de "Dispo totale" qui est utilisée, pas Stock dispo + Résa Amz
+// ─────────────────────────────────────────────────────────────────────────
+test('V5i — ERP parser : Dispo totale -> stock_disponible_amazon (config cumulated)', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(async () => {
+    const wb = XLSX.utils.book_new();
+    // Cas réel : Stock dispo=580, Résa Amz=36, Dispo totale=616 (≠ 580+36=616 ici, mais on vérifie la source)
+    // Cas avec différence volontaire pour confirmer que c'est Dispo totale qui est utilisée
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['SKU', 'Stock dispo', 'Résa Amz', 'Dispo totale'],
+      ['141433', 580, 36, 999],  // Dispo totale = 999 ≠ 580+36=616 → doit retourner 999
+      ['141434', 100,  0, 100],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Extraction');
+    const buf  = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const file = new File([buf], 'test_dispo_totale.xlsx',
+      { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    return parseFileERP(file);
+  });
+
+  expect(result.ok,            '"Dispo totale" doit etre acceptee').toBe(true);
+  expect(result.config,        'Config doit etre cumulated').toBe('cumulated');
+  // Valeur issue de Dispo totale (999), PAS de Stock dispo + Résa Amz (616)
+  expect(result.rows[0].stock_disponible_amazon, 'stock_disponible_amazon doit venir de Dispo totale (999)').toBe(999);
+  console.log('  OK V5i — Dispo totale utilisee: stock=' + result.rows[0].stock_disponible_amazon + ' (config=' + result.config + ')');
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V5j — ERP parser régression : ancien format "Stock_disponible_Amazon" toujours OK
+// ─────────────────────────────────────────────────────────────────────────
+test('V5j — ERP parser regression : ancien format Stock_disponible_Amazon toujours OK', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(async () => {
+    const wb = XLSX.utils.book_new();
+    // Ancien format avec nom de colonne standard "Stock_disponible_Amazon"
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['SKU', 'EAN', 'Designation', 'Code_Vie', 'Stock_disponible_Amazon', 'Date_prochain_arrivage'],
+      ['REF-001', '3367304009366', 'PRODUIT A', 'PERM', 60, '2026-08-03'],
+      ['REF-002', '3367304009373', 'PRODUIT B', 'PERM',  0, ''],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Stock_Amazon_Pilot');
+    const buf  = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const file = new File([buf], 'test_ancien_format.xlsx',
+      { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    return parseFileERP(file);
+  });
+
+  expect(result.ok,             'Ancien format doit toujours fonctionner').toBe(true);
+  expect(result.config,         'Ancien format config cumulated').toBe('cumulated');
+  expect(result.rows.length,    '2 lignes attendues').toBe(2);
+  expect(result.rows[0].sku,    'SKU').toBe('REF-001');
+  expect(result.rows[0].stock_disponible_amazon, 'Stock ancien = 60').toBe(60);
+  console.log('  OK V5j — ancien format OK, ' + result.rows.length + ' lignes, config=' + result.config);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
 // V6 — Parser VC multilingue (v3.6.6.1)
 // CSV inline : ligne 0 vide (metadata absente) → heuristique headers
 // ─────────────────────────────────────────────────────────────────────────
@@ -560,4 +688,200 @@ test('V7 — smoke_history : IDB v5 store + saveSmokeHistory ecrit une mesure', 
   expect(result.dbVersion, 'IDB version attendue 5').toBe(5);
   expect(result.writeOk,   'saveSmokeHistory n\'a pas écrit de mesure (count=' + result.count + ')').toBe(true);
   console.log('  OK V7 smoke_history — IDB v' + result.dbVersion + ', stores=' + result.allStores.join(',') + ', count=' + result.count);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V8a — Warning W1 : CA baisse > 20 %
+// ─────────────────────────────────────────────────────────────────────────
+test('V8a — Warning W1 declenche si CA -25%', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(() => {
+    if (typeof calcYoYWarnings !== 'function') return { ok: false, error: 'calcYoYWarnings undefined' };
+    const d = {
+      dim1: { deltaCAPct: -25, caA: 75000, caRef: 100000, deltaCAAnnu: -25000 },
+      dim7: { stables: [], enBaisse: [{ asin: 'B001TEST', titre: 'Test', caAPerDay: 100, caRefPerDay: 150, deltaPct: -33 }],
+              enHausse: [], disparus: [], apparus: [] },
+      dim9: { concA: { top10: 28 }, concRef: { top10: 25 } }
+    };
+    const warnings = calcYoYWarnings(d, {});
+    const w1 = warnings.find(function(w){ return w.id === 'W1'; });
+    return {
+      ok: !!w1,
+      level: w1 ? w1.level : null,
+      nbWarnings: warnings.length,
+      hasCta: w1 ? !!w1.ctaLabel : false
+    };
+  });
+
+  expect(result.ok,      'W1 non declenche avec CA -25%').toBe(true);
+  expect(result.level,   'W1 doit etre critique').toBe('critique');
+  expect(result.hasCta,  'W1 doit avoir un ctaLabel').toBe(true);
+  console.log('  OK V8a — W1 declenche, level=' + result.level + ', nb warnings=' + result.nbWarnings);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V8b — Warning W2 : concentration Top10 +20 pts
+// ─────────────────────────────────────────────────────────────────────────
+test('V8b — Warning W2 declenche si concentration Top10 +20pts', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(() => {
+    if (typeof calcYoYWarnings !== 'function') return { ok: false, error: 'calcYoYWarnings undefined' };
+    const d = {
+      dim1: { deltaCAPct: -5 },
+      dim7: { stables: [{ asin: 'B002', caAPerDay: 500, caRefPerDay: 500 }],
+              enBaisse: [], enHausse: [], disparus: [], apparus: [] },
+      dim9: { concA: { top10: 50 }, concRef: { top10: 28 } }
+    };
+    const warnings = calcYoYWarnings(d, {});
+    const w2 = warnings.find(function(w){ return w.id === 'W2'; });
+    return {
+      ok: !!w2,
+      level: w2 ? w2.level : null,
+      deltaPts: 50 - 28,
+      noW1: !warnings.find(function(w){ return w.id === 'W1'; })
+    };
+  });
+
+  expect(result.ok,    'W2 non declenche avec +22 pts concentration').toBe(true);
+  expect(result.level, 'W2 doit etre attention').toBe('attention');
+  expect(result.noW1,  'W1 ne doit pas se declencher avec -5%').toBe(true);
+  console.log('  OK V8b — W2 declenche, delta=' + result.deltaPts + 'pts, level=' + result.level);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V8c — Warning W3 : catalogue contracte > 30 %
+// ─────────────────────────────────────────────────────────────────────────
+test('V8c — Warning W3 declenche si catalogue -53%', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(() => {
+    if (typeof calcYoYWarnings !== 'function') return { ok: false, error: 'calcYoYWarnings undefined' };
+    // nbRef = 8 disparus + 5 stables + 2 enBaisse = 15 ; nbA = 0 apparus + 5 stables + 2 enBaisse = 7 → baisse 53%
+    const mockDisparus = [{ asin: 'BD001', caAPerDay: 0, caRefPerDay: 80 }, { asin: 'BD002', caAPerDay: 0, caRefPerDay: 60 },
+      { asin: 'BD003', caAPerDay: 0, caRefPerDay: 50 }, { asin: 'BD004', caAPerDay: 0, caRefPerDay: 40 },
+      { asin: 'BD005', caAPerDay: 0, caRefPerDay: 35 }, { asin: 'BD006', caAPerDay: 0, caRefPerDay: 30 },
+      { asin: 'BD007', caAPerDay: 0, caRefPerDay: 25 }, { asin: 'BD008', caAPerDay: 0, caRefPerDay: 20 }];
+    const mockStables  = [{ asin: 'BS001', caAPerDay: 100, caRefPerDay: 100 }, { asin: 'BS002', caAPerDay: 90, caRefPerDay: 90 },
+      { asin: 'BS003', caAPerDay: 80, caRefPerDay: 80 }, { asin: 'BS004', caAPerDay: 70, caRefPerDay: 70 },
+      { asin: 'BS005', caAPerDay: 60, caRefPerDay: 60 }];
+    const mockBaisse   = [{ asin: 'BB001', caAPerDay: 40, caRefPerDay: 80 }, { asin: 'BB002', caAPerDay: 30, caRefPerDay: 70 }];
+    const d = {
+      dim1: { deltaCAPct: -10 },
+      dim7: { stables: mockStables, enBaisse: mockBaisse, enHausse: [], disparus: mockDisparus, apparus: [] },
+      dim9: { concA: { top10: 30 }, concRef: { top10: 28 } }
+    };
+    const warnings = calcYoYWarnings(d, {});
+    const w3 = warnings.find(function(w){ return w.id === 'W3'; });
+    return {
+      ok: !!w3,
+      level: w3 ? w3.level : null,
+      nbAsinIds: w3 ? w3.asinIds.length : 0
+    };
+  });
+
+  expect(result.ok,      'W3 non declenche avec catalogue -53%').toBe(true);
+  expect(result.level,   'W3 doit etre critique').toBe('critique');
+  expect(result.nbAsinIds, 'W3 doit avoir 8 ASIN IDs').toBe(8);
+  console.log('  OK V8c — W3 declenche, level=' + result.level + ', asinIds=' + result.nbAsinIds);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V8d — Pavé éveil 80/20 : calcEveil8020 visible si erosion > seuil
+// ─────────────────────────────────────────────────────────────────────────
+test('V8d — calcEveil8020 retourne un resultat si erosion > 5000 EUR/mois', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(() => {
+    if (typeof calcEveil8020 !== 'function') return { ok: false, error: 'calcEveil8020 undefined' };
+
+    // 5 ASINs "top 80%" avec CA élevé (pas en érosion)
+    // + 20 ASINs "longue traîne" chacun CA=500, revenueDelta=-30% → erosion = 500*30/100=150/sem*20=3000/sem*4.33=12990/mois > 5000
+    const topAsins = Array.from({ length: 5 }, function(_, i) {
+      return { asin: 'BTOP00' + i, orderedRevenue: 50000, revenueDelta: '5' };
+    });
+    const tailAsins = Array.from({ length: 20 }, function(_, i) {
+      return { asin: 'BTAIL0' + i, orderedRevenue: 500, revenueDelta: '-30' };
+    });
+    const mockClient = { asins: topAsins.concat(tailAsins) };
+
+    const data = calcEveil8020(mockClient);
+    const blockHtml = typeof renderEveil8020Block === 'function' ? renderEveil8020Block(mockClient) : '';
+    return {
+      ok: data !== null,
+      nbAsins: data ? data.nbAsins : 0,
+      montant: data ? data.montant : 0,
+      hasBlock: blockHtml.length > 50,            // HTML non vide (le mot contient un accent é)
+      hasCtaBtn: blockHtml.includes('goToAsinsYoY')
+    };
+  });
+
+  expect(result.ok,      'calcEveil8020 doit retourner un resultat avec 20 ASINs en erosion > 5000/mois').toBe(true);
+  expect(result.nbAsins, 'doit trouver 20 ASINs en erosion').toBe(20);
+  expect(result.hasBlock,'renderEveil8020Block doit produire du HTML').toBe(true);
+  expect(result.hasCtaBtn,'renderEveil8020Block doit contenir goToAsinsYoY').toBe(true);
+  console.log('  OK V8d — calcEveil8020: nbAsins=' + result.nbAsins + ', montant=' + result.montant + ' EUR/mois');
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V8e — CTA 11 : "Enqueter" depuis warning W1 → Analyse ASINs + badge filtre
+// ─────────────────────────────────────────────────────────────────────────
+test('V8e — CTA11 Warning W1 : goToAsinsYoY navigue vers Analyse ASINs', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(async () => {
+    if (typeof goToAsinsYoY !== 'function')  return { ok: false, error: 'goToAsinsYoY undefined' };
+    if (typeof asinViewLabel === 'undefined') return { ok: false, error: 'asinViewLabel undefined' };
+
+    // Appel direct du CTA 11
+    goToAsinsYoY(['B001TEST', 'B002TEST'], 'W1 — ASINs CA en baisse');
+    await new Promise(function(r){ setTimeout(r, 200); });
+
+    return {
+      ok: true,
+      screen: typeof screen !== 'undefined' ? screen : 'unknown',
+      asinView: typeof asinView !== 'undefined' ? asinView : 'unknown',
+      labelSet: typeof asinViewLabel !== 'undefined' ? asinViewLabel : '',
+      customIdsLen: Array.isArray(asinViewCustomIds) ? asinViewCustomIds.length : -1
+    };
+  });
+
+  expect(result.ok,           'goToAsinsYoY doit etre definie').toBe(true);
+  expect(result.screen,       'screen doit etre asins apres CTA11').toBe('asins');
+  expect(result.asinView,     'asinView doit etre yoy-warning').toBe('yoy-warning');
+  expect(result.labelSet,     'asinViewLabel doit contenir W1').toContain('W1');
+  expect(result.customIdsLen, 'asinViewCustomIds doit avoir 2 IDs').toBe(2);
+  console.log('  OK V8e — CTA11: screen=' + result.screen + ', view=' + result.asinView + ', label=' + result.labelSet);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V8f — CTA 12 : "Voir les ASINs en erosion" → Analyse ASINs + badge longue traine
+// ─────────────────────────────────────────────────────────────────────────
+test('V8f — CTA12 eveil 80/20 : goToAsinsYoY avec label longue traine', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(async () => {
+    if (typeof goToAsinsYoY !== 'function') return { ok: false, error: 'goToAsinsYoY undefined' };
+
+    // Simuler le clic du CTA 12 (pavé éveil 80/20)
+    const mockAsinIds = Array.from({ length: 15 }, function(_, i){ return 'BTAIL' + String(i).padStart(3, '0'); });
+    goToAsinsYoY(mockAsinIds, 'Longue traine en erosion');
+    await new Promise(function(r){ setTimeout(r, 200); });
+
+    return {
+      ok: true,
+      screen: typeof screen !== 'undefined' ? screen : 'unknown',
+      asinView: typeof asinView !== 'undefined' ? asinView : 'unknown',
+      labelSet: typeof asinViewLabel !== 'undefined' ? asinViewLabel : '',
+      customIdsLen: Array.isArray(asinViewCustomIds) ? asinViewCustomIds.length : -1
+    };
+  });
+
+  expect(result.ok,           'goToAsinsYoY doit etre definie').toBe(true);
+  expect(result.screen,       'screen doit etre asins apres CTA12').toBe('asins');
+  expect(result.asinView,     'asinView doit etre yoy-warning').toBe('yoy-warning');
+  expect(result.labelSet,     'asinViewLabel doit contenir longue traine').toContain('traine');
+  expect(result.customIdsLen, 'asinViewCustomIds doit avoir 15 IDs').toBe(15);
+  console.log('  OK V8f — CTA12: screen=' + result.screen + ', label=' + result.labelSet + ', ids=' + result.customIdsLen);
 });
