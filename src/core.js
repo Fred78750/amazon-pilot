@@ -675,7 +675,11 @@ function freshClient() {
     bolSource: '',               // 'ERP' | 'CMS' | 'OMS' | 'TRANSPORTEUR' | 'INCONNU' | ''
     bolSourceDetail: '',         // texte libre : 'Navision', 'SAP', 'Shopify Plus', etc.
     // ── Buy Box v3.6.1 — Cas d'enquête ──
-    buyboxCases: []  // [{ id, asin, status, openedAt, closedAt, facts: {snapshot, computedAt}, hypotheses: [{id, status, evidence, updatedAt}], journal: [{ts, type, content, author}], conclusion: {state, proposedAction, outcome, closedAt} }]
+    buyboxCases: [], // [{ id, asin, status, openedAt, closedAt, facts: {snapshot, computedAt}, hypotheses: [{id, status, evidence, updatedAt}], journal: [{ts, type, content, author}], conclusion: {state, proposedAction, outcome, closedAt} }]
+    // ── YoY Enquête v3.6.8 ──
+    brandAliases:         [],   // [{ canonical: string, variants: string[] }] — alias marques pour Section Marques
+    enquetePeriodMonths:  4,    // fenêtre PO pour algo classification (slider 1-12, défaut 4)
+    anomalyThreshold:     80    // seuil similarité Levenshtein anomalies (50-100%, défaut 80%)
   };
 }
 
@@ -3999,14 +4003,66 @@ function renderImport() {
       h += '</div>';
     }
   }
+  // v3.6.8 — Afficher les POs POItemExport déjà chargés
+  const _poItemExportCount = (c.pos||[]).filter(function(p){ return p.source === 'POItemExport'; }).length;
+  const _poItemExportDate  = _poItemExportCount > 0
+    ? (c.pos||[]).filter(function(p){ return p.source === 'POItemExport'; })
+        .sort(function(a,b){ return (b.importedAt||'').localeCompare(a.importedAt||''); })[0]?.importedAt
+    : null;
+  const _poItemExportDateStr = _poItemExportDate ? new Date(_poItemExportDate).toLocaleDateString('fr-FR') : null;
+
+  if (_poItemExportCount > 0) {
+    h += '<div style="padding:8px 12px;background:var(--g-bg);border:1px solid var(--g-bd);border-radius:var(--rd);margin-bottom:8px;font-size:12px">'
+      + '✅ <strong>' + _poItemExportCount + ' POs POItemExport</strong> chargés — dernier import : ' + (_poItemExportDateStr||'—')
+      + '</div>';
+  }
+
   h += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
-  h += '<label class="btn btn-sm" style="cursor:pointer">📁 ' + (posLoaded?'Recharger les POs':'Charger les POs (XLS/CSV)') + '<input type="file" accept=".xls,.xlsx,.csv,.txt" multiple onchange="handlePOFile(this)" style="display:none"/></label>';
+  h += '<label class="btn btn-sm" style="cursor:pointer">📁 ' + (posLoaded?'Recharger les POs (ancien format)':'Charger les POs (XLS/CSV)') + '<input type="file" accept=".xls,.xlsx,.csv,.txt" multiple onchange="handlePOFile(this)" style="display:none"/></label>';
+  // v3.6.8 — Bouton import POItemExport CSV (nouveau format enrichi)
+  h += '<label class="btn btn-sm btn-p" style="cursor:pointer" title="Import depuis VC → Commandes → Gestion des commandes → Export CSV">📥 POItemExport CSV<input type="file" accept=".csv,.txt" multiple onchange="handlePOItemExportFile(this)" style="display:none"/></label>';
   h += '<a href="' + getVCLink('pos',_poMkt) + '" target="_blank" class="btn btn-sm" style="text-decoration:none">↗ Ouvrir dans Vendor Central</a>'
   if (posLoaded) {
     h += '<button class="btn btn-xs" onclick="exportPOsXlsx()" style="margin-left:4px">⬇ XLSX</button>';
     h += '<button class="btn btn-xs" onclick="if(confirm(\'Supprimer tous les POs ?\')){deletePOs()}" style="margin-left:auto;color:var(--r);border-color:var(--r-bd)">🗑 Supprimer</button>';
   }
+  h += '</div>';
+
+  // v3.6.8 — Section Paramètres YoY (fenêtre PO + seuil anomalies)
+  h += '<div style="margin-top:12px;padding:10px 12px;background:var(--b-bg,#e8f0fb);border:1px solid var(--b-bd,#b0c8f0);border-radius:var(--rd);font-size:12px">';
+  h += '<div style="font-weight:600;margin-bottom:8px;color:var(--tx)">⚙ Paramètres YoY — Enquête</div>';
+  h += '<div style="display:flex;gap:16px;flex-wrap:wrap">';
+  h += '<div style="flex:1;min-width:160px"><label style="display:block;margin-bottom:3px;color:var(--tx2)">Fenêtre PO (mois)</label>'
+    + '<input type="range" min="1" max="12" value="' + (c.enquetePeriodMonths||4) + '" '
+    + 'oninput="this.nextElementSibling.textContent=this.value+\' mois\';updClient(\'enquetePeriodMonths\',+this.value)" style="width:100%">'
+    + '<span style="font-size:11px;color:var(--tx3)">' + (c.enquetePeriodMonths||4) + ' mois</span></div>';
+  h += '<div style="flex:1;min-width:160px"><label style="display:block;margin-bottom:3px;color:var(--tx2)">Seuil anomalies marques (%)</label>'
+    + '<input type="range" min="50" max="100" value="' + (c.anomalyThreshold||80) + '" '
+    + 'oninput="this.nextElementSibling.textContent=this.value+\'%\';updClient(\'anomalyThreshold\',+this.value)" style="width:100%">'
+    + '<span style="font-size:11px;color:var(--tx3)">' + (c.anomalyThreshold||80) + '%</span></div>';
   h += '</div></div>';
+
+  // v3.6.8 — Section Alias Marques
+  var aliases = c.brandAliases || [];
+  h += '<div style="margin-top:12px">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">';
+  h += '<span style="font-weight:600;font-size:12px">🏷 Alias Marques (' + aliases.length + ')</span>';
+  h += '<button class="btn btn-xs" onclick="yoyAddAliasPrompt()">+ Alias</button>';
+  h += '</div>';
+  if (aliases.length > 0) {
+    h += '<table class="yoy-table" style="font-size:11px"><thead><tr><th>Nom canonique</th><th>Variantes fusionnées</th><th></th></tr></thead><tbody>';
+    aliases.forEach(function(al, idx) {
+      h += '<tr><td><strong>' + esc(al.canonical||'') + '</strong></td>'
+        + '<td style="color:var(--tx2)">' + esc((al.variants||[]).join(', ')) + '</td>'
+        + '<td><button class="btn btn-xs" onclick="yoyDeleteAlias(' + idx + ')" style="color:var(--r)">✕</button></td></tr>';
+    });
+    h += '</tbody></table>';
+  } else {
+    h += '<div style="font-size:11px;color:var(--tx3);padding:6px 0">Aucun alias — les fusions de marques orthographiques seront proposées dans la Section Anomalies YoY.</div>';
+  }
+  h += '</div>';
+
+  h += '</div>'; // ferme cd po-section-3
 
   // ══════════════════════════════════════════════════════
   // ÉTAPE 4 — PPM Nette
