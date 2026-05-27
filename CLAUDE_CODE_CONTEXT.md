@@ -1,6 +1,6 @@
 ﻿# CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 26 mai 2026 (v3.6.6.2 PROD + dépôt docs V0.7 + brief v3.6.7)
+**Dernière mise à jour :** 27 mai 2026 (v3.6.7.1 PROD — YoY warnings W1/W2/W3 + éveil 80/20 + CTA 11/12 + Parser ERP Gers)
 
 ---
 
@@ -105,6 +105,8 @@ Tout patch doit être minimal et ciblé :
 | v3.6.6 | ✅ **PROD** — mergé 22 mai 2026 / tag v3.6.6 | d078c90 (merge) / tag v3.6.6 |
 | v3.6.6.1 | ✅ **PROD** — en production avant patch (tag implicite, commit de référence) | — |
 | v3.6.6.2 | ✅ **PROD** — mergé 26 mai 2026 / tag v3.6.6.2 | 24630bf (merge) / tag v3.6.6.2 |
+| v3.6.7 | ✅ **PROD** — mergé 27 mai 2026 | 6455588 (staging) |
+| v3.6.7.1 | ✅ **PROD** — mergé 27 mai 2026 | 584dfcb (staging) / 327d999 (preprod) |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -133,9 +135,9 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | **v3.6.6** (merge d078c90 — 22 mai 2026) | https://amazon.foliow.app |
-| Recette (staging) | **v3.6.6.2** (docs V0.7 + brief v3.6.7 — 26 mai 2026) | https://d9xny9istvl53.cloudfront.net |
-| Preprod | **v3.6.6.2** (deploy 26 mai 2026) | https://preprod.amazon.foliow.app |
+| Production (main) | **v3.6.7.1** (merge 27 mai 2026) | https://amazon.foliow.app |
+| Recette (staging) | **v3.6.7.1** (commit 584dfcb — 27 mai 2026) | https://d9xny9istvl53.cloudfront.net |
+| Preprod | **v3.6.7.1** (deploy 27 mai 2026) | https://preprod.amazon.foliow.app |
 
 ✅ **MERGÉ EN PROD le 19 mai 2026** — merge 01656bc, tag v3.6.2, APP_VERSION 3.6.2 vérifié, CloudFront invalidé.
 Scope : moteur de recherche ASIN transversal topbar + rebranchement Buy Box / Appros / Prévisionnel.
@@ -148,8 +150,21 @@ Smoke tests : colonne cause ✅ | fragile=0 légitime (0 ASIN Cogex avec ≥3 se
 ✅ **v3.6.6 MERGÉ EN PROD le 22 mai 2026** — merge d078c90, tag v3.6.6, APP_VERSION 3.6.6 vérifié, CloudFront invalidé.
 Scope : Parser ERP universel (parseFileERP, downloadERPTemplate, handleERPImport, getStockERP) + IndexedDB v4 erp_stock + ÉTAPE 4 import + fix handleErpStock (support Gers — header décalé, Stock Physique non réservé) + 12/12 smoke tests. Anti-régression 22/22 ✅.
 
-✅ **v3.6.6.2 MERGÉ EN PROD le 26 mai 2026** — staging validé 26 mai 2026 — 20/20 smoke tests Playwright ✅.
-Scope : Parser CSV Vendor Central multilingue (src/parser_vc.js nouveau module) — EN canonique + FR suppletif, vcNorm(), VC_COL_DICT 33 champs, détection automatique type rapport (5 types), agrégation multi-pays 1 ligne/ASIN (fix CA x6 sur multi-marchés Gers), erreur bloquante type inconnu, retro-compat parseCSVFile(). SMOKE_REF par client : SMOKE_REF_BY_CLIENT, V9a/V9b/V9c/V9d conditionnels (Gers = skip silencieux, pas d'alerte rouge). smoke_history : IDB v5, collecte historique KPIs par client (brique amorce détection dérive, sans logique d'évaluation). build.py étendu 4 composants de version. Tests : V6a-V6g (parser VC) + V7 (smoke_history IDB).
+✅ **v3.6.6.2 MERGÉ EN PROD le 26 mai 2026** — merge 24630bf, tag v3.6.6.2, APP_VERSION 3.6.6.2 vérifié, CloudFront invalidé.
+Scope : Parser CSV Vendor Central multilingue (src/parser_vc.js nouveau module) — EN canonique + FR suppletif, vcNorm(), VC_COL_DICT 33 champs, détection automatique type rapport (5 types), agrégation multi-pays 1 ligne/ASIN (fix CA ×N marchés sur Gers), erreur bloquante type inconnu, retro-compat parseCSVFile(). SMOKE_REF par client : SMOKE_REF_BY_CLIENT, V9a/V9b/V9c/V9d conditionnels (Cogex calibré, Gers = skip silencieux). smoke_history : IDB v5, collecte historique KPIs par client (brique amorce détection dérive v3.6.8+). Anti-régression 46/46 ✅.
+Validation terrain Fred : import 5 fichiers EN Gers (agrégation multi-pays OK) + ERP Gers 3712 refs + YoY Cogex analyses historiques OK.
+
+✅ **v3.6.7 MERGÉ EN PROD le 27 mai 2026** — merge 6455588, APP_VERSION 3.6.7 vérifié, 30/30 Playwright ✅.
+Scope : YoY Étape 2 — warnings W1/W2/W3 + éveil 80/20 + CTA 11/12.
+- `src/yoy.js` : `YOY_WARNING_THRESHOLDS` (W1=−20% CA, W2=+10pts concentration, W3=−30% catalogue, EVEIL=5000€/mois) ; `calcYoYWarnings(d,t)` évalue dim1/dim7/dim9 ; `renderYoYWarningCards(warnings, analysis)` cards rouge/orange + CTA "Enquêter →" ; `calcEveil8020(c)` détection érosion longue traîne (80/20 CA, × 4.33) ; `renderEveil8020Block(c)` pavé orange CTA 12 ; `window.renderEveil8020Block` exporté.
+- `src/core.js` : `asinViewCustomIds` / `asinViewLabel` globaux CTA 11/12 ; preset `'yoy-warning'` dans `goFilteredAsins()` ; `goToAsinsYoY(asinIds, label)` ; badge orange filtrage YoY dans `renderAsins` ; appel `renderEveil8020Block` dans `renderDashboard` + `renderWeeklyReview`.
+- Tests V8a–V8f : W1/W2/W3/éveil/CTA11/CTA12. Anti-régression 30/30 ✅.
+
+✅ **v3.6.7.1 MERGÉ EN PROD le 27 mai 2026** — merge 327d999, APP_VERSION 3.6.7.1 vérifié, 30/30 Playwright ✅, audit préprod 20/20 ✅.
+Scope : Patch ERP parser Gers — nouveau format fichier `202605_Dispo_Amazon_Mai_26.xlsx`.
+- `src/parser_erp.js` : Sheet priority `['Stock_Amazon_Pilot', 'Extraction']` avant fallback index 0 ; `ERP_COL_SYNONYMS` +3 synonymes Gers (`resa amz` → Stock_Amazon, `dispo totale` → Stock_disponible_Amazon, `code barre / gencode / gtin13` → EAN).
+- Tests V5g/V5h/V5i/V5j : format Gers + régression ancien format. 30/30 ✅.
+- BTI-1 (deploy-preprod.yml) : backlog maintenu.
 
 ### PIÈGES RENCONTRÉS v3.6.6.2 (à mémoriser)
 - **Caractères spéciaux dans smoke.spec.js** : apostrophes courbes `'` dans des strings JS single-quoted cassent la syntaxe. Contournement : utiliser double quotes pour les strings contenant des apostrophes, ou `\uXXXX` explicites. Si l'Edit tool refuse (mismatch bytes), passer par un script Python intermédiaire.
@@ -353,7 +368,7 @@ Un ASIN peut avoir 2 VC (COGEX + 3J6MN), SKU différent par VC. Le SKU ne peut p
 
 - [x] **v3.6.6** : Parser ERP universel (parseFileERP, downloadERPTemplate, handleERPImport, getStockERP) + IDB v4 erp_stock + fix handleErpStock Gers. PROD 22 mai 2026.
 
-- [x] **v3.6.6.2** (staging 26 mai 2026) :
+- [x] **v3.6.6.2** (PROD 26 mai 2026) :
   - `src/parser_vc.js` (NOUVEAU module) — Parser CSV Vendor Central multilingue EN-first / FR suppletif
     - `vcNorm()` : normalisation robuste (NFD accents, apostrophes typo U+2018/U+2019, tirets cadratin, espaces NBSP/NNBSP)
     - `VC_COL_DICT` : 33 champs canoniques EN↔FR (valeurs ASCII-simplifiées côté FR, vcNorm lève les accents des vrais headers)
@@ -375,6 +390,15 @@ Un ASIN peut avoir 2 VC (COGEX + 3J6MN), SKU différent par VC. Le SKU ne peut p
     - Appelé fin smokeTest() — collecte pure, sans logique d'évaluation (brique pour v3.6.8+)
   - `build.py` : get_ver + re.sub regex étendus aux versions 4 composants ([\d.]+) ; injection // @parser_vc
   - `tests/smoke.spec.js` : 20/20 tests (V6a-V6g parser VC + V7 smoke_history IDB v5 + V1 étendu saveSmokeHistory/SMOKE_REF_BY_CLIENT)
+
+- [x] **v3.6.7** (PROD 27 mai 2026) — YoY Étape 2 : warnings + éveil 80/20 + CTA 11/12
+  - `src/yoy.js` : `YOY_WARNING_THRESHOLDS`, `calcYoYWarnings`, `renderYoYWarningCards`, `calcEveil8020`, `renderEveil8020Block` (window export)
+  - `src/core.js` : `asinViewCustomIds`, `asinViewLabel`, preset `yoy-warning`, `goToAsinsYoY`, badge YoY dans renderAsins, appels renderEveil8020Block dans dashboard + revue
+  - Tests V8a–V8f (W1/W2/W3 triggers, calcEveil8020, CTA11/CTA12). 30/30 ✅.
+
+- [x] **v3.6.7.1** (PROD 27 mai 2026) — Patch Parser ERP : support format Gers
+  - `src/parser_erp.js` : sheet priority `['Stock_Amazon_Pilot', 'Extraction']` ; +3 synonymes Gers (`resa amz`, `dispo totale`, `code barre / gencode / gtin13`)
+  - Tests V5g/V5h/V5i/V5j. 30/30 ✅. Audit préprod 20/20 ✅.
 
 - [x] **v3.6.5 — YoY Étape 1 (chantier en cours — dernière version stable v3.6.5.11)**
   - Parser CSV/XLSX Vendor Central FR (colonnes FR, apostrophe typographique U+2019, séparateur milliers U+202F)
@@ -488,10 +512,11 @@ Les INSTRUCTIONS Claude Code placent les fonctions Buy Box dans `src/core.js`. E
 
 ## ÉTAT SESSION SUIVANTE PROBABLE
 
-- **v3.6.2 en prod** — barre recherche ASIN topbar
-- **v3.6.5.12 en PROD** — mergé 22 mai 2026, tag v3.6.5.12, CloudFront invalide ✅. Scope : YoY module Etape 1 (KPI hero block typographie + charte visuelle).
-- **v3.6.3** — toujours en attente merge prod (sera groupé avec v3.6.5.x ou prochain chantier)
-- **Prochain scope** : YoY Étape 2 (suite chantier YoY — brief orchestrateur à venir)
+- **v3.6.7.1 en PROD** — mergé 27 mai 2026, APP_VERSION 3.6.7.1 vérifié, CloudFront prod invalidé ✅.
+  Scope livré : YoY warnings W1/W2/W3 + éveil 80/20 + CTA 11/12 + patch ERP Gers.
+- **v3.6.3** — toujours en attente merge prod (was pending depuis mai 2026 — sera groupé avec prochain chantier)
+- **BTI-1** (deploy-preprod.yml GitHub Actions) — backlog maintenu
+- **Prochain scope possible** : YoY Étape 3 (analyse IA / skill V4) ou v3.6.3 Buy Box enrichissements UI
 - **Dans tous les cas** : Fred rouvre la session — Claude Code n'anticipe rien
 
 ---
