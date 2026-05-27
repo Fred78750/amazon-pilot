@@ -18,12 +18,15 @@ function erpNorm(str) {
 // ── Dictionnaire synonymes (valeurs déjà normalisées via erpNorm) ────────
 var ERP_COL_SYNONYMS = {
   SKU:                     ['sku','code sku','no','numero','code article','reference','ref','article'],
-  EAN:                     ['ean','ean13','code ean','code barres','barcode','gtin'],
+  EAN:                     ['ean','ean13','code ean','code barres','barcode','gtin',
+                             'code barre / gencode / gtin13'],                    // v3.6.7.1 Gers
   Designation:             ['designation','libelle','libelle produit','nom produit','description','nom'],
   Code_Vie:                ['code vie','cycle de vie','statut','vie produit'],
   Stock_libre:             ['stock libre','stock dispo','stock disponible','disponible','libre'],
-  Stock_Amazon:            ['stock amazon','reserve amazon','amazon stock'],
-  Stock_disponible_Amazon: ['stock disponible amazon','stock physique non reserve','stock physique','dispo amazon','stock unique'],
+  Stock_Amazon:            ['stock amazon','reserve amazon','amazon stock',
+                             'resa amz'],                                          // v3.6.7.1 Gers
+  Stock_disponible_Amazon: ['stock disponible amazon','stock physique non reserve','stock physique','dispo amazon','stock unique',
+                             'dispo totale'],                                      // v3.6.7.1 Gers
   Date_prochain_arrivage:  ['date prochain arrivage','date arrivage','prochain arrivage','date po','date livraison','proch arrivage'],
   Qte_prochain_arrivage:   ['qte prochain arrivage','qt prochain arrivage','quantite arrivage','qte arrivage','qte po','qte livraison']
 };
@@ -71,10 +74,11 @@ function parseFileERP(file) {
         var data = new Uint8Array(e.target.result);
         var wb = XLSX.read(data, { type: 'array', cellDates: false });
 
-        // 1. Feuille : Stock_Amazon_Pilot en priorité, sinon active (index 0)
+        // 1. Feuille : Stock_Amazon_Pilot en priorité, puis Extraction (v3.6.7.1 Gers), sinon active (index 0)
+        var SHEET_PRIORITIES = ['Stock_Amazon_Pilot', 'Extraction'];
         var sheetName = null;
-        for (var si = 0; si < wb.SheetNames.length; si++) {
-          if (wb.SheetNames[si] === 'Stock_Amazon_Pilot') { sheetName = wb.SheetNames[si]; break; }
+        for (var pi = 0; pi < SHEET_PRIORITIES.length; pi++) {
+          if (wb.SheetNames.indexOf(SHEET_PRIORITIES[pi]) !== -1) { sheetName = SHEET_PRIORITIES[pi]; break; }
         }
         if (!sheetName) sheetName = wb.SheetNames[0];
         var ws = wb.Sheets[sheetName];

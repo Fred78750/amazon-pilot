@@ -320,6 +320,134 @@ test('V5f — getStockERP retourne null pour cle inexistante', async ({ page }) 
 });
 
 // ─────────────────────────────────────────────────────────────────────────
+// V5g — ERP parser : format Gers nouveau (feuille Extraction, colonnes Gers)
+// v3.6.7.1 — SKU/Code Barre.../Stock dispo/Résa Amz/Dispo totale
+// ─────────────────────────────────────────────────────────────────────────
+test('V5g — ERP parser Gers nouveau format : feuille Extraction + colonnes Gers', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(async () => {
+    // Reproduire exactement le format du fichier 202605_Dispo_Amazon_Mai_26.xlsx
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      // Header en ligne 0 (index 0) — pas de ligne metadata
+      ['SKU', 'Code Barre / gencode / GTIN13', 'Désignation', 'Code vie', 'Code univers',
+       'Stock dispo', 'Résa Amz', 'Dispo totale', 'Quantité prochain arrivage', 'Date prochain arrivage'],
+      [140467, 3367301404676, 'EGOUTT PIN FIL MET PEINT 40X24', 'PERM', null,  538,  0, 538, 0,    null],
+      [141393, 3367304008987, 'UST SPATUL RACLETTE X6 HET',      'PERM', null,    0,  0,   0, 0,    null],
+      [141431, 3367304009366, 'CVLE ANTI GRAS INOX D16/18/20',   'PERM', null,    0, 60,  60, 1368, 46237],
+      [141432, 3367304009373, 'CVLE ANTI GRAS INOX D22/24/26',   'PERM', null,    0, 324, 324, 1728, 46296],
+      [141433, 3367304009380, 'CVLE ANTI GRAS INOX D28/30/32',   'PERM', null,  580,  36, 616, 1920, 46203],
+    ]);
+    // Feuille nommée "Extraction" (nom réel du fichier Gers)
+    XLSX.utils.book_append_sheet(wb, ws, 'Extraction');
+    const buf  = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const file = new File([buf], '202605_Dispo_Amazon_Mai_26.xlsx',
+      { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    return parseFileERP(file);
+  });
+
+  expect(result.ok,     'Parser format Gers doit retourner ok=true : ' + JSON.stringify(result.errors)).toBe(true);
+  expect(result.config, 'Config doit etre cumulated (Dispo totale present)').toBe('cumulated');
+  expect(result.rows.length, 'Doit charger 5 lignes').toBe(5);
+  // SKU en nombre → converti en string
+  expect(result.rows[0].sku,  'SKU ligne 1').toBe('140467');
+  expect(result.rows[0].stock_disponible_amazon, 'Dispo totale ligne 1 = 538').toBe(538);
+  expect(result.rows[2].sku,  'SKU ligne 3').toBe('141431');
+  expect(result.rows[2].stock_disponible_amazon, 'Dispo totale ligne 3 = 60').toBe(60);
+  // EAN mappé
+  expect(result.rows[0].ean, 'EAN ligne 1').toBe('3367301404676');
+  console.log('  OK V5g ERP Gers nouveau — ' + result.rows.length + ' lignes, config=' + result.config);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V5h — ERP parser : header en ligne 1 (index 0) détecté correctement
+// ─────────────────────────────────────────────────────────────────────────
+test('V5h — ERP parser : header index 0 detecte (pas de ligne metadata)', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(async () => {
+    const wb = XLSX.utils.book_new();
+    // Header directement en ligne 0, pas de ligne vide ou metadata avant
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['SKU', 'Stock dispo', 'Résa Amz', 'Dispo totale'],
+      ['REF-001', 100, 20, 120],
+      ['REF-002', 50,  10,  60],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Extraction');
+    const buf  = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const file = new File([buf], 'test_header_idx0.xlsx',
+      { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    return parseFileERP(file);
+  });
+
+  expect(result.ok,            'Header index 0 doit etre detecte').toBe(true);
+  expect(result.rows.length,   '2 lignes data attendues').toBe(2);
+  expect(result.rows[0].sku,   'SKU ligne 1').toBe('REF-001');
+  expect(result.rows[0].stock_disponible_amazon, 'Dispo totale = 120').toBe(120);
+  console.log('  OK V5h — header index 0 detecte, ' + result.rows.length + ' lignes');
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V5i — ERP parser : mapping "Dispo totale" → stock_total (config cumulated)
+// Vérifier que c'est la valeur de "Dispo totale" qui est utilisée, pas Stock dispo + Résa Amz
+// ─────────────────────────────────────────────────────────────────────────
+test('V5i — ERP parser : Dispo totale -> stock_disponible_amazon (config cumulated)', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(async () => {
+    const wb = XLSX.utils.book_new();
+    // Cas réel : Stock dispo=580, Résa Amz=36, Dispo totale=616 (≠ 580+36=616 ici, mais on vérifie la source)
+    // Cas avec différence volontaire pour confirmer que c'est Dispo totale qui est utilisée
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['SKU', 'Stock dispo', 'Résa Amz', 'Dispo totale'],
+      ['141433', 580, 36, 999],  // Dispo totale = 999 ≠ 580+36=616 → doit retourner 999
+      ['141434', 100,  0, 100],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Extraction');
+    const buf  = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const file = new File([buf], 'test_dispo_totale.xlsx',
+      { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    return parseFileERP(file);
+  });
+
+  expect(result.ok,            '"Dispo totale" doit etre acceptee').toBe(true);
+  expect(result.config,        'Config doit etre cumulated').toBe('cumulated');
+  // Valeur issue de Dispo totale (999), PAS de Stock dispo + Résa Amz (616)
+  expect(result.rows[0].stock_disponible_amazon, 'stock_disponible_amazon doit venir de Dispo totale (999)').toBe(999);
+  console.log('  OK V5i — Dispo totale utilisee: stock=' + result.rows[0].stock_disponible_amazon + ' (config=' + result.config + ')');
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V5j — ERP parser régression : ancien format "Stock_disponible_Amazon" toujours OK
+// ─────────────────────────────────────────────────────────────────────────
+test('V5j — ERP parser regression : ancien format Stock_disponible_Amazon toujours OK', async ({ page }) => {
+  await page.goto(RECETTE_URL, { waitUntil: 'networkidle', timeout: 15000 });
+
+  const result = await page.evaluate(async () => {
+    const wb = XLSX.utils.book_new();
+    // Ancien format avec nom de colonne standard "Stock_disponible_Amazon"
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['SKU', 'EAN', 'Designation', 'Code_Vie', 'Stock_disponible_Amazon', 'Date_prochain_arrivage'],
+      ['REF-001', '3367304009366', 'PRODUIT A', 'PERM', 60, '2026-08-03'],
+      ['REF-002', '3367304009373', 'PRODUIT B', 'PERM',  0, ''],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Stock_Amazon_Pilot');
+    const buf  = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const file = new File([buf], 'test_ancien_format.xlsx',
+      { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    return parseFileERP(file);
+  });
+
+  expect(result.ok,             'Ancien format doit toujours fonctionner').toBe(true);
+  expect(result.config,         'Ancien format config cumulated').toBe('cumulated');
+  expect(result.rows.length,    '2 lignes attendues').toBe(2);
+  expect(result.rows[0].sku,    'SKU').toBe('REF-001');
+  expect(result.rows[0].stock_disponible_amazon, 'Stock ancien = 60').toBe(60);
+  console.log('  OK V5j — ancien format OK, ' + result.rows.length + ' lignes, config=' + result.config);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
 // V6 — Parser VC multilingue (v3.6.6.1)
 // CSV inline : ligne 0 vide (metadata absente) → heuristique headers
 // ─────────────────────────────────────────────────────────────────────────
