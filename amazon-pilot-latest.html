@@ -5579,12 +5579,14 @@ function renderImport() {
   // ══════════════════════════════════════════════════════
   // ÉTAPE 3 — Bons de commande (POs confirmés)
   // ══════════════════════════════════════════════════════
-  const posLoaded  = (c.pos||[]).length > 0;
-  const posCount   = (c.pos||[]).length;
-  const poAsins    = new Set((c.pos||[]).map(p=>p.asin)).size;
-  const lastPO     = posLoaded ? (c.pos||[]).slice().sort((a,b)=>(b.importedAt||'').localeCompare(a.importedAt||''))[0] : null;
-  const lastPODate = lastPO?.importedAt ? new Date(lastPO.importedAt).toLocaleDateString('fr-FR') : null;
-  const _poMkt     = c.mainMarket || '.fr';
+  const posLoaded          = (c.pos||[]).length > 0;
+  const posCount           = (c.pos||[]).length;
+  const poAsins            = new Set((c.pos||[]).map(p=>p.asin)).size;
+  const lastPO             = posLoaded ? (c.pos||[]).slice().sort((a,b)=>(b.importedAt||'').localeCompare(a.importedAt||''))[0] : null;
+  const lastPODate         = lastPO?.importedAt ? new Date(lastPO.importedAt).toLocaleDateString('fr-FR') : null;
+  const _poMkt             = c.mainMarket || '.fr';
+  // Hoisted ici pour usage dans le bandeau BO + badge POItemExport plus bas
+  const _poItemExportCount = (c.pos||[]).filter(function(p){ return p.source === 'POItemExport'; }).length;
 
   h += '<div class="cd" id="po-section-3">';
   h += '<div class="cd-t space"><span>3 — Bons de commande <span style="font-size:10px;font-weight:400;color:var(--tx3)">(confirmés — mise à jour libre)</span></span>' + (posLoaded ? '<span class="pill pill-g">✓ Chargés</span>' : '<span class="pill pill-gr">Non chargé</span>') + '</div>';
@@ -5602,9 +5604,27 @@ function renderImport() {
     var _boFilesN = _boMarkets.length || 1;
     var _boMarketsStr = _boMarkets.map(function(m) { return m.replace('.','').toUpperCase(); }).join(', ');
 
+    // Sous-comptes BO couverts par au moins 1 PO POItemExport
+    var _poItemExportVCs = {};
+    (c.pos||[]).forEach(function(p) { if (p.source === 'POItemExport' && p.vendorCode) _poItemExportVCs[p.vendorCode] = true; });
+    var _boVCCoveredCount = boAccts.filter(function(a) { return !!_poItemExportVCs[a.vendorCode]; }).length;
+    var _boMarketsCoveredSet = {};
+    boAccts.forEach(function(a) { if (_poItemExportVCs[a.vendorCode] && a.market) _boMarketsCoveredSet[a.market] = true; });
+    var _boMarketsCoveredN = Object.keys(_boMarketsCoveredSet).length;
+
     h += '<div style="padding:10px 14px;background:var(--b-bg,#e8f0fb);border:1px solid var(--b-bd,#b0c8f0);border-radius:var(--rdl);margin-bottom:12px;font-size:12px">';
-    h += '<div style="font-weight:600;margin-bottom:4px">📦 Pays détectés : ' + (_boMarketsStr||'—')
-      + ' — <span style="font-weight:400">' + _boFilesN + ' fichier' + (_boFilesN > 1 ? 's' : '') + ' POItemExport attendu' + (_boFilesN > 1 ? 's' : '') + '</span></div>';
+    if (_poItemExportCount > 0) {
+      // Au moins 1 PO POItemExport chargé → afficher l'état réel
+      h += '<div style="font-weight:600;margin-bottom:4px">📦 Pays détectés : ' + (_boMarketsStr||'—')
+        + ' — <span style="font-weight:400;color:var(--g)">'
+        + _boMarketsCoveredN + '/' + _boFilesN + ' fichier' + (_boFilesN > 1 ? 's' : '') + ' chargé' + (_boMarketsCoveredN > 1 ? 's' : '')
+        + ' — ' + _boVCCoveredCount + '/' + boAccts.length + ' sous-compte' + (boAccts.length > 1 ? 's' : '') + ' couvert' + (_boVCCoveredCount > 1 ? 's' : '')
+        + '</span></div>';
+    } else {
+      // Aucun POItemExport → invite au chargement
+      h += '<div style="font-weight:600;margin-bottom:4px">📦 Pays détectés : ' + (_boMarketsStr||'—')
+        + ' — <span style="font-weight:400">' + _boFilesN + ' fichier' + (_boFilesN > 1 ? 's' : '') + ' POItemExport attendu' + (_boFilesN > 1 ? 's' : '') + '</span></div>';
+    }
     h += '<div style="color:var(--tx2);font-size:11px">';
     var boLabels = [];
     for (var bai = 0; bai < boAccts.length; bai++) {
@@ -5649,8 +5669,7 @@ function renderImport() {
       h += '</div>';
     }
   }
-  // v3.6.8 — Afficher les POs POItemExport déjà chargés
-  const _poItemExportCount = (c.pos||[]).filter(function(p){ return p.source === 'POItemExport'; }).length;
+  // v3.6.8 — Afficher les POs POItemExport déjà chargés (_poItemExportCount hoisted en haut de section)
   const _poItemExportDate  = _poItemExportCount > 0
     ? (c.pos||[]).filter(function(p){ return p.source === 'POItemExport'; })
         .sort(function(a,b){ return (b.importedAt||'').localeCompare(a.importedAt||''); })[0]?.importedAt
