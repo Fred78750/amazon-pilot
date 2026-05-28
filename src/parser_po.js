@@ -240,7 +240,7 @@ function handlePOItemExportFile(input) {
   if (!files.length) return;
   var c = cl(); if (!c) return;
 
-  var totalAdded = 0, totalUpdated = 0, errors = [];
+  var totalAdded = 0, totalUpdated = 0, totalRaw = 0, errors = [];
 
   var pending = files.length;
   files.forEach(function(file) {
@@ -251,6 +251,7 @@ function handlePOItemExportFile(input) {
         if (result.error) {
           errors.push(file.name + ': ' + result.error);
         } else {
+          totalRaw += result.count;  // cumul lignes brutes avant déduplication
           var stats = mergePOItemsIntoClient(c, result.items);
           totalAdded   += stats.added;
           totalUpdated += stats.updated;
@@ -264,6 +265,8 @@ function handlePOItemExportFile(input) {
       }
       pending--;
       if (pending === 0) {
+        // Stocker les lignes brutes du batch (remplace la valeur précédente — représente le dernier import)
+        c.poItemExportRawLines = totalRaw;
         save(); render();
         if (errors.length) {
           showToast('⚠ ' + errors[0], 'alr-a', 5000);

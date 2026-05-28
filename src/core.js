@@ -679,7 +679,8 @@ function freshClient() {
     // ── YoY Enquête v3.6.8 ──
     brandAliases:         [],   // [{ canonical: string, variants: string[] }] — alias marques pour Section Marques
     enquetePeriodMonths:  4,    // fenêtre PO pour algo classification (slider 1-12, défaut 4)
-    anomalyThreshold:     80    // seuil similarité Levenshtein anomalies (50-100%, défaut 80%)
+    anomalyThreshold:     80,   // seuil similarité Levenshtein anomalies (50-100%, défaut 80%)
+    poItemExportRawLines: 0     // total lignes brutes du dernier import POItemExport (avant déduplication)
   };
 }
 
@@ -3958,17 +3959,28 @@ function renderImport() {
   // ── Comptes BO attendus (si c.accounts renseigné) ──
   var boAccts = (c.accounts || []).filter(function(a) { return a.role === 'BO'; });
   if (boAccts.length > 0) {
+    // Pays distincts = nombre de fichiers POItemExport attendus (1 fichier VC par marketplace)
+    var _boMarketsSet = {}, _boMarkets = [];
+    for (var bmi = 0; bmi < boAccts.length; bmi++) {
+      var _mkt = boAccts[bmi].market || '';
+      if (_mkt && !_boMarketsSet[_mkt]) { _boMarketsSet[_mkt] = true; _boMarkets.push(_mkt); }
+    }
+    var _boFilesN = _boMarkets.length || 1;
+    var _boMarketsStr = _boMarkets.map(function(m) { return m.replace('.','').toUpperCase(); }).join(', ');
+
     h += '<div style="padding:10px 14px;background:var(--b-bg,#e8f0fb);border:1px solid var(--b-bd,#b0c8f0);border-radius:var(--rdl);margin-bottom:12px;font-size:12px">';
-    h += '<div style="font-weight:600;margin-bottom:4px">📦 Comptes Bon de Commande — ' + boAccts.length + ' PO attendus</div>';
-    h += '<div style="color:var(--tx2)">';
+    h += '<div style="font-weight:600;margin-bottom:4px">📦 Pays détectés : ' + (_boMarketsStr||'—')
+      + ' — <span style="font-weight:400">' + _boFilesN + ' fichier' + (_boFilesN > 1 ? 's' : '') + ' POItemExport attendu' + (_boFilesN > 1 ? 's' : '') + '</span></div>';
+    h += '<div style="color:var(--tx2);font-size:11px">';
     var boLabels = [];
     for (var bai = 0; bai < boAccts.length; bai++) {
       var ba = boAccts[bai];
       var bamp = MARKETPLACES_FULL.find(function(m) { return m.market === ba.market; });
       var baflag = bamp ? bamp.flag : '';
-      boLabels.push(baflag + ' ' + ba.vendorCode + ' (' + ba.market.replace('.', '').toUpperCase() + ')');
+      var baMktCode = ba.market ? ba.market.replace('.','').toUpperCase() : '—';
+      boLabels.push(baflag + ' ' + baMktCode + ' ' + ba.vendorCode);
     }
-    h += boLabels.join(' · ');
+    h += 'Sous-comptes : ' + boLabels.join(' · ');
     h += '</div></div>';
   }
 
@@ -4010,10 +4022,18 @@ function renderImport() {
         .sort(function(a,b){ return (b.importedAt||'').localeCompare(a.importedAt||''); })[0]?.importedAt
     : null;
   const _poItemExportDateStr = _poItemExportDate ? new Date(_poItemExportDate).toLocaleDateString('fr-FR') : null;
+  // v3.6.8c — Lignes brutes vs uniques (disambiguation 5851 vs 5569)
+  const _poRawLines    = c.poItemExportRawLines || 0;
+  const _poDuplicates  = (_poRawLines > _poItemExportCount) ? (_poRawLines - _poItemExportCount) : 0;
 
   if (_poItemExportCount > 0) {
+    var _poRawDetail = (_poRawLines > 0 && _poDuplicates > 0)
+      ? '<span style="font-size:10px;color:var(--tx3);display:block;margin-top:2px">'
+        + _poRawLines.toLocaleString('fr-FR') + ' lignes brutes — ' + _poDuplicates.toLocaleString('fr-FR') + ' doublons fusionnés</span>'
+      : '';
     h += '<div style="padding:8px 12px;background:var(--g-bg);border:1px solid var(--g-bd);border-radius:var(--rd);margin-bottom:8px;font-size:12px">'
-      + '✅ <strong>' + _poItemExportCount + ' POs POItemExport</strong> chargés — dernier import : ' + (_poItemExportDateStr||'—')
+      + '✅ <strong>' + _poItemExportCount.toLocaleString('fr-FR') + ' POs uniques</strong> — dernier import : ' + (_poItemExportDateStr||'—')
+      + _poRawDetail
       + '</div>';
   }
 
