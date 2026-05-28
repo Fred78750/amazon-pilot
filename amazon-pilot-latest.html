@@ -16790,18 +16790,35 @@ function renderYoYResult() {
   const dim10 = d.dim10 || {};
   const s4Title = YOY_TITLES.s4[sign];
   const topBrands = dim10.topBrands || [];
+  // v3.6.8d — 6 colonnes brief §3.5 : Marque · CA/j réf. · Part réf. · CA/j A · Part A · Variation €/j
   const s4Rows = topBrands.slice(0, 10).map(b => {
-    // backward compat : deltaPct ajouté en v3.6.5.4, calculer à la volée si absent
+    // backward compat : deltaPct calculé à la volée si absent (pré-v3.6.5.4)
     const dp = b.deltaPct != null ? b.deltaPct
              : (b.caRefPerDay > 0 ? (b.caAPerDay / b.caRefPerDay - 1) * 100 : null);
-    const dClass = dp != null ? yoyDeltaClass(dp) : 'muted';
-    return `<tr><td>${esc(b.marque || '—')}</td>
-      <td class="num">${b.caAPerDay != null ? yoyFmtEur(b.caAPerDay) : '—'}</td>
+    const dEur = (b.caAPerDay != null && b.caRefPerDay != null) ? b.caAPerDay - b.caRefPerDay : null;
+    const dClass = dEur != null ? yoyDeltaClass(dEur) : 'muted';
+    const shareRefFmt = b.shareRef != null ? yoyFmtPct(b.shareRef) : '—';
+    const shareAFmt   = b.shareA   != null ? yoyFmtPct(b.shareA)   : '—';
+    // Variation €/j (principal) + % en secondaire
+    const dpSub = dp != null ? `<span style="font-size:9px;color:var(--tx3);margin-left:3px">${yoyFmtPct(dp, true)}</span>` : '';
+    return `<tr>
+      <td>${esc(b.marque || '—')}</td>
       <td class="num">${b.caRefPerDay != null ? yoyFmtEur(b.caRefPerDay) : '—'}</td>
-      <td class="num ${dClass}">${dp != null ? yoyFmtPct(dp, true) : '—'}</td></tr>`;
-  }).join('') || `<tr><td colspan="4" class="muted" style="text-align:center">Données insuffisantes</td></tr>`;
+      <td class="num" style="font-size:11px;color:var(--tx3)">${shareRefFmt}</td>
+      <td class="num">${b.caAPerDay != null ? yoyFmtEur(b.caAPerDay) : '—'}</td>
+      <td class="num" style="font-size:11px;color:var(--tx3)">${shareAFmt}</td>
+      <td class="num ${dClass}">${dEur != null ? yoyFmtEurSigned(dEur) : '—'}${dpSub}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6" class="muted" style="text-align:center">Données insuffisantes</td></tr>`;
   const s4Table = `<table class="yoy-table">
-    <thead><tr><th>Marque</th><th>CA/j Période A</th><th>CA/j Réf</th><th>Δ</th></tr></thead>
+    <thead><tr>
+      <th>Marque</th>
+      <th class="num">CA/j réf.</th>
+      <th class="num" style="font-size:10px;color:var(--tx3)">Part réf.</th>
+      <th class="num">CA/j A</th>
+      <th class="num" style="font-size:10px;color:var(--tx3)">Part A</th>
+      <th class="num">Variation €/j</th>
+    </tr></thead>
     <tbody>${s4Rows}</tbody>
   </table>`;
   const _tpl4     = tplMarques(d, sign);

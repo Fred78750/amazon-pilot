@@ -91,6 +91,40 @@ non chargé | Non chargé | À importer | En attente | à charger | A charger
 
 ---
 
+## Sections livrées en anticipation de v3.6.9
+
+Les sections suivantes étaient explicitement reportées en v3.6.9 dans le brief (section 4 — limites négatives), mais ont été livrées en v3.6.8 lors de l'implémentation.
+
+**Décision Fred (2026-05-28)** : on ne retire pas — le travail est bon, enregistré comme "anticipation v3.6.9 livrée en v3.6.8". Poursuite de la qualification v3.6.8 telle quelle.
+
+| Section | Scope brief | Décision |
+|---|---|---|
+| Top mouvements ASIN (perdants + gagnants, dim11) | v3.6.9 | ✅ Anticipée en v3.6.8 — à biffer du brief v3.6.9 |
+| Mon diagnostic (narrative pré-rédigée) | v3.6.9 | ✅ Anticipée en v3.6.8 — à biffer du brief v3.6.9 |
+| Plan d'action 3 priorités complet (P2+P3 en plus de P1) | v3.6.9 (P1 partielle seulement) | ✅ Anticipée en v3.6.8 — à biffer du brief v3.6.9 |
+| Conclusion générale narrative | v3.6.9 | ✅ Anticipée en v3.6.8 — à biffer du brief v3.6.9 |
+
+**Note pour le brief v3.6.9** : aucun paywall back-end ni toggle Vue Free/Pro implémenté. Ces sections sont visibles en Vue Free. À recadrer dans v3.6.9 pour ne pas redoubler le travail et cibler uniquement les éléments réellement manquants (toggle freemium, export Word, narrative IA enrichie).
+
+---
+
+## Écart corrigé en v3.6.8d — Section Marques (sous-livré)
+
+Le brief §3.5 prévoyait 6 colonnes pour la Section Marques. Livré initialement : 4 colonnes.
+
+| Colonne | Brief §3.5 | Livré v3.6.8 (initial) | Livré v3.6.8d |
+|---|---|---|---|
+| Marque | ✅ | ✅ | ✅ |
+| CA/j réf. | ✅ | ✅ (col 3) | ✅ (col 2) |
+| Part réf. (%) | ✅ | ❌ manquante | ✅ ajoutée |
+| CA/j A | ✅ | ✅ (col 2) | ✅ (col 4) |
+| Part A (%) | ✅ | ❌ manquante | ✅ ajoutée |
+| Variation €/j | ✅ (obligatoire) | ❌ livré en % seulement | ✅ `yoyFmtEurSigned` — % en secondaire |
+
+Les `shareRef` et `shareA` étaient déjà calculés dans `dim10.topBrands` mais non rendus dans la table. Patch : ajout des 2 colonnes Part + rebasement Variation €/j comme colonne principale (% conservé en sous-texte 9px).
+
+---
+
 ## Verdict final
 
 **1 seul vrai Dériveur identifié et corrigé** (commit `34c471f`).
