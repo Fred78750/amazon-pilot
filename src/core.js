@@ -681,7 +681,10 @@ function freshClient() {
     brandAliases:         [],   // [{ canonical: string, variants: string[] }] — alias marques pour Section Marques
     enquetePeriodMonths:  4,    // fenêtre PO pour algo classification (slider 1-12, défaut 4)
     anomalyThreshold:     80,   // seuil similarité Levenshtein anomalies (50-100%, défaut 80%)
-    poItemExportRawLines: 0     // total lignes brutes du dernier import POItemExport (avant déduplication)
+    poItemExportRawLines: 0,    // total lignes brutes du dernier import POItemExport (avant déduplication)
+    // ── Analyse comparée v3.6.9 ──
+    viewMode: 'free',           // 'free' | 'pro' — toggle Free/Pro UI-only, persisté IDB
+    aiCache:  {}                // cache narratives IA { diagnosticV1: { hash, generatedAt, content, sign } }
   };
 }
 
