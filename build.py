@@ -53,13 +53,16 @@ def build(ver=None, check=False):
     guide      = strip_header(r('guide_asn.js'))
     parser_erp = strip_header(r('parser_erp.js'))
     parser_vc  = strip_header(r('parser_vc.js'))
-    yoy    = strip_header(r('yoy.js'))
-    yoy_ai = strip_header(r('yoy_ai.js'))
+    yoy         = strip_header(r('yoy.js'))
+    yoy_ai      = strip_header(r('yoy_ai.js'))
+    yoy_enquete = strip_header(r('yoy_enquete.js'))   # v3.6.8 — VC_AVAILABILITY_CODES + algo classification
+    parser_po   = strip_header(r('parser_po.js'))     # v3.6.8 — parser POItemExport (après yoy_enquete)
     # Templates Free — tous les fichiers src/templates/yoy_*.js (ordre alphabétique stable)
     tpl_dir = os.path.join(SRC_DIR, 'templates')
     tpl_files = sorted(glob.glob(os.path.join(tpl_dir, 'yoy_*.js')))
     yoy_templates = '\n'.join(strip_header(open(f, 'rb').read().decode('utf-8').replace('\r\n', '\n')) for f in tpl_files)
-    yoy_full = yoy + '\n' + yoy_templates + '\n' + yoy_ai
+    # Ordre injection : yoy_enquete (VC_AVAILABILITY_CODES) → parser_po → yoy → templates → yoy_ai
+    yoy_full = yoy_enquete + '\n' + parser_po + '\n' + yoy + '\n' + yoy_templates + '\n' + yoy_ai
 
     # runSmokeTestManual : dans smoke.js mais injecté a @smoke_manual dans core
     rsm_line = 'function runSmokeTestManual() { smokeTest(false); }'
@@ -69,6 +72,7 @@ def build(ver=None, check=False):
     for name, content in [('core.js',core),('buybox.js',buybox),('seo.js',seo),
                            ('smoke.js',smoke),('guide_asn.js',guide),
                            ('parser_erp.js',parser_erp),('parser_vc.js',parser_vc),
+                           ('yoy_enquete.js',yoy_enquete),('parser_po.js',parser_po),
                            ('yoy.js',yoy),('yoy_ai.js',yoy_ai),('templates/*',yoy_templates)]:
         log(f"{name:<20} {len(content)//1024} Ko")
 

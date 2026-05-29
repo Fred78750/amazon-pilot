@@ -704,7 +704,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.6.7.1';
+const APP_VERSION = '3.6.8';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -1742,6 +1742,7 @@ let asinView   = 'all';    // 'all' | 'lowstock' | 'declining' | 'growing' | 'se
 let asinViewAsins = null;  // liste des ASINs filtrés par la vue active (null = pas de filtre)
 let asinViewCustomIds = null; // v3.6.7 — liste ASIN IDs pour filtre YoY (CTA 11 / CTA 12)
 let asinViewLabel = '';       // v3.6.7 — libellé du badge filtre YoY
+var _yoyReturnCtx = null;     // v3.6.8 α+γ — contexte retour YoY { scrollY, label } — session only
 let asinSearch = ''; // recherche texte ASIN/SKU/titre
 let _searchTimer = null;
 function debouncedRender() {
@@ -2309,7 +2310,12 @@ function freshClient() {
     bolSource: '',               // 'ERP' | 'CMS' | 'OMS' | 'TRANSPORTEUR' | 'INCONNU' | ''
     bolSourceDetail: '',         // texte libre : 'Navision', 'SAP', 'Shopify Plus', etc.
     // ── Buy Box v3.6.1 — Cas d'enquête ──
-    buyboxCases: []  // [{ id, asin, status, openedAt, closedAt, facts: {snapshot, computedAt}, hypotheses: [{id, status, evidence, updatedAt}], journal: [{ts, type, content, author}], conclusion: {state, proposedAction, outcome, closedAt} }]
+    buyboxCases: [], // [{ id, asin, status, openedAt, closedAt, facts: {snapshot, computedAt}, hypotheses: [{id, status, evidence, updatedAt}], journal: [{ts, type, content, author}], conclusion: {state, proposedAction, outcome, closedAt} }]
+    // ── YoY Enquête v3.6.8 ──
+    brandAliases:         [],   // [{ canonical: string, variants: string[] }] — alias marques pour Section Marques
+    enquetePeriodMonths:  4,    // fenêtre PO pour algo classification (slider 1-12, défaut 4)
+    anomalyThreshold:     80,   // seuil similarité Levenshtein anomalies (50-100%, défaut 80%)
+    poItemExportRawLines: 0     // total lignes brutes du dernier import POItemExport (avant déduplication)
   };
 }
 
@@ -5574,12 +5580,14 @@ function renderImport() {
   // ══════════════════════════════════════════════════════
   // ÉTAPE 3 — Bons de commande (POs confirmés)
   // ══════════════════════════════════════════════════════
-  const posLoaded  = (c.pos||[]).length > 0;
-  const posCount   = (c.pos||[]).length;
-  const poAsins    = new Set((c.pos||[]).map(p=>p.asin)).size;
-  const lastPO     = posLoaded ? (c.pos||[]).slice().sort((a,b)=>(b.importedAt||'').localeCompare(a.importedAt||''))[0] : null;
-  const lastPODate = lastPO?.importedAt ? new Date(lastPO.importedAt).toLocaleDateString('fr-FR') : null;
-  const _poMkt     = c.mainMarket || '.fr';
+  const posLoaded          = (c.pos||[]).length > 0;
+  const posCount           = (c.pos||[]).length;
+  const poAsins            = new Set((c.pos||[]).map(p=>p.asin)).size;
+  const lastPO             = posLoaded ? (c.pos||[]).slice().sort((a,b)=>(b.importedAt||'').localeCompare(a.importedAt||''))[0] : null;
+  const lastPODate         = lastPO?.importedAt ? new Date(lastPO.importedAt).toLocaleDateString('fr-FR') : null;
+  const _poMkt             = c.mainMarket || '.fr';
+  // Hoisted ici pour usage dans le bandeau BO + badge POItemExport plus bas
+  const _poItemExportCount = (c.pos||[]).filter(function(p){ return p.source === 'POItemExport'; }).length;
 
   h += '<div class="cd" id="po-section-3">';
   h += '<div class="cd-t space"><span>3 — Bons de commande <span style="font-size:10px;font-weight:400;color:var(--tx3)">(confirmés — mise à jour libre)</span></span>' + (posLoaded ? '<span class="pill pill-g">✓ Chargés</span>' : '<span class="pill pill-gr">Non chargé</span>') + '</div>';
@@ -5588,17 +5596,46 @@ function renderImport() {
   // ── Comptes BO attendus (si c.accounts renseigné) ──
   var boAccts = (c.accounts || []).filter(function(a) { return a.role === 'BO'; });
   if (boAccts.length > 0) {
+    // Pays distincts = nombre de fichiers POItemExport attendus (1 fichier VC par marketplace)
+    var _boMarketsSet = {}, _boMarkets = [];
+    for (var bmi = 0; bmi < boAccts.length; bmi++) {
+      var _mkt = boAccts[bmi].market || '';
+      if (_mkt && !_boMarketsSet[_mkt]) { _boMarketsSet[_mkt] = true; _boMarkets.push(_mkt); }
+    }
+    var _boFilesN = _boMarkets.length || 1;
+    var _boMarketsStr = _boMarkets.map(function(m) { return m.replace('.','').toUpperCase(); }).join(', ');
+
+    // Sous-comptes BO couverts par au moins 1 PO POItemExport
+    var _poItemExportVCs = {};
+    (c.pos||[]).forEach(function(p) { if (p.source === 'POItemExport' && p.vendorCode) _poItemExportVCs[p.vendorCode] = true; });
+    var _boVCCoveredCount = boAccts.filter(function(a) { return !!_poItemExportVCs[a.vendorCode]; }).length;
+    var _boMarketsCoveredSet = {};
+    boAccts.forEach(function(a) { if (_poItemExportVCs[a.vendorCode] && a.market) _boMarketsCoveredSet[a.market] = true; });
+    var _boMarketsCoveredN = Object.keys(_boMarketsCoveredSet).length;
+
     h += '<div style="padding:10px 14px;background:var(--b-bg,#e8f0fb);border:1px solid var(--b-bd,#b0c8f0);border-radius:var(--rdl);margin-bottom:12px;font-size:12px">';
-    h += '<div style="font-weight:600;margin-bottom:4px">📦 Comptes Bon de Commande — ' + boAccts.length + ' PO attendus</div>';
-    h += '<div style="color:var(--tx2)">';
+    if (_poItemExportCount > 0) {
+      // Au moins 1 PO POItemExport chargé → afficher l'état réel
+      h += '<div style="font-weight:600;margin-bottom:4px">📦 Pays détectés : ' + (_boMarketsStr||'—')
+        + ' — <span style="font-weight:400;color:var(--g)">'
+        + _boMarketsCoveredN + '/' + _boFilesN + ' fichier' + (_boFilesN > 1 ? 's' : '') + ' chargé' + (_boMarketsCoveredN > 1 ? 's' : '')
+        + ' — ' + _boVCCoveredCount + '/' + boAccts.length + ' sous-compte' + (boAccts.length > 1 ? 's' : '') + ' couvert' + (_boVCCoveredCount > 1 ? 's' : '')
+        + '</span></div>';
+    } else {
+      // Aucun POItemExport → invite au chargement
+      h += '<div style="font-weight:600;margin-bottom:4px">📦 Pays détectés : ' + (_boMarketsStr||'—')
+        + ' — <span style="font-weight:400">' + _boFilesN + ' fichier' + (_boFilesN > 1 ? 's' : '') + ' POItemExport attendu' + (_boFilesN > 1 ? 's' : '') + '</span></div>';
+    }
+    h += '<div style="color:var(--tx2);font-size:11px">';
     var boLabels = [];
     for (var bai = 0; bai < boAccts.length; bai++) {
       var ba = boAccts[bai];
       var bamp = MARKETPLACES_FULL.find(function(m) { return m.market === ba.market; });
       var baflag = bamp ? bamp.flag : '';
-      boLabels.push(baflag + ' ' + ba.vendorCode + ' (' + ba.market.replace('.', '').toUpperCase() + ')');
+      var baMktCode = ba.market ? ba.market.replace('.','').toUpperCase() : '—';
+      boLabels.push(baflag + ' ' + baMktCode + ' ' + ba.vendorCode);
     }
-    h += boLabels.join(' · ');
+    h += 'Sous-comptes : ' + boLabels.join(' · ');
     h += '</div></div>';
   }
 
@@ -5633,14 +5670,73 @@ function renderImport() {
       h += '</div>';
     }
   }
+  // v3.6.8 — Afficher les POs POItemExport déjà chargés (_poItemExportCount hoisted en haut de section)
+  const _poItemExportDate  = _poItemExportCount > 0
+    ? (c.pos||[]).filter(function(p){ return p.source === 'POItemExport'; })
+        .sort(function(a,b){ return (b.importedAt||'').localeCompare(a.importedAt||''); })[0]?.importedAt
+    : null;
+  const _poItemExportDateStr = _poItemExportDate ? new Date(_poItemExportDate).toLocaleDateString('fr-FR') : null;
+  // v3.6.8c — Lignes brutes vs uniques (disambiguation 5851 vs 5569)
+  const _poRawLines    = c.poItemExportRawLines || 0;
+  const _poDuplicates  = (_poRawLines > _poItemExportCount) ? (_poRawLines - _poItemExportCount) : 0;
+
+  if (_poItemExportCount > 0) {
+    var _poRawDetail = (_poRawLines > 0 && _poDuplicates > 0)
+      ? '<span style="font-size:10px;color:var(--tx3);display:block;margin-top:2px">'
+        + _poRawLines.toLocaleString('fr-FR') + ' lignes brutes — ' + _poDuplicates.toLocaleString('fr-FR') + ' doublons fusionnés</span>'
+      : '';
+    h += '<div style="padding:8px 12px;background:var(--g-bg);border:1px solid var(--g-bd);border-radius:var(--rd);margin-bottom:8px;font-size:12px">'
+      + '✅ <strong>' + _poItemExportCount.toLocaleString('fr-FR') + ' POs uniques</strong> — dernier import : ' + (_poItemExportDateStr||'—')
+      + _poRawDetail
+      + '</div>';
+  }
+
   h += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
-  h += '<label class="btn btn-sm" style="cursor:pointer">📁 ' + (posLoaded?'Recharger les POs':'Charger les POs (XLS/CSV)') + '<input type="file" accept=".xls,.xlsx,.csv,.txt" multiple onchange="handlePOFile(this)" style="display:none"/></label>';
+  h += '<label class="btn btn-sm" style="cursor:pointer">📁 ' + (posLoaded?'Recharger les POs (ancien format)':'Charger les POs (XLS/CSV)') + '<input type="file" accept=".xls,.xlsx,.csv,.txt" multiple onchange="handlePOFile(this)" style="display:none"/></label>';
+  // v3.6.8 — Bouton import POItemExport CSV (nouveau format enrichi)
+  h += '<label class="btn btn-sm btn-p" style="cursor:pointer" title="Import depuis VC → Commandes → Gestion des commandes → Export CSV">📥 POItemExport CSV<input type="file" accept=".csv,.txt" multiple onchange="handlePOItemExportFile(this)" style="display:none"/></label>';
   h += '<a href="' + getVCLink('pos',_poMkt) + '" target="_blank" class="btn btn-sm" style="text-decoration:none">↗ Ouvrir dans Vendor Central</a>'
   if (posLoaded) {
     h += '<button class="btn btn-xs" onclick="exportPOsXlsx()" style="margin-left:4px">⬇ XLSX</button>';
     h += '<button class="btn btn-xs" onclick="if(confirm(\'Supprimer tous les POs ?\')){deletePOs()}" style="margin-left:auto;color:var(--r);border-color:var(--r-bd)">🗑 Supprimer</button>';
   }
+  h += '</div>';
+
+  // v3.6.8 — Section Paramètres YoY (fenêtre PO + seuil anomalies)
+  h += '<div style="margin-top:12px;padding:10px 12px;background:var(--b-bg,#e8f0fb);border:1px solid var(--b-bd,#b0c8f0);border-radius:var(--rd);font-size:12px">';
+  h += '<div style="font-weight:600;margin-bottom:8px;color:var(--tx)">⚙ Paramètres YoY — Enquête</div>';
+  h += '<div style="display:flex;gap:16px;flex-wrap:wrap">';
+  h += '<div style="flex:1;min-width:160px"><label style="display:block;margin-bottom:3px;color:var(--tx2)">Fenêtre PO (mois)</label>'
+    + '<input type="range" min="1" max="12" value="' + (c.enquetePeriodMonths||4) + '" '
+    + 'oninput="this.nextElementSibling.textContent=this.value+\' mois\';updClient(\'enquetePeriodMonths\',+this.value)" style="width:100%">'
+    + '<span style="font-size:11px;color:var(--tx3)">' + (c.enquetePeriodMonths||4) + ' mois</span></div>';
+  h += '<div style="flex:1;min-width:160px"><label style="display:block;margin-bottom:3px;color:var(--tx2)">Seuil anomalies marques (%)</label>'
+    + '<input type="range" min="50" max="100" value="' + (c.anomalyThreshold||80) + '" '
+    + 'oninput="this.nextElementSibling.textContent=this.value+\'%\';updClient(\'anomalyThreshold\',+this.value)" style="width:100%">'
+    + '<span style="font-size:11px;color:var(--tx3)">' + (c.anomalyThreshold||80) + '%</span></div>';
   h += '</div></div>';
+
+  // v3.6.8 — Section Alias Marques
+  var aliases = c.brandAliases || [];
+  h += '<div style="margin-top:12px">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">';
+  h += '<span style="font-weight:600;font-size:12px">🏷 Alias Marques (' + aliases.length + ')</span>';
+  h += '<button class="btn btn-xs" onclick="yoyAddAliasPrompt()">+ Alias</button>';
+  h += '</div>';
+  if (aliases.length > 0) {
+    h += '<table class="yoy-table" style="font-size:11px"><thead><tr><th>Nom canonique</th><th>Variantes fusionnées</th><th></th></tr></thead><tbody>';
+    aliases.forEach(function(al, idx) {
+      h += '<tr><td><strong>' + esc(al.canonical||'') + '</strong></td>'
+        + '<td style="color:var(--tx2)">' + esc((al.variants||[]).join(', ')) + '</td>'
+        + '<td><button class="btn btn-xs" onclick="yoyDeleteAlias(' + idx + ')" style="color:var(--r)">✕</button></td></tr>';
+    });
+    h += '</tbody></table>';
+  } else {
+    h += '<div style="font-size:11px;color:var(--tx3);padding:6px 0">Aucun alias — les fusions de marques orthographiques seront proposées dans la Section Anomalies YoY.</div>';
+  }
+  h += '</div>';
+
+  h += '</div>'; // ferme cd po-section-3
 
   // ══════════════════════════════════════════════════════
   // ÉTAPE 4 — PPM Nette
@@ -7767,6 +7863,15 @@ function renderAsins() {
   const totalCA = displayAsins.reduce((s, a) => s + (getRevenue(a,c)||0), 0);
   const withRevenue = displayAsins.filter(a => (getRevenue(a,c)||0) > 0);
   let h = '';
+
+  // v3.6.8 α — Bandeau retour YoY (affiché seulement si arrivé via goToAsinsYoY)
+  if (!selectedAsin && _yoyReturnCtx) {
+    h += '<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--b-bg,#e8f0fb);border:1px solid var(--b-bd,#b0c8f0);border-radius:var(--rd);margin-bottom:12px">'
+      + '<button class="btn btn-sm" onclick="yoyGoBack()" style="flex-shrink:0;gap:4px">← Analyse comparée</button>'
+      + '<span style="font-size:12px;color:var(--tx2)">Filtré par : <strong>' + esc(asinViewLabel || 'YoY') + '</strong></span>'
+      + '<span style="font-size:10px;color:var(--tx3);margin-left:auto">ou utilisez le bouton ← du navigateur</span>'
+      + '</div>';
+  }
 
   if (!selectedAsin) {
     h += renderMarketTabs(c, filters.market);
@@ -14072,6 +14177,7 @@ function copyPrompt(i) {
   setTimeout(() => el.textContent = '📋 Copier', 1500);
 }
 function go(s) {
+  _yoyReturnCtx = null;  // toute navigation via go() = manuelle → efface le contexte retour YoY
   screen = s;
   aiResult = '';
   if (s !== 'asins') { selectedAsin = null; asinView = 'all'; asinViewAsins = null; }
@@ -14321,11 +14427,31 @@ function goFilteredAsins(preset) {
   render();
 }
 // v3.6.7 — CTA 11 / CTA 12 : navigation vers Analyse ASINs avec filtre YoY
+// v3.6.8 α+γ : pushState pour Back navigateur + _yoyReturnCtx pour bandeau retour
 function goToAsinsYoY(asinIds, label) {
+  _yoyReturnCtx = { scrollY: window.scrollY, label: 'Analyse comparée' };
+  try { history.pushState({ _yoyReturn: true, scrollY: window.scrollY }, ''); } catch(e) {}
   asinViewCustomIds = Array.isArray(asinIds) && asinIds.length ? asinIds : [];
   asinViewLabel     = label || 'Filtré par YoY';
   goFilteredAsins('yoy-warning');
 }
+
+// v3.6.8 α+γ : retour YoY depuis bandeau "← Analyse comparée"
+function yoyGoBack() {
+  var ctx = _yoyReturnCtx;
+  _yoyReturnCtx = null;
+  go('yoy');
+  if (ctx && ctx.scrollY) setTimeout(function() { try { window.scrollTo(0, ctx.scrollY); } catch(e) {} }, 80);
+}
+
+// v3.6.8 γ : handler popstate — uniquement pour les états poussés par goToAsinsYoY
+window.addEventListener('popstate', function(e) {
+  if (!e.state || !e.state._yoyReturn) return;  // ignorer tout autre popstate
+  var sy = e.state.scrollY || 0;
+  _yoyReturnCtx = null;
+  go('yoy');
+  if (sy) setTimeout(function() { try { window.scrollTo(0, sy); } catch(ex) {} }, 100);
+});
 
 function selClient(id) { activeId = id; screen = 'dashboard'; selectedAsin = null; aiResult = ''; render(); }
 function startOnboarding() { newClient = freshClient(); wizStep = 0; screen = 'onboarding'; render(); }
@@ -15201,6 +15327,786 @@ async function init() {
   }
 }
 
+// v3.6.8 — Classification algorithme + Section Marques alias + Section Anomalies + Fiche détail À CREUSER
+// Module injecté via // @yoy (avant parser_po.js dans build.py)
+
+// ═══════════════════════════════════════════════════════════════
+// CONSTANTE — 9 codes disponibilité Vendor Central
+// ═══════════════════════════════════════════════════════════════
+
+var VC_AVAILABILITY_CODES = {
+  'AC': { family: 'accepted_real',       meaning: 'Accepté confirmé manuellement, stock OK' },
+  'IA': { family: 'accepted_blind',      meaning: 'Accepté EDI uniquement (statut réel inconnu)' },
+  'IR': { family: 'out_temp',            meaning: 'Rupture temporaire' },
+  'OS': { family: 'out_temp',            meaning: 'Rupture temporaire (saisie ADV imprécise)' },
+  'CK': { family: 'out_perm',            meaning: 'Rupture longue / refus fournisseur' },
+  'CP': { family: 'discontinued',        meaning: 'Fin de série / sortie organisée' },
+  'CQ': { family: 'commercial_minimum',  meaning: 'Franco non atteint' },
+  'R2': { family: 'commercial_price',    meaning: 'Prix de cession refusé' },
+  'CA': { family: 'not_yet',             meaning: 'Pré-lancement, pas encore commandable' }
+};
+
+// ═══════════════════════════════════════════════════════════════
+// NORMALISATION MARQUES — conservatrice (brief §9.5)
+// ═══════════════════════════════════════════════════════════════
+
+function normalizeBrand(brand) {
+  if (!brand) return '';
+  return brand
+    .toUpperCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')  // suppression accents
+    .replace(/\s+/g, ' ')                               // espaces multiples → 1
+    .trim();
+}
+
+/**
+ * Résoudre les alias : si normalizedBrand figure dans variants[] d'un alias,
+ * retourner son canonical normalisé ; sinon retourner normalizedBrand tel quel.
+ */
+function resolveBrandAlias(normalizedBrand, brandAliases) {
+  if (!brandAliases || !brandAliases.length) return normalizedBrand;
+  for (var i = 0; i < brandAliases.length; i++) {
+    var al = brandAliases[i];
+    var variants = al.variants || [];
+    for (var j = 0; j < variants.length; j++) {
+      if (normalizeBrand(variants[j]) === normalizedBrand) {
+        return normalizeBrand(al.canonical);
+      }
+    }
+  }
+  return normalizedBrand;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CACHE ENQUÊTE (mémoire session uniquement — pas en IDB)
+// ═══════════════════════════════════════════════════════════════
+
+var _enqueteCache = {
+  clientId: null,
+  posHash: null,  // hash léger : c.pos.length + dernier importedAt
+  result: null
+};
+
+function _enquetePosHash(client) {
+  var pos = client.pos || [];
+  var last = pos.length > 0 ? (pos[pos.length - 1].importedAt || '') : '';
+  return pos.length + '|' + last;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ALGORITHME PRINCIPAL — classification ASINs disparus (Q1=c)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * classifyMissingASINs(client, disparus, dRef)
+ *
+ * @param {Object} client      — objet client complet (c.pos, c.accounts, c.asins, ...)
+ * @param {Array}  disparus    — dim7.disparus : [{ asin, titre, marque, caRefPerDay, caAPerDay }]
+ * @param {number} dRef        — durée période de référence en jours (pour info seulement)
+ * @returns {Object}           — { cat1_mortality, cat2_investigate, cat3_others, raw, meta }
+ */
+function classifyMissingASINs(client, disparus, dRef) {
+  var months = (client.enquetePeriodMonths != null ? client.enquetePeriodMonths : 4);
+  var today = new Date();
+  var windowStart = new Date(today);
+  windowStart.setMonth(windowStart.getMonth() - months);
+
+  // ── Identifier les vendorCodes "Bon de Commande" ──
+  var accounts = client.accounts || [];
+  var boVendorCodes = new Set(
+    accounts.filter(function(a) { return a.role === 'BO'; }).map(function(a) { return a.vendorCode; })
+  );
+  // Fallback : si c.accounts vide, tous les VCs dans c.pos sont considérés BO
+  if (boVendorCodes.size === 0 && (client.pos || []).length > 0) {
+    (client.pos).forEach(function(p) { if (p.vendorCode) boVendorCodes.add(p.vendorCode); });
+  }
+
+  // ── Index POs (O(n)) — uniquement POItemExport + BO + dans la fenêtre ──
+  var posByAsin = {};
+  var legacyPOsCount = 0;
+  var allPos = client.pos || [];
+  for (var pi = 0; pi < allPos.length; pi++) {
+    var po = allPos[pi];
+    if (po.source !== 'POItemExport') { legacyPOsCount++; continue; }
+    if (!boVendorCodes.has(po.vendorCode)) continue;
+    var d = new Date(po.orderDate);
+    if (isNaN(d) || d < windowStart || d > today) continue;
+    var akey = po.asin;
+    if (!posByAsin[akey]) posByAsin[akey] = [];
+    posByAsin[akey].push(po);
+  }
+
+  // ── Index stock Amazon Retail (sellableUnits depuis c.asins) ──
+  // Correction critique #1 : utiliser c.asins[i].sellableUnits (Stock_ASIN_Fabrication)
+  var stockByAsin = {};
+  var clientAsins = client.asins || [];
+  for (var si = 0; si < clientAsins.length; si++) {
+    var a = clientAsins[si];
+    if (a.asin) stockByAsin[a.asin] = a.sellableUnits != null ? a.sellableUnits : 0;
+  }
+
+  // ── Classification ──
+  var results = { A1: [], A2: [], B: [], C: [], D1: [], D2: [], R: [] };
+
+  for (var di = 0; di < disparus.length; di++) {
+    var row = disparus[di];
+    var asin = row.asin;
+    var pos = posByAsin[asin] || [];
+
+    if (pos.length === 0) {
+      // Aucun PO BO POItemExport dans la fenêtre
+      var stock = stockByAsin[asin] != null ? stockByAsin[asin] : 0;
+      if (stock === 0) {
+        results.A1.push({ asin: asin, reason: 'Mortalité confirmée', caRefPerDay: row.caRefPerDay, titre: row.titre, marque: row.marque });
+      } else {
+        results.A2.push({ asin: asin, subcat: 'A2', reason: 'Stock dormant', stock: stock, caRefPerDay: row.caRefPerDay, titre: row.titre, marque: row.marque });
+      }
+    } else {
+      // Trouver le DERNIER PO par orderDate (secondaire : poId asc — correction #3)
+      var lastPO = pos.reduce(function(best, p) {
+        var dB = new Date(best.orderDate), dP = new Date(p.orderDate);
+        if (dP > dB) return p;
+        if (dP < dB) return best;
+        return (p.poId || '') < (best.poId || '') ? p : best;  // poId asc comme tiebreak
+      });
+      var code = lastPO.availabilityCode || 'UNKNOWN';
+      var daysOld = Math.floor((today - new Date(lastPO.orderDate)) / 86400000);
+
+      if (code === 'CP') {
+        results.B.push({ asin: asin, code: code, subcat: 'B', reason: 'Sortie organisée', lastPO: lastPO, caRefPerDay: row.caRefPerDay, titre: row.titre, marque: row.marque });
+
+      } else if (code === 'CK') {
+        results.B.push({ asin: asin, code: code, subcat: 'B', reason: 'Refus / Rupture permanente', lastPO: lastPO, caRefPerDay: row.caRefPerDay, titre: row.titre, marque: row.marque });
+
+      } else if ((code === 'IR' || code === 'OS') && daysOld > 90) {
+        results.B.push({ asin: asin, code: code, subcat: 'B', reason: 'Hémorragie longue (>' + daysOld + 'j)', lastPO: lastPO, caRefPerDay: row.caRefPerDay, titre: row.titre, marque: row.marque });
+
+      } else if (code === 'CQ' || code === 'R2') {
+        results.R.push({ asin: asin, code: code, subcat: 'R', reason: 'Désaccord commercial', lastPO: lastPO, caRefPerDay: row.caRefPerDay, titre: row.titre, marque: row.marque });
+
+      } else if ((code === 'IR' || code === 'OS') && daysOld <= 90) {
+        results.C.push({ asin: asin, code: code, subcat: 'C', reason: 'Rupture temporaire récente (' + daysOld + 'j)', lastPO: lastPO, caRefPerDay: row.caRefPerDay, titre: row.titre, marque: row.marque });
+
+      } else if (code === 'IA' && lastPO.poStatus === 'confirmed') {
+        results.D2.push({ asin: asin, code: code, subcat: 'D2', reason: 'PO en cours', lastPO: lastPO, caRefPerDay: row.caRefPerDay, titre: row.titre, marque: row.marque });
+
+      } else if (code === 'IA' && lastPO.poStatus === 'closed') {
+        results.D1.push({ asin: asin, code: code, subcat: 'D1', reason: 'Mystère (IA clôturé)', lastPO: lastPO, caRefPerDay: row.caRefPerDay, titre: row.titre, marque: row.marque });
+
+      } else if (code === 'AC') {
+        results.D1.push({ asin: asin, code: code, subcat: 'D1', reason: 'Mystère (AC en stock mais absent)', lastPO: lastPO, caRefPerDay: row.caRefPerDay, titre: row.titre, marque: row.marque });
+
+      } else {
+        // CA, UNKNOWN, IA sans poStatus résolu → D1 conservateur
+        results.D1.push({ asin: asin, code: code, subcat: 'D1', reason: 'Mystère (code: ' + code + ')', lastPO: lastPO, caRefPerDay: row.caRefPerDay, titre: row.titre, marque: row.marque });
+      }
+    }
+  }
+
+  // Trier cat2 par caRefPerDay décroissant (ASINs à plus fort enjeu en premier)
+  var cat2 = [].concat(results.A2, results.D1, results.D2, results.R)
+    .sort(function(a, b) { return (b.caRefPerDay || 0) - (a.caRefPerDay || 0); });
+
+  return {
+    cat1_mortality:    results.A1.sort(function(a, b) { return (b.caRefPerDay || 0) - (a.caRefPerDay || 0); }),
+    cat2_investigate:  cat2,
+    cat3_others:       [].concat(results.B, results.C).sort(function(a, b) { return (b.caRefPerDay || 0) - (a.caRefPerDay || 0); }),
+    raw: results,
+    meta: {
+      computed: new Date().toISOString(),
+      periodMonths: months,
+      totalMissing: disparus.length,
+      hasLegacyPOs: legacyPOsCount > 0,
+      legacyPOsCount: legacyPOsCount
+    }
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CALCUL DIM10 AVEC ALIAS (intégré dans yoy.js calc section)
+// Fonction utilitaire appelée depuis la zone dim10 de calcYoYDims
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * calcBrandAggs(rowsRef, rowsA, dRef, dA, brandAliases)
+ * Calcule les agrégats de CA par marque avec normalisation + alias.
+ * Retourne { bMapRef, bMapA } — maps marque_canonique → CA/j
+ */
+function calcBrandAggs(rowsRef, rowsA, dRef, dA, brandAliases) {
+  var aliases = brandAliases || [];
+
+  function getBrand(row) {
+    var raw = (row.marque || 'Inconnue').trim();
+    var normalized = normalizeBrand(raw);
+    var resolved = resolveBrandAlias(normalized, aliases);
+    return resolved || 'INCONNUE';
+  }
+
+  var bMapRef = {}, bMapA = {};
+  rowsRef.forEach(function(r) {
+    var m = getBrand(r);
+    bMapRef[m] = (bMapRef[m] || 0) + (r.ca_cmd || 0) / dRef;
+  });
+  rowsA.forEach(function(r) {
+    var m = getBrand(r);
+    bMapA[m] = (bMapA[m] || 0) + (r.ca_cmd || 0) / dA;
+  });
+  return { bMapRef: bMapRef, bMapA: bMapA };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDU HTML — SECTION ENQUÊTE (insérée après s6 dans renderYoYResult)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * renderEnqueteSection(client, dims, dRef)
+ * @returns {string} HTML complet de la section Enquête
+ */
+function renderEnqueteSection(client, dims, dRef) {
+  var d7 = dims.dim7 || {};
+  var disparus = d7.disparus || [];
+
+  // Vérifier si POs POItemExport présents
+  var posItemExport = (client.pos || []).filter(function(p) { return p.source === 'POItemExport'; });
+  var hasPOItemExport = posItemExport.length > 0;
+
+  // Warning si pas de POs (Q3) ou POs legacy (Q4)
+  var warningHtml = '';
+  if (!hasPOItemExport) {
+    warningHtml = '<div style="padding:10px 14px;background:var(--a-bg,#fff8e1);border:1px solid var(--a-bd,#f0c040);border-radius:var(--rdl);margin-bottom:14px;font-size:12px">'
+      + '⚠️ <strong>Classification partielle</strong> — aucun Bon de Commande (POItemExport) importé. '
+      + 'Les résultats ci-dessous sont basés sur le stock uniquement (catégories A1/A2). '
+      + '<button class="btn btn-xs" onclick="go(\'clients\')" style="margin-left:8px">Importer les POs →</button>'
+      + '</div>';
+  } else {
+    var legacyCount = (client.pos || []).filter(function(p) { return p.source !== 'POItemExport'; }).length;
+    if (legacyCount > 0) {
+      warningHtml = '<div style="padding:8px 12px;background:var(--b-bg,#e8f0fb);border:1px solid var(--b-bd,#b0c8f0);border-radius:var(--rdl);margin-bottom:12px;font-size:11px;color:var(--tx2)">'
+        + 'ℹ️ ' + legacyCount + ' PO(s) au format ancien détecté(s) — ignorés pour la classification. Réimportez via POItemExport CSV pour une classification complète.'
+        + '</div>';
+    }
+  }
+
+  if (disparus.length === 0) {
+    return '<div class="yoy-section" id="yoy-sec-enquete">'
+      + '<h3 class="yoy-section-title">Enquête ASINs disparus</h3>'
+      + '<p class="yoy-section-para" style="color:var(--tx3)">Aucun ASIN disparu à classifier sur cette période.</p>'
+      + '</div>';
+  }
+
+  // Lancer la classification (avec cache Q1=c)
+  var enquete = null;
+  var cHash = _enquetePosHash(client);
+  if (_enqueteCache.clientId === client.id && _enqueteCache.posHash === cHash && _enqueteCache.result) {
+    enquete = _enqueteCache.result;
+  } else {
+    enquete = classifyMissingASINs(client, disparus, dRef);
+    _enqueteCache.clientId = client.id;
+    _enqueteCache.posHash = cHash;
+    _enqueteCache.result = enquete;
+  }
+
+  var cat1 = enquete.cat1_mortality;
+  var cat2 = enquete.cat2_investigate;
+  var cat3 = enquete.cat3_others;
+  var meta = enquete.meta;
+
+  var computedStr = meta.computed ? new Date(meta.computed).toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+
+  var html = '<div class="yoy-section" id="yoy-sec-enquete">';
+  html += '<div class="yoy-section-header"><h3 class="yoy-section-title">Enquête ASINs disparus — ' + disparus.length + ' classifiés</h3>'
+    + '<span style="font-size:10px;color:var(--tx3);margin-left:8px">Calculé le ' + computedStr + ' · Fenêtre PO : ' + meta.periodMonths + ' mois</span></div>';
+
+  html += warningHtml;
+
+  // ── Résumé 3 catégories ──
+  html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px">';
+  var cats = [
+    { label: 'Mortalité naturelle', count: cat1.length, color: '#94a3b8', bg: '#f1f5f9', desc: 'Pas d\'action', code: 'A1' },
+    { label: 'À CREUSER', count: cat2.length, color: '#d97706', bg: '#fff8e1', desc: 'Investigation requise', code: 'A2+D' },
+    { label: 'Autres', count: cat3.length, color: '#475569', bg: 'var(--b-bg,#f0f4f8)', desc: 'Géré au fil de l\'eau', code: 'B+C' }
+  ];
+  cats.forEach(function(cat) {
+    html += '<div style="padding:12px 14px;background:' + cat.bg + ';border:1px solid ' + cat.color + '33;border-radius:var(--rdl);text-align:center">'
+      + '<div style="font-size:22px;font-weight:800;color:' + cat.color + '">' + cat.count + '</div>'
+      + '<div style="font-size:12px;font-weight:600;color:' + cat.color + ';margin-bottom:2px">' + esc(cat.label) + '</div>'
+      + '<div style="font-size:10px;color:var(--tx3)">' + esc(cat.desc) + '</div>'
+      + '</div>';
+  });
+  html += '</div>';
+
+  // ── Index stock Amazon Retail (sellableUnits) — reconstruit localement pour le rendu ──
+  var stockByAsin = {};
+  (client.asins || []).forEach(function(a) {
+    if (a.asin) stockByAsin[a.asin] = a.sellableUnits != null ? a.sellableUnits : 0;
+  });
+
+  // Couleurs sous-catégories — hoistées avant les deux blocs qui les utilisent
+  var subcatColors = { A2: '#0ea5e9', D1: '#8b5cf6', D2: '#16a34a', R: '#dc2626' };
+  var subcatLabels = { A2: 'A2 Stock dormant', D1: 'D1 Mystère', D2: 'D2 PO en cours', R: 'R Désaccord' };
+
+  // ── Catégorie 2 : À CREUSER (table expandable — option α) ──
+  html += '<div style="margin-bottom:20px">';
+  html += '<div style="font-size:13px;font-weight:700;color:#d97706;margin-bottom:8px">🔍 À CREUSER (' + cat2.length + ' ASINs) — investigation par ASIN</div>';
+
+  if (cat2.length === 0) {
+    html += '<p class="yoy-section-para" style="color:var(--tx3)">Aucun ASIN dans cette catégorie.</p>';
+  } else {
+    html += '<table class="yoy-table" style="font-size:12px">'
+      + '<thead><tr>'
+      + '<th style="width:60px">Cat.</th>'
+      + '<th style="width:110px">ASIN</th>'
+      + '<th>Titre</th>'
+      + '<th style="width:80px">Code</th>'
+      + '<th style="width:90px">Dernier PO</th>'
+      + '<th class="num" style="width:70px">CA réf./j</th>'
+      + '<th style="width:20px"></th>'
+      + '</tr></thead><tbody>';
+
+    cat2.forEach(function(item) {
+      var sc = item.subcat || 'D1';
+      var color = subcatColors[sc] || '#475569';
+      var lastPODateStr = item.lastPO && item.lastPO.orderDate ? item.lastPO.orderDate.slice(0, 10) : '—';
+      var codeStr = item.code ? ('<span title="' + esc((VC_AVAILABILITY_CODES[item.code] || {}).meaning || '') + '">' + esc(item.code) + '</span>') : (sc === 'A2' ? '—' : '?');
+      var caFmt = item.caRefPerDay != null ? yoyFmtEur(item.caRefPerDay) : '—';
+      var titleShort = (item.titre || '').slice(0, 55) + ((item.titre || '').length > 55 ? '…' : '');
+
+      html += '<tr class="enquete-row" data-asin="' + esc(item.asin) + '" data-expanded="false" onclick="toggleEnqueteRow(this)" style="cursor:pointer">'
+        + '<td><span style="font-size:10px;font-weight:600;color:' + color + ';padding:2px 5px;border:1px solid ' + color + '44;border-radius:3px">' + esc(sc) + '</span></td>'
+        + '<td style="font-family:monospace;font-size:11px">' + esc(item.asin) + '</td>'
+        + '<td title="' + esc(item.titre || '') + '">' + esc(titleShort) + '</td>'
+        + '<td>' + codeStr + '</td>'
+        + '<td>' + lastPODateStr + '</td>'
+        + '<td class="num">' + caFmt + '</td>'
+        + '<td style="text-align:center;color:var(--tx3);font-size:10px">▶</td>'
+        + '</tr>';
+
+      // Ligne détail (cachée par défaut)
+      var stockStr = (item.asin && typeof stockByAsin !== 'undefined' && stockByAsin[item.asin] != null)
+        ? stockByAsin[item.asin] + ' unités'
+        : '—';
+      // Lien VC : utiliser le market du sous-compte du dernier PO si disponible
+      var vcMarket = '.fr';
+      if (item.lastPO && item.lastPO.vendorCode) {
+        var accts = client.accounts || [];
+        var matchAcct = accts.find(function(a) { return a.vendorCode === item.lastPO.vendorCode; });
+        if (matchAcct && matchAcct.market) vcMarket = matchAcct.market;
+      }
+      var vcUrl = 'https://vendorcentral.amazon' + vcMarket + '/abis/listing/edit/product_details?asin=' + encodeURIComponent(item.asin)
+        + (item.lastPO && item.lastPO.vendorCode ? '&vendorCode=' + encodeURIComponent(item.lastPO.vendorCode) : '');
+      var subcatFullLabel = subcatLabels[sc] || sc;
+      var poDetail = item.lastPO
+        ? 'PO <strong>' + esc(item.lastPO.poId || '—') + '</strong> · '
+          + 'Dispo : <strong>' + esc(item.code || '—') + '</strong> · '
+          + 'Statut : <strong>' + esc(item.lastPO.status || '—') + '</strong>'
+        : 'Aucun PO dans la fenêtre de ' + meta.periodMonths + ' mois';
+
+      html += '<tr class="enquete-detail-row" data-asin="' + esc(item.asin) + '" style="display:none;background:var(--b-bg,#f0f4f8)">'
+        + '<td colspan="7" style="padding:10px 14px">'
+        + '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;font-size:12px">'
+        + '<div><div style="font-weight:600;color:var(--tx2);margin-bottom:2px">Sous-catégorie</div><div>' + esc(subcatFullLabel) + '</div>'
+        + '<div style="color:var(--tx3);margin-top:2px">' + esc(item.reason || '') + '</div></div>'
+        + '<div><div style="font-weight:600;color:var(--tx2);margin-bottom:2px">Dernier PO</div><div>' + poDetail + '</div></div>'
+        + '<div><div style="font-weight:600;color:var(--tx2);margin-bottom:2px">Stock Amazon actuel</div><div>' + esc(stockStr) + '</div></div>'
+        + '</div>'
+        + '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'
+        + '<a href="' + esc(vcUrl) + '" target="_blank" class="btn btn-xs" style="text-decoration:none">↗ Fiche VC</a>'
+        // Fix v3.6.8e : JSON.stringify(asin) → '"B01..."' terminait l'attribut — utiliser single-quote
+        + '<button class="btn btn-xs" onclick="event.stopPropagation();goToAsinsYoY([\'' + item.asin + '\'],\'Enquête: ' + esc(item.asin) + '\')">🔍 Analyse ASINs →</button>'
+        + '</div>'
+        + '</td></tr>';
+    });
+
+    html += '</tbody></table>';
+  }
+  html += '</div>';
+
+  // ── Catégorie 3 : Autres (liste compacte) ──
+  if (cat3.length > 0) {
+    html += '<div style="margin-bottom:16px">';
+    html += '<div style="font-size:13px;font-weight:600;color:var(--tx2);margin-bottom:6px">Autres (' + cat3.length + ' ASINs) — géré au fil de l\'eau</div>';
+    html += '<table class="yoy-table" style="font-size:11px">'
+      + '<thead><tr><th style="width:60px">Cat.</th><th style="width:110px">ASIN</th><th>Titre</th><th>Code</th><th>Raison</th><th class="num">CA réf./j</th></tr></thead><tbody>';
+    var subcatColorsB = { B: '#64748b', C: '#0891b2' };
+    cat3.forEach(function(item) {
+      var sc = item.subcat || 'B';
+      var color = subcatColorsB[sc] || '#64748b';
+      var caFmt = item.caRefPerDay != null ? yoyFmtEur(item.caRefPerDay) : '—';
+      html += '<tr>'
+        + '<td><span style="font-size:10px;font-weight:600;color:' + color + '">' + esc(sc) + '</span></td>'
+        + '<td style="font-family:monospace;font-size:11px">' + esc(item.asin) + '</td>'
+        + '<td title="' + esc(item.titre || '') + '">' + esc((item.titre || '').slice(0, 45)) + '</td>'
+        + '<td>' + esc(item.code || '—') + '</td>'
+        + '<td style="color:var(--tx2)">' + esc(item.reason || '—') + '</td>'
+        + '<td class="num">' + caFmt + '</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+
+  // ── Catégorie 1 : Mortalité (compacte) ──
+  if (cat1.length > 0) {
+    html += '<details style="margin-bottom:8px">';
+    html += '<summary style="font-size:12px;color:var(--tx3);cursor:pointer">Mortalité naturelle (' + cat1.length + ' ASINs, sans action)</summary>';
+    html += '<table class="yoy-table" style="font-size:11px;margin-top:6px">'
+      + '<thead><tr><th style="width:110px">ASIN</th><th>Titre</th><th class="num">CA réf./j</th></tr></thead><tbody>';
+    cat1.forEach(function(item) {
+      html += '<tr>'
+        + '<td style="font-family:monospace;font-size:11px">' + esc(item.asin) + '</td>'
+        + '<td title="' + esc(item.titre || '') + '">' + esc((item.titre || '').slice(0, 55)) + '</td>'
+        + '<td class="num">' + yoyFmtEur(item.caRefPerDay || 0) + '</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table></details>';
+  }
+
+  // ── Plan d'action P1 — CTA 8 (3 ASINs Free) ──
+  var top3Cat2 = cat2.slice(0, 3);
+  if (top3Cat2.length > 0) {
+    html += '<div style="margin-top:18px;padding:14px;background:var(--g-bg);border:1px solid var(--g-bd);border-radius:var(--rdl)">';
+    html += '<div style="font-size:13px;font-weight:700;margin-bottom:8px">Plan d\'action P1 — Top ' + top3Cat2.length + ' ASINs prioritaires</div>';
+    html += '<table class="yoy-table" style="font-size:12px;margin-bottom:10px">'
+      + '<thead><tr><th>Cat.</th><th>ASIN</th><th>Titre</th><th class="num">CA réf./j</th></tr></thead><tbody>';
+    top3Cat2.forEach(function(item) {
+      var sc = item.subcat || 'D1';
+      html += '<tr>'
+        + '<td><span style="font-size:10px;font-weight:600;color:' + (subcatColors[sc] || '#475569') + '">' + esc(sc) + '</span></td>'
+        + '<td style="font-family:monospace;font-size:11px">' + esc(item.asin) + '</td>'
+        + '<td title="' + esc(item.titre || '') + '">' + esc((item.titre || '').slice(0, 50)) + '</td>'
+        + '<td class="num">' + yoyFmtEur(item.caRefPerDay || 0) + '</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table>';
+    var top3Ids = top3Cat2.map(function(i) { return i.asin; });
+    html += '<button class="btn btn-p" onclick="goToAsinsYoY(' + JSON.stringify(top3Ids) + ', \'Enquête P1 — Top 3 ASINs\')">🚀 Démarrer l\'audit dans Analyse ASINs →</button>';
+    html += '<span style="font-size:10px;color:var(--tx3);margin-left:12px">Vue Free — 3 ASINs prioritaires</span>';
+    html += '</div>';
+  }
+
+  html += '</div>'; // .yoy-section
+  return html;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TOGGLE LIGNE EXPANDABLE (option α)
+// ═══════════════════════════════════════════════════════════════
+
+function toggleEnqueteRow(tr) {
+  var asin = tr.getAttribute('data-asin');
+  var expanded = tr.getAttribute('data-expanded') === 'true';
+  var detailRow = tr.nextElementSibling;
+  if (!detailRow || !detailRow.classList.contains('enquete-detail-row')) return;
+
+  if (expanded) {
+    tr.setAttribute('data-expanded', 'false');
+    detailRow.style.display = 'none';
+    var icon = tr.querySelector('td:last-child');
+    if (icon) icon.textContent = '▶';
+  } else {
+    tr.setAttribute('data-expanded', 'true');
+    detailRow.style.display = '';
+    var icon = tr.querySelector('td:last-child');
+    if (icon) icon.textContent = '▼';
+  }
+}
+
+// Exposer sur window pour usage cross-module
+window.renderEnqueteSection = renderEnqueteSection;
+window.toggleEnqueteRow = toggleEnqueteRow;
+window.classifyMissingASINs = classifyMissingASINs;
+window.normalizeBrand = normalizeBrand;
+window.resolveBrandAlias = resolveBrandAlias;
+window.calcBrandAggs = calcBrandAggs;
+window.VC_AVAILABILITY_CODES = VC_AVAILABILITY_CODES;
+
+// v3.6.8 — FR (BdC,...) + EN (PO,...) · BOM UTF-8 · date DD-MonAbbr-YYYY
+// Injection via // @yoy (après yoy_enquete.js dans build.py)
+
+// ═══════════════════════════════════════════════════════════════
+// MAPPINGS COLONNES — FR et EN
+// ═══════════════════════════════════════════════════════════════
+
+var PO_COL_MAP_FR = {
+  poId:         'BdC',
+  vendorCode:   'Code fournisseur',
+  orderDate:    'Date de la commande',
+  status:       'Statut',
+  title:        'Nom du produit',
+  asin:         'ASIN',
+  availability: 'Disponibilité',
+  qtyRequested: 'Quantité demandée',
+  qtyAccepted:  'Quantité acceptée',
+  costAccepted: 'Coût total accepté',
+  shipTo:       'Lieu de livraison'
+};
+
+var PO_COL_MAP_EN = {
+  poId:         'PO',
+  vendorCode:   'Vendor code',
+  orderDate:    'Order date',
+  status:       'Status',
+  title:        'Product name',
+  asin:         'ASIN',
+  availability: 'Availability',
+  qtyRequested: 'Requested quantity',
+  qtyAccepted:  'Accepted quantity',
+  costAccepted: 'Total accepted cost',
+  shipTo:       'Ship-to location'
+};
+
+// Normalisation statut → interne
+var PO_STATUS_MAP = {
+  // FR
+  'Confirmé':      'confirmed',
+  'Clôturé':       'closed',
+  'Non confirmé':  'unconfirmed',
+  // EN
+  'Confirmed':     'confirmed',
+  'Closed':        'closed',
+  'Not confirmed': 'unconfirmed'
+};
+
+// Mois anglais (invariants même en variante FR — convention VC export)
+var PO_MONTH_ABBR = {
+  Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6,
+  Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12
+};
+
+// ═══════════════════════════════════════════════════════════════
+// DÉTECTION LANGUE
+// ═══════════════════════════════════════════════════════════════
+
+function detectPOLang(csvText) {
+  var firstLine = csvText.replace(/^﻿/, '').split('\n')[0];
+  if (firstLine.startsWith('BdC,') || firstLine.startsWith('"BdC",')) return 'fr';
+  if (firstLine.startsWith('PO,') || firstLine.startsWith('"PO",')) return 'en';
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONVERSION DATE  "27-May-2026" → "2026-05-27"
+// Mois toujours en anglais dans l'export VC (même variante FR)
+// ═══════════════════════════════════════════════════════════════
+
+function parsePoDate(rawDate) {
+  if (!rawDate) return '';
+  var parts = rawDate.trim().split('-');
+  if (parts.length !== 3) return rawDate;
+  var day = parts[0], mon = parts[1], year = parts[2];
+  var m = PO_MONTH_ABBR[mon];
+  if (!m) return rawDate;  // abbr inconnue → retour brut
+  return year + '-' + (m < 10 ? '0' : '') + m + '-' + (parseInt(day) < 10 ? '0' : '') + parseInt(day);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EXTRACTION CODE DISPONIBILITÉ  "IA - Accepté : EDI..." → "IA"
+// ═══════════════════════════════════════════════════════════════
+
+function extractAvailabilityCode(raw) {
+  if (!raw) return '';
+  var idx = raw.indexOf(' - ');
+  var code = (idx > -1 ? raw.slice(0, idx) : raw).trim().toUpperCase();
+  // Valider : 1-3 chars alphanum
+  return /^[A-Z0-9]{1,3}$/.test(code) ? code : '';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PARSER PRINCIPAL
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * parsePOItemExport(csvText)
+ * @returns {{ items: Array, lang: string|null, count: number, error?: string }}
+ */
+function parsePOItemExport(csvText) {
+  // 1. Supprimer BOM
+  var text = csvText.replace(/^﻿/, '');
+
+  // 2. Détecter langue
+  var lang = detectPOLang(text);
+  if (!lang) {
+    console.warn('[parser_po] Langue non détectée. Début:', text.slice(0, 80));
+    return { items: [], lang: null, count: 0, error: 'lang_undetected' };
+  }
+
+  var colMap = lang === 'fr' ? PO_COL_MAP_FR : PO_COL_MAP_EN;
+
+  // 3. Papa.parse — déjà dans le bundle
+  var parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+  var presentHeaders = {};
+  (parsed.meta.fields || []).forEach(function(h) { presentHeaders[h] = true; });
+
+  // 4. Vérifier colonnes attendues
+  Object.keys(colMap).forEach(function(field) {
+    if (!presentHeaders[colMap[field]]) {
+      console.warn('[parser_po] Colonne manquante: "' + colMap[field] + '" (champ: ' + field + ', lang: ' + lang + ')');
+    }
+  });
+
+  // 5. Parser chaque ligne
+  var items = [];
+  var data = parsed.data || [];
+  for (var i = 0; i < data.length; i++) {
+    var row = data[i];
+    var asin = (row[colMap.asin] || '').trim();
+    var poId = (row[colMap.poId] || '').trim();
+    if (!asin || !poId) continue; // ignorer lignes vides
+
+    var availRaw  = row[colMap.availability] || '';
+    var availCode = extractAvailabilityCode(availRaw);
+    // VC_AVAILABILITY_CODES défini dans yoy_enquete.js (injecté avant)
+    var availFamily = (VC_AVAILABILITY_CODES[availCode] || {}).family || 'unknown';
+    var rawStatus = (row[colMap.status] || '').trim();
+
+    items.push({
+      poId:               poId,
+      vendorCode:         (row[colMap.vendorCode] || '').trim(),
+      orderDate:          parsePoDate(row[colMap.orderDate] || ''),
+      status:             rawStatus,
+      poStatus:           PO_STATUS_MAP[rawStatus] || 'unknown',
+      title:              (row[colMap.title] || '').trim(),
+      asin:               asin,
+      availabilityRaw:    availRaw,
+      availabilityCode:   availCode,
+      availabilityFamily: availFamily,
+      qtyRequested:       parseInt(row[colMap.qtyRequested] || '0', 10) || 0,
+      qtyAccepted:        parseInt(row[colMap.qtyAccepted]  || '0', 10) || 0,
+      costAccepted:       parseFloat(row[colMap.costAccepted] || '0') || 0,  // point décimal confirmé
+      shipTo:             (row[colMap.shipTo] || '').trim(),
+      // shipTo ≠ marketplace de vente (point d'attention 9.3) — parsé non affiché
+      importedAt:         new Date().toISOString(),
+      source:             'POItemExport'
+    });
+  }
+
+  return { items: items, lang: lang, count: items.length };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MERGE DANS c.pos — dédoublonnage par (poId, asin)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * mergePOItemsIntoClient(client, newItems)
+ * @returns {{ added: number, updated: number, total: number }}
+ */
+function mergePOItemsIntoClient(client, newItems) {
+  if (!client.pos) client.pos = [];
+
+  // Construire index existant
+  var idx = {};
+  for (var i = 0; i < client.pos.length; i++) {
+    var p = client.pos[i];
+    idx[p.poId + '|' + p.asin] = i;
+  }
+
+  var added = 0, updated = 0;
+  for (var j = 0; j < newItems.length; j++) {
+    var item = newItems[j];
+    var key = item.poId + '|' + item.asin;
+    if (idx[key] != null) {
+      // Enrichir le PO existant avec les nouveaux champs sans écraser poId/asin
+      var existing = client.pos[idx[key]];
+      Object.keys(item).forEach(function(k) { existing[k] = item[k]; });
+      updated++;
+    } else {
+      idx[key] = client.pos.length;
+      client.pos.push(item);
+      added++;
+    }
+  }
+
+  // Auto-détecter les vendorCodes pour c.accounts
+  autoDetectVendorCodes(client, newItems);
+
+  return { added: added, updated: updated, total: client.pos.length };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AUTO-DÉTECTION vendorCodes → c.accounts
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * autoDetectVendorCodes(client, items)
+ * Crée une entrée role='BO' dans c.accounts pour chaque vendorCode
+ * présent dans les items mais absent de c.accounts.
+ */
+function autoDetectVendorCodes(client, items) {
+  if (!client.accounts) client.accounts = [];
+  var known = {};
+  client.accounts.forEach(function(a) { known[a.vendorCode] = true; });
+  var seen = {};
+  items.forEach(function(i) { if (i.vendorCode) seen[i.vendorCode] = true; });
+  Object.keys(seen).forEach(function(vc) {
+    if (!known[vc]) {
+      client.accounts.push({
+        id: 'vc_auto_' + vc + '_' + Date.now(),
+        market: '',
+        vendorCode: vc,
+        role: 'BO',  // auto : a des POs → Bon de Commande
+        label: vc
+      });
+      known[vc] = true;
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HANDLER UI — appelé depuis la fiche client
+// ═══════════════════════════════════════════════════════════════
+
+function handlePOItemExportFile(input) {
+  var files = Array.from(input.files);
+  if (!files.length) return;
+  var c = cl(); if (!c) return;
+
+  var totalAdded = 0, totalUpdated = 0, totalRaw = 0, errors = [];
+
+  var pending = files.length;
+  files.forEach(function(file) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        var result = parsePOItemExport(e.target.result);
+        if (result.error) {
+          errors.push(file.name + ': ' + result.error);
+        } else {
+          totalRaw += result.count;  // cumul lignes brutes avant déduplication
+          var stats = mergePOItemsIntoClient(c, result.items);
+          totalAdded   += stats.added;
+          totalUpdated += stats.updated;
+          // Invalider le cache enquête
+          _enqueteCache.posHash = null;
+          console.info('[parser_po] ' + file.name + ' · ' + result.count + ' lignes · lang=' + result.lang
+            + ' · VC: ' + [...new Set(result.items.map(function(i){return i.vendorCode;}))].join(', '));
+        }
+      } catch(err) {
+        errors.push(file.name + ': ' + err.message);
+      }
+      pending--;
+      if (pending === 0) {
+        // Stocker les lignes brutes du batch (remplace la valeur précédente — représente le dernier import)
+        c.poItemExportRawLines = totalRaw;
+        save(); render();
+        if (errors.length) {
+          showToast('⚠ ' + errors[0], 'alr-a', 5000);
+        } else {
+          var msg = '✅ POItemExport : +' + totalAdded + ' POs ajoutés';
+          if (totalUpdated > 0) msg += ', ' + totalUpdated + ' mis à jour';
+          showToast(msg, 'alr-g', 5000);
+        }
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  });
+}
+
+// Exposer sur window
+window.parsePOItemExport = parsePOItemExport;
+window.mergePOItemsIntoClient = mergePOItemsIntoClient;
+window.handlePOItemExportFile = handlePOItemExportFile;
+window.autoDetectVendorCodes = autoDetectVendorCodes;
+
 // v3.6.5.8 — C1-C3 : KPI sous-textes enrichis, structure causale freemium, respiration verdict
 // CP1 : Fondations techniques (routing, import, parser, sanity check, IndexedDB)
 // CP2 : Calculs 12 dimensions + KPI cards
@@ -15886,6 +16792,11 @@ function renderYoYResult() {
   const _tpl2     = tplCatalogue(d, sign);
   const s2Lecture = _tpl2.lecture ? '<div class="yoy-section-lecture">Lecture</div>' + _tpl2.lecture : '';
   const s2Verdict = _tpl2.verdict;
+  // v3.6.8 — CTA 3 : Filtrer les disparus dans Analyse ASINs
+  const _disparusIds = (dim7.disparus || []).map(a => a.asin);
+  const _cta3Html = disparusN > 0
+    ? `<div style="margin-top:10px"><button class="btn btn-p btn-sm" onclick="goToAsinsYoY(${JSON.stringify(_disparusIds)}, 'YoY — ${disparusN} disparus')">Filtrer les ${disparusN} disparus dans Analyse ASINs →</button></div>`
+    : '';
 
   // ── Section 3 : Concentration portefeuille (dim9)
   const dim9 = d.dim9 || {};
@@ -15911,23 +16822,60 @@ function renderYoYResult() {
   const dim10 = d.dim10 || {};
   const s4Title = YOY_TITLES.s4[sign];
   const topBrands = dim10.topBrands || [];
+  // v3.6.8d — 6 colonnes brief §3.5 : Marque · CA/j réf. · Part réf. · CA/j A · Part A · Variation €/j
   const s4Rows = topBrands.slice(0, 10).map(b => {
-    // backward compat : deltaPct ajouté en v3.6.5.4, calculer à la volée si absent
+    // backward compat : deltaPct calculé à la volée si absent (pré-v3.6.5.4)
     const dp = b.deltaPct != null ? b.deltaPct
              : (b.caRefPerDay > 0 ? (b.caAPerDay / b.caRefPerDay - 1) * 100 : null);
-    const dClass = dp != null ? yoyDeltaClass(dp) : 'muted';
-    return `<tr><td>${esc(b.marque || '—')}</td>
-      <td class="num">${b.caAPerDay != null ? yoyFmtEur(b.caAPerDay) : '—'}</td>
+    const dEur = (b.caAPerDay != null && b.caRefPerDay != null) ? b.caAPerDay - b.caRefPerDay : null;
+    const dClass = dEur != null ? yoyDeltaClass(dEur) : 'muted';
+    const shareRefFmt = b.shareRef != null ? yoyFmtPct(b.shareRef) : '—';
+    const shareAFmt   = b.shareA   != null ? yoyFmtPct(b.shareA)   : '—';
+    // Variation €/j (principal) + % en secondaire
+    const dpSub = dp != null ? `<span style="font-size:9px;color:var(--tx3);margin-left:3px">${yoyFmtPct(dp, true)}</span>` : '';
+    return `<tr>
+      <td>${esc(b.marque || '—')}</td>
       <td class="num">${b.caRefPerDay != null ? yoyFmtEur(b.caRefPerDay) : '—'}</td>
-      <td class="num ${dClass}">${dp != null ? yoyFmtPct(dp, true) : '—'}</td></tr>`;
-  }).join('') || `<tr><td colspan="4" class="muted" style="text-align:center">Données insuffisantes</td></tr>`;
+      <td class="num" style="font-size:11px;color:var(--tx3)">${shareRefFmt}</td>
+      <td class="num">${b.caAPerDay != null ? yoyFmtEur(b.caAPerDay) : '—'}</td>
+      <td class="num" style="font-size:11px;color:var(--tx3)">${shareAFmt}</td>
+      <td class="num ${dClass}">${dEur != null ? yoyFmtEurSigned(dEur) : '—'}${dpSub}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6" class="muted" style="text-align:center">Données insuffisantes</td></tr>`;
   const s4Table = `<table class="yoy-table">
-    <thead><tr><th>Marque</th><th>CA/j Période A</th><th>CA/j Réf</th><th>Δ</th></tr></thead>
+    <thead><tr>
+      <th>Marque</th>
+      <th class="num">CA/j réf.</th>
+      <th class="num" style="font-size:10px;color:var(--tx3)">Part réf.</th>
+      <th class="num">CA/j A</th>
+      <th class="num" style="font-size:10px;color:var(--tx3)">Part A</th>
+      <th class="num">Variation €/j</th>
+    </tr></thead>
     <tbody>${s4Rows}</tbody>
   </table>`;
   const _tpl4     = tplMarques(d, sign);
   const s4Lecture = _tpl4.lecture ? '<div class="yoy-section-lecture">Lecture</div>' + _tpl4.lecture : '';
   const s4Verdict = _tpl4.verdict;
+  // v3.6.8 — CTA 6 : Explorer les marques en chute dans Analyse ASINs
+  // Critère Q9=(c) : Top 3 chute absolue €/j parmi le Top 10 (valeur absolue décroissante)
+  const _brandsDeclining = topBrands
+    .filter(b => (b.delta || 0) < 0)
+    .sort((a, b) => (a.delta || 0) - (b.delta || 0))  // plus négatif en premier
+    .slice(0, 3);
+  const _cta6Html = _brandsDeclining.length > 0
+    ? (function() {
+        const names = _brandsDeclining.map(b => b.marque);
+        // Récupérer les ASIN IDs des marques en chute depuis dim7 (tous buckets)
+        const allBucketAsins = [].concat(dim7.disparus||[], dim7.enBaisse||[], dim7.stables||[], dim7.enHausse||[]);
+        const chutingIds = allBucketAsins
+          .filter(function(a) { return names.indexOf((a.marque||'').trim().toUpperCase()) > -1 || names.indexOf((a.marque||'').trim()) > -1; })
+          .map(function(a) { return a.asin; });
+        const label = 'YoY — Marques en chute: ' + names.slice(0,3).join(', ');
+        // Fix v3.6.8e : JSON.stringify(label) produisait "..." qui terminait l'attribut onclick
+        const labelSafe = label.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        return `<div style="margin-top:10px"><button class="btn btn-sm" onclick="goToAsinsYoY(${JSON.stringify(chutingIds)}, '${labelSafe}')">Explorer les marques en chute dans Analyse ASINs →</button></div>`;
+      })()
+    : '';
 
   // ── Section 5 : Top mouvements ASIN (dim11)
   const dim11 = d.dim11 || {};
@@ -15962,13 +16910,25 @@ function renderYoYResult() {
   const dim12 = d.dim12 || {};
   const s6Title = YOY_TITLES.s6[sign];
   const anomPairs = dim12.anomPairs || [];
-  const s6Rows = anomPairs.slice(0, 10).map(p =>
-    `<tr><td>${esc(p.marque1||'—')}</td><td>${esc(p.marque2||'—')}</td>
-      <td class="num">${p.similarity != null ? yoyFmtPct(p.similarity * 100) : '—'}</td>
-      <td class="num muted">${p.caTot != null ? yoyFmtEur(p.caTot) : '—'}</td></tr>`
-  ).join('') || `<tr><td colspan="4" class="muted" style="text-align:center">Aucune anomalie détectée</td></tr>`;
+  // v3.6.8e — CTA 7 : fix onclick double-quote collision (JSON.stringify→single-quote)
+  const s6Rows = anomPairs.slice(0, 10).map(p => {
+    const simFmt = p.similarity != null ? yoyFmtPct(p.similarity * 100) : '—';
+    const cFmt   = p.caTot != null ? yoyFmtEur(p.caTot) : '—';
+    // Échapper pour JS single-quoted string dans attribut HTML double-quoté
+    const m1s = (p.marque1||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const m2s = (p.marque2||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const fusionBtn = `<button class="btn btn-xs" onclick="yoyFusionnerMarques('${m1s}','${m2s}')" title="Créer un alias : ${esc(p.marque2||'')} → ${esc(p.marque1||'')}">Fusionner</button>`;
+    // yoyCasVCFusion : wrapper pour éviter objet littéral {m1:"..."} dans attribut onclick
+    const casBtn = `<button class="btn btn-xs" onclick="yoyCasVCFusion('${m1s}','${m2s}')" title="Ouvrir un cas de fusion catalogue dans Vendor Central">Cas VC →</button>`;
+    return `<tr>
+      <td>${esc(p.marque1||'—')}</td><td>${esc(p.marque2||'—')}</td>
+      <td class="num">${simFmt}</td>
+      <td class="num muted">${cFmt}</td>
+      <td style="white-space:nowrap">${fusionBtn} ${casBtn}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="5" class="muted" style="text-align:center">Aucune anomalie détectée</td></tr>`;
   const s6Table = `<table class="yoy-table">
-    <thead><tr><th>Marque 1</th><th>Marque 2</th><th>Similarité</th><th>CA combiné</th></tr></thead>
+    <thead><tr><th>Marque 1</th><th>Marque 2</th><th>Similarité</th><th>CA combiné</th><th></th></tr></thead>
     <tbody>${s6Rows}</tbody>
   </table>`;
   const _tpl6     = tplAnomalies(d, sign);
@@ -16310,14 +17270,24 @@ function renderYoYResult() {
       </div>
 
     </div>
+
+    <!-- v3.6.8 — CTA 1 + CTA 2 bloc hero -->
+    ${sign === 'negative' ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
+      <button class="btn btn-p" onclick="goToAsinsYoY(${JSON.stringify((dim7.enBaisse||[]).map(a=>a.asin))}, 'YoY — ASINs en baisse')">Examiner les ASINs en baisse dans Analyse ASINs →</button>
+      <button class="btn btn-sm" onclick="go('diagnostic')">Voir le Diagnostic CA détaillé →</button>
+    </div>` : ''}
+
     ${_warningCardsHtml}
     <!-- 6 sections analytiques -->
     ${sec('s1', s1Title, s1Table, s1Lecture, s1Verdict)}
-    ${sec('s2', s2Title, s2Table, s2Lecture, s2Verdict)}
+    ${sec('s2', s2Title, s2Table + _cta3Html, s2Lecture, s2Verdict)}
     ${sec('s3', s3Title, s3Table, s3Lecture, s3Verdict)}
-    ${sec('s4', s4Title, s4Table, s4Lecture, s4Verdict)}
+    ${sec('s4', s4Title, s4Table + _cta6Html, s4Lecture, s4Verdict)}
     ${sec('s5', s5Title, s5Table, s5Lecture, s5Verdict)}
     ${sec('s6', s6Title, s6Table, s6Lecture, s6Verdict)}
+
+    <!-- v3.6.8 — Section Enquête ASINs disparus (après s6, avant diagnostic) -->
+    ${typeof renderEnqueteSection === 'function' ? renderEnqueteSection(c, d, dRef) : ''}
 
     ${s7Html}
     ${s8Html}
@@ -16329,6 +17299,97 @@ function renderYoYResult() {
     </div>
 
   </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// v3.6.8 — FUSION MARQUES (CTA 7 — crée alias dans c.brandAliases)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * yoyFusionnerMarques(m1, m2)
+ * Crée un alias canonical=m1, variants=[m2] dans c.brandAliases avec confirmation.
+ * Invalide le cache enquête et les agrégats marques.
+ */
+function yoyFusionnerMarques(m1, m2) {
+  var c = cl(); if (!c) return;
+  if (!confirm('Fusionner "' + m2 + '" → "' + m1 + '" ?\n\nLes ASINs marqués "' + m2 + '" seront regroupés sous "' + m1 + '" dans la Section Marques.')) return;
+  if (!c.brandAliases) c.brandAliases = [];
+  // Chercher si canonical m1 existe déjà
+  var existing = c.brandAliases.find(function(a) {
+    return (typeof normalizeBrand === 'function' ? normalizeBrand(a.canonical) : a.canonical.toUpperCase()) ===
+           (typeof normalizeBrand === 'function' ? normalizeBrand(m1) : m1.toUpperCase());
+  });
+  var normM2 = typeof normalizeBrand === 'function' ? normalizeBrand(m2) : m2.toUpperCase();
+  if (existing) {
+    if (!existing.variants.some(function(v) {
+      var normV = typeof normalizeBrand === 'function' ? normalizeBrand(v) : v.toUpperCase();
+      return normV === normM2;
+    })) {
+      existing.variants.push(m2);
+    }
+  } else {
+    c.brandAliases.push({ canonical: m1, variants: [m2] });
+  }
+  // Invalider le cache enquête
+  if (typeof _enqueteCache !== 'undefined') _enqueteCache.posHash = null;
+  save(); render();
+  showToast('✅ Alias créé : "' + m2 + '" → "' + m1 + '"', 'alr-g');
+}
+
+/**
+ * yoyCasVCFusion(m1, m2)
+ * Wrapper pour CTA 7 "Cas VC →" — évite de sérialiser un objet {m1:"...",m2:"..."}
+ * dans un attribut onclick (guillemets doubles = collision HTML).
+ */
+function yoyCasVCFusion(m1, m2) {
+  if (typeof renderCaseModal === 'function') renderCaseModal(null, 'fusion_catalogue', { m1: m1, m2: m2 });
+  else go('buybox');
+}
+
+/**
+ * yoyAddAliasPrompt()
+ * UI prompt pour créer un alias manuellement : demande le canonical puis les variants.
+ */
+function yoyAddAliasPrompt() {
+  var c = cl(); if (!c) return;
+  var canonical = (prompt('Marque canonique (référence) :\nEx : VILMORIN') || '').trim();
+  if (!canonical) return;
+  var variantsRaw = (prompt('Variante(s) à fusionner vers "' + canonical + '" :\n(séparées par des virgules)\nEx : Vilmorin, VILMORIN SA') || '').trim();
+  if (!variantsRaw) return;
+  var variants = variantsRaw.split(',').map(function(v) { return v.trim(); }).filter(Boolean);
+  if (!variants.length) return;
+  if (!c.brandAliases) c.brandAliases = [];
+  var normCanon = typeof normalizeBrand === 'function' ? normalizeBrand(canonical) : canonical.toUpperCase();
+  var existing = c.brandAliases.find(function(a) {
+    return (typeof normalizeBrand === 'function' ? normalizeBrand(a.canonical) : a.canonical.toUpperCase()) === normCanon;
+  });
+  if (existing) {
+    variants.forEach(function(v) {
+      var normV = typeof normalizeBrand === 'function' ? normalizeBrand(v) : v.toUpperCase();
+      var already = existing.variants.some(function(ev) {
+        return (typeof normalizeBrand === 'function' ? normalizeBrand(ev) : ev.toUpperCase()) === normV;
+      });
+      if (!already) existing.variants.push(v);
+    });
+  } else {
+    c.brandAliases.push({ canonical: canonical, variants: variants });
+  }
+  if (typeof _enqueteCache !== 'undefined') _enqueteCache.posHash = null;
+  save(); render();
+  showToast('✅ Alias "' + canonical + '" ← [' + variants.join(', ') + ']', 'alr-g');
+}
+
+/**
+ * yoyDeleteAlias(idx)
+ * Supprime l'alias à l'index idx dans c.brandAliases.
+ */
+function yoyDeleteAlias(idx) {
+  var c = cl(); if (!c) return;
+  if (!c.brandAliases || !c.brandAliases[idx]) return;
+  var removed = c.brandAliases.splice(idx, 1)[0];
+  if (typeof _enqueteCache !== 'undefined') _enqueteCache.posHash = null;
+  save(); render();
+  showToast('🗑 Alias supprimé : "' + (removed.canonical || '') + '"', 'alr-a');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -17133,10 +18194,21 @@ function yoyComputeDimensions(rowsA, rowsRef, metaA, metaRef) {
     return sorted.slice(0,n).reduce(function(s,r){ return s+(r.ca_cmd||0); },0) / total * 100;
   };
 
-  // ── Dim 10 — Marques ─────────────────────────────────────────
-  var bMapRef = {}, bMapA = {};
-  rowsRef.forEach(function(r){ var m=(r.marque||'Inconnue').trim(); bMapRef[m]=(bMapRef[m]||0)+(r.ca_cmd||0)/dRef; });
-  rowsA.forEach(function(r){   var m=(r.marque||'Inconnue').trim(); bMapA[m]  =(bMapA[m]  ||0)+(r.ca_cmd||0)/dA;  });
+  // ── Dim 10 — Marques (v3.6.8 : normalisation + alias via calcBrandAggs) ──────
+  // calcBrandAggs défini dans yoy_enquete.js (injecté avant)
+  var _clientForYoy = cl();
+  var _brandAliases = _clientForYoy ? (_clientForYoy.brandAliases || []) : [];
+  var _brandAggs = (typeof calcBrandAggs === 'function')
+    ? calcBrandAggs(rowsRef, rowsA, dRef, dA, _brandAliases)
+    : (function() {
+        // Fallback si yoy_enquete non chargé
+        var br = {}, ba = {};
+        rowsRef.forEach(function(r){ var m=(r.marque||'Inconnue').trim(); br[m]=(br[m]||0)+(r.ca_cmd||0)/dRef; });
+        rowsA.forEach(function(r){   var m=(r.marque||'Inconnue').trim(); ba[m]=(ba[m]||0)+(r.ca_cmd||0)/dA;  });
+        return { bMapRef: br, bMapA: ba };
+      })();
+  var bMapRef = _brandAggs.bMapRef;
+  var bMapA   = _brandAggs.bMapA;
   var topBrands = Object.keys(bMapRef)
     .sort(function(a,b){ return bMapRef[b]-bMapRef[a]; }).slice(0,10)
     .map(function(m){
@@ -17159,22 +18231,33 @@ function yoyComputeDimensions(rowsA, rowsRef, metaA, metaRef) {
   var perdants = llList.slice().sort(function(a,b){ return a.deltaPerDay-b.deltaPerDay; }).slice(0,15);
   var gagnants = llList.slice().sort(function(a,b){ return b.deltaPerDay-a.deltaPerDay; }).slice(0,15);
 
-  // ── Dim 12 — Anomalies catalogue ─────────────────────────────
-  // Normaliser la casse avant matching (P7 — Cogex vs COGEX)
-  var allBrandNames = Object.keys(Object.assign({},bMapRef,bMapA)).filter(function(m){ return m&&m!=='Inconnue'; });
+  // ── Dim 12 — Anomalies catalogue (v3.6.8 : threshold client + filtre asymétrie) ──
+  // Seuil : c.anomalyThreshold (défaut 80%) — brief §3.6 + §3.2
+  var _anomThresh = (_clientForYoy && _clientForYoy.anomalyThreshold != null)
+    ? _clientForYoy.anomalyThreshold / 100
+    : 0.80;
+  // Post-normalisation + alias : les paires identiques post-alias disparaissent (brief §3.6)
+  var allBrandNames = Object.keys(Object.assign({},bMapRef,bMapA)).filter(function(m){ return m&&m!=='INCONNUE'&&m!=='Inconnue'; });
   var allBrandNamesLow = allBrandNames.map(function(m){ return m.toLowerCase(); });
   var anomPairs = [];
   for (var bi=0; bi<allBrandNames.length; bi++) {
     for (var bj=bi+1; bj<allBrandNames.length; bj++) {
       var ma=allBrandNames[bi], mb=allBrandNames[bj];
       var maL=allBrandNamesLow[bi], mbL=allBrandNamesLow[bj];
-      if (maL === mbL) { // même nom, casse différente → similarité max
-        anomPairs.push({ marque1:ma, marque2:mb, similarity:0.99, caTot:(bMapRef[ma]||0)+(bMapRef[mb]||0)+(bMapA[ma]||0)+(bMapA[mb]||0) });
-        continue;
+      if (maL === mbL) { // même nom post-normalisation → paire 100%, pas une anomalie
+        continue; // déjà fusionnées par calcBrandAggs — ne pas signaler
       }
       if (Math.abs(ma.length-mb.length)>6) continue;
-      var sim=yoySimilarity(maL,mbL); // comparer en minuscules
-      if (sim>0.75&&sim<1) anomPairs.push({ marque1:ma, marque2:mb, similarity:sim, caTot:(bMapRef[ma]||0)+(bMapRef[mb]||0)+(bMapA[ma]||0)+(bMapA[mb]||0) });
+      var sim=yoySimilarity(maL,mbL);
+      if (sim >= _anomThresh && sim < 1) {
+        var caTot = (bMapRef[ma]||0)+(bMapRef[mb]||0)+(bMapA[ma]||0)+(bMapA[mb]||0);
+        // Filtre asymétrie : min/max CA < 0.5% → probablement pas un vrai doublon
+        var caM1 = (bMapRef[ma]||0)+(bMapA[ma]||0);
+        var caM2 = (bMapRef[mb]||0)+(bMapA[mb]||0);
+        var minCA = Math.min(caM1, caM2), maxCA = Math.max(caM1, caM2);
+        if (maxCA > 0 && minCA / maxCA < 0.005) continue;
+        anomPairs.push({ marque1:ma, marque2:mb, similarity:sim, caTot:caTot });
+      }
     }
   }
   anomPairs.sort(function(a,b){ return b.similarity-a.similarity; });
