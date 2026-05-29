@@ -454,6 +454,10 @@ function renderYoYResult() {
   const c = cl();
   const clientName = c ? c.name : '—';
 
+  // ── v3.6.9 : Toggle Free/Pro ─────────────────────────────────
+  const viewMode = c ? (c.viewMode || 'free') : 'free';
+  const isPro    = viewMode === 'pro';
+
   // ── Détermination du signe global (dim1.deltaCAPct)
   const deltaCAPct = d.dim1 ? d.dim1.deltaCAPct : null;
   const sign = yoyGetSign(deltaCAPct);
@@ -942,7 +946,12 @@ function renderYoYResult() {
       + '</ol>'
       + '<div class="yoy-section-lecture" style="margin-top:22px">Ce que je ne vois PAS dans les chiffres</div>'
       + '<p class="yoy-section-para">Je ne vois pas de baisse du prix moyen (PMV ' + _pmvUpDown7 + ' de <strong>' + _pmvAbs7 + '</strong>). Je ne vois pas de problème logistique global (ratio expédié/commandé proche de 100 %). Je ne vois pas de dégradation qualité (taux de retours <strong>' + _retDir7 + '</strong>). Je ne chercherais donc pas en priorité du côté du prix, de l\'entrepôt ou des avis clients.</p>'
-      + '<p class="yoy-section-para">La cause la plus probable se situe en amont de la demande consommateur : <strong>commandes Amazon (PO) qui se sont raréfiées, perte de référencement actif, ruptures structurelles sur ASINs clés, suppressions de listings</strong>. C\'est l\'objet du plan d\'action.</p>'
+      // v3.6.9 — "Cause la plus probable" : placeholder IA (narrative Sonnet ou fallback pré-rédigée)
+      // Décision F2 : IA uniquement pour sign='negative'. initAIDiagnostic appelé après render().
+      + '<div class="yoy-section-lecture" style="margin-top:22px">Cause la plus probable</div>'
+      + '<div id="yoy-diag-cause-probable" style="min-height:48px">'
+      + '<p class="yoy-section-para" style="color:var(--tx3);font-style:italic">⏳ Analyse en cours…</p>'
+      + '</div>'
       + '</div>';
   } else if (sign === 'positive') {
     const _gainNames7 = _gainBrands7.slice(0, 3).map(function(b) { return '<strong>' + esc(b.n) + '</strong>'; }).join(', ') || 'plusieurs marques';
@@ -969,6 +978,15 @@ function renderYoYResult() {
       + '<div class="yoy-section-lecture" style="margin-top:22px">Ce que je ne vois PAS dans les chiffres</div>'
       + '<p class="yoy-section-para">Je ne vois pas de signal de risque imminent. Je ne vois pas non plus de moteur de croissance évident à activer.</p>'
       + '<p class="yoy-section-para">Le plan d\'action porte sur les opportunités identifiées au niveau ASIN ou marque (cf. sections précédentes), pas sur un sujet global.</p>'
+      + '</div>';
+  }
+
+  // ── v3.6.9 — Masquer Mon diagnostic en Free (visible Pro uniquement) ──
+  if (!isPro && s7Html) {
+    const _s7Title = s7Html.match(/<h3[^>]*>([^<]+)<\/h3>/);
+    s7Html = '<div class="yoy-section" id="yoy-sec-s7">'
+      + '<h3 class="yoy-section-title">Mon diagnostic</h3>'
+      + yoyBandeauPro('Analyse causale complète + Cause la plus probable (narrative IA)')
       + '</div>';
   }
 
@@ -1081,17 +1099,42 @@ function renderYoYResult() {
       + '</div>';
   }
 
-  // ── Conclusion générale (T5) ──────────────────────────────────────
-  const concluHtml = '<div class="yoy-section" id="yoy-sec-conclusion">'
-    + '<h3 class="yoy-section-title">Conclusion générale</h3>'
-    + tplConclusion(d, sign, clientName)
-    + '</div>';
+  // ── v3.6.9 — Vue Free : plan d'action limité (P1 top 3, P2+P3 masqués) ──
+  if (!isPro && s8Html) {
+    var _p1TitleMatch = /Priorité [123] —[^<]*/.exec(s8Html);
+    var _p1Title = _p1TitleMatch ? _p1TitleMatch[0] : 'Priorité 1 — Plan d\'action';
+    // En Free : montrer uniquement P1 avec top 3 ASINs + bandeau Pro sur le reste
+    var _top3List = _mkAsinList(
+      sign === 'positive' ? (_gagnants11 || []).slice(0, 3) :
+      sign === 'negative' ? (_top8Disp7  || []).slice(0, 3) : []
+    );
+    s8Html = '<div class="yoy-section" id="yoy-sec-s8">'
+      + '<h3 class="yoy-section-title">Ce que je ferais maintenant — plan d\'action priorisé</h3>'
+      + '<div style="margin-bottom:16px">'
+      + '<div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:8px">' + _p1Title + '</div>'
+      + '<p class="yoy-section-para" style="font-size:12px;color:var(--tx3)">Top 3 ASINs prioritaires — Vue Free</p>'
+      + _top3List
+      + '</div>'
+      + yoyBandeauPro('Plan d\'action complet (P1 intégral + Priorités 2 et 3)')
+      + '</div>';
+  }
+
+  // ── Conclusion générale (T5) — visible uniquement en Pro ─────────
+  const concluHtml = isPro
+    ? '<div class="yoy-section" id="yoy-sec-conclusion">'
+      + '<h3 class="yoy-section-title">Conclusion générale</h3>'
+      + tplConclusion(d, sign, clientName)
+      + '</div>'
+    : '<div class="yoy-section" id="yoy-sec-conclusion">'
+      + '<h3 class="yoy-section-title">Conclusion générale</h3>'
+      + yoyBandeauPro('Synthèse exécutive complète — rapport directorial')
+      + '</div>';
 
   // ── v3.6.7 — Warnings YoY ────────────────────────────────────────
   const _warnings = calcYoYWarnings(d, t);
   const _warningCardsHtml = _warnings.length ? renderYoYWarningCards(_warnings, a) : '';
 
-  return `<div style="max-width:960px;margin:0 auto;padding:24px 20px" class="yoy-result-root">
+  const _yoyResultHtml = `<div style="max-width:960px;margin:0 auto;padding:24px 20px" class="yoy-result-root">
 
     <!-- En-tête -->
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
@@ -1099,8 +1142,10 @@ function renderYoYResult() {
         <h2 style="font-size:19px;font-weight:700;margin-bottom:4px">Analyse comparée — ${esc(clientName)}</h2>
         <div style="font-size:12px;color:var(--tx2)">${esc(pALabel)} <span style="color:var(--tx3)">vs</span> ${esc(pRefLabel)}</div>
       </div>
-      <div style="display:flex;gap:8px;flex-shrink:0">
+      <div style="display:flex;gap:8px;flex-shrink:0;align-items:center;flex-wrap:wrap">
         <button class="btn btn-sm" onclick="yoyBack()">← Modifier les imports</button>
+        ${renderYoYToggle(viewMode)}
+        ${isPro ? '<button class="btn btn-sm" id="yoy-word-btn" onclick="downloadYoYWord()" style="border-color:var(--b);color:var(--b)">📄 Rapport Word</button>' : ''}
         <button class="btn btn-sm" onclick="window.print()">🖨 Imprimer</button>
       </div>
     </div>
@@ -1181,8 +1226,10 @@ function renderYoYResult() {
     <!-- v3.6.8 — Section Enquête ASINs disparus (après s6, avant diagnostic) -->
     ${typeof renderEnqueteSection === 'function' ? renderEnqueteSection(c, d, dRef) : ''}
 
-    ${s7Html}
     ${s8Html}
+    <!-- v3.6.9 — Section Analyse par famille (Pro) — après Plan d'action -->
+    ${renderAnalyseFamille(d, isPro)}
+    ${s7Html}
     ${concluHtml}
 
     <!-- Footer print -->
@@ -1191,6 +1238,21 @@ function renderYoYResult() {
     </div>
 
   </div>`;
+
+  // v3.6.9 — Déclencher la narrative IA après injection DOM (sign='negative' + isPro)
+  // setTimeout 0 garantit que le DOM est peint avant le patch async
+  if (sign === 'negative' && isPro && c) {
+    const _cIdAtLaunch = c.id;
+    const _dims = d;
+    const _dRef = dRef;
+    setTimeout(function() {
+      if (typeof initAIDiagnostic === 'function') {
+        initAIDiagnostic(cl(), _dims, _dRef, 'negative', 'yoy-diag-cause-probable', _cIdAtLaunch);
+      }
+    }, 0);
+  }
+
+  return _yoyResultHtml;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1282,6 +1344,127 @@ function yoyDeleteAlias(idx) {
   if (typeof _enqueteCache !== 'undefined') _enqueteCache.posHash = null;
   save(); render();
   showToast('🗑 Alias supprimé : "' + (removed.canonical || '') + '"', 'alr-a');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// v3.6.9 — TOGGLE FREE/PRO + BANDEAU PRO
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * toggleYoYViewMode()
+ * Bascule c.viewMode entre 'free' et 'pro', persiste en IDB, re-render.
+ */
+function toggleYoYViewMode() {
+  var c = cl(); if (!c) return;
+  c.viewMode = (c.viewMode === 'pro') ? 'free' : 'pro';
+  save(); render();
+}
+
+/**
+ * renderYoYToggle(viewMode)
+ * CTA 14 — Toggle switch Free/Pro (UI-only, pas de backend paiement en v3.6.9).
+ */
+function renderYoYToggle(viewMode) {
+  var isPro = viewMode === 'pro';
+  var bg    = isPro ? 'var(--b,#2563eb)' : 'var(--bd2,#d1d5db)';
+  var knob  = isPro ? 'right:2px' : 'left:2px';
+  return '<div style="display:flex;align-items:center;gap:7px">'
+    + '<span style="font-size:11px;font-weight:600;color:' + (isPro ? 'var(--tx3)' : 'var(--b,#2563eb)') + '">Free</span>'
+    + '<button onclick="toggleYoYViewMode()" style="width:42px;height:22px;border-radius:11px;border:none;'
+    +   'background:' + bg + ';cursor:pointer;position:relative;transition:background .2s;flex-shrink:0" '
+    +   'title="' + (isPro ? 'Basculer en Vue Free' : 'Basculer en Vue Pro') + '">'
+    +   '<span style="position:absolute;top:2px;' + knob + ';width:18px;height:18px;border-radius:50%;'
+    +     'background:#fff;transition:left .2s,right .2s"></span>'
+    + '</button>'
+    + '<span style="font-size:11px;font-weight:600;color:' + (isPro ? 'var(--b,#2563eb)' : 'var(--tx3)') + '">Pro</span>'
+    + '</div>';
+}
+
+/**
+ * yoyBandeauPro(label)
+ * CTA 15 — Bandeau unique "Accès Pro" réutilisé sur toutes les sections masquées en Free.
+ */
+function yoyBandeauPro(label) {
+  return '<div style="display:flex;align-items:center;justify-content:space-between;'
+    + 'gap:12px;flex-wrap:wrap;padding:14px 18px;margin:10px 0;'
+    + 'background:linear-gradient(135deg,#f8faff 0%,#eef3ff 100%);'
+    + 'border:1.5px solid var(--b-bd,#bfdbfe);border-radius:var(--rdl)">'
+    + '<span style="font-size:13px;color:var(--tx2)">🔒 <strong>Accès Pro</strong> — ' + label + '</span>'
+    + '<button class="btn btn-sm" style="border-color:var(--b);color:var(--b);white-space:nowrap" '
+    +   'onclick="if(confirm(\'Pour passer en Pro, contactez :\\n\\nFred Rochette\\nfrochette@vitajardin.com\')){}">'
+    +   'Passer en Pro →</button>'
+    + '</div>';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// v3.6.9 — SECTION ANALYSE PAR FAMILLE — ACTIONS RECOMMANDÉES (Pro)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * renderAnalyseFamille(dims, isPro)
+ * Tableau Pro Top 20 familles avec état coloré + action recommandée statique.
+ * Placement : après Plan d'action P3, avant Mon diagnostic.
+ */
+function renderAnalyseFamille(dims, isPro) {
+  var d10 = dims.dim10 || {};
+  var brands = (d10.topBrands || []).slice(0, 20); // top 20 (calcYoYDims retourne 20 depuis v3.6.9)
+
+  if (!isPro) {
+    return '<div class="yoy-section" id="yoy-sec-famille">'
+      + '<h3 class="yoy-section-title">Analyse par famille — actions recommandées</h3>'
+      + yoyBandeauPro('Tableau complet des ' + brands.length + ' familles avec diagnostic et recommandations')
+      + '</div>';
+  }
+
+  if (!brands.length) return '';
+
+  // Règles classification état (brief §3.3)
+  function brandState(delta, deltaPct) {
+    var pct = deltaPct != null ? deltaPct : (delta != null ? delta * 100 : null);
+    if (pct === null) return { label: 'Inconnu', color: 'var(--tx3)', bg: 'var(--s2)' };
+    if (pct > 20)   return { label: 'En croissance', color: 'var(--g,#15803d)',  bg: 'var(--g-bg,#f0fdf4)' };
+    if (pct >= -20) return { label: 'Stable',        color: 'var(--tx3)',        bg: 'var(--s2)'            };
+    if (pct >= -50) return { label: 'En recul',      color: 'var(--a,#d97706)',  bg: 'var(--a-bg,#fffbeb)'  };
+    return           { label: 'Hémorragie',  color: 'var(--r,#b91c1c)',  bg: 'var(--r-bg,#fef2f2)'  };
+  }
+
+  // Actions recommandées statiques
+  var ACTIONS = {
+    'En croissance': 'Sécuriser stock + surveiller Buy Box (best-seller émergent)',
+    'Stable':        'Maintenir la cadence d\'approvisionnement',
+    'En recul':      'Audit disponibilité + relance PO + révision fiches produit',
+    'Hémorragie':    'Audit prioritaire — possible suppression ou problème pricing',
+    'Inconnu':       '—'
+  };
+
+  var rows = brands
+    .sort(function(a, b) { return ((a.delta||0)) - ((b.delta||0)); }) // pires en premier
+    .map(function(b) {
+      var state = brandState(b.delta, b.deltaPct);
+      var caRefFmt = b.caRefPerDay != null ? yoyFmtEur(b.caRefPerDay) : '—';
+      var caAFmt   = b.caAPerDay   != null ? yoyFmtEur(b.caAPerDay)   : '—';
+      var dEurFmt  = b.delta       != null ? yoyFmtEurSigned(b.delta)  : '—';
+      var dPctFmt  = b.deltaPct    != null ? yoyFmtPct(b.deltaPct, true) : '—';
+      return '<tr>'
+        + '<td>' + esc(b.marque || '—') + '</td>'
+        + '<td><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;'
+        +   'color:' + state.color + ';background:' + state.bg + '">' + esc(state.label) + '</span></td>'
+        + '<td class="num">' + caRefFmt + '</td>'
+        + '<td class="num">' + caAFmt + '</td>'
+        + '<td class="num ' + (b.delta < 0 ? 'neg' : b.delta > 0 ? 'pos' : 'muted') + '">' + dEurFmt
+        +   '<span style="font-size:9px;color:var(--tx3);margin-left:3px">' + dPctFmt + '</span></td>'
+        + '<td style="font-size:11px;color:var(--tx2)">' + esc(ACTIONS[state.label] || '—') + '</td>'
+        + '</tr>';
+    }).join('');
+
+  return '<div class="yoy-section" id="yoy-sec-famille">'
+    + '<h3 class="yoy-section-title">Analyse par famille — actions recommandées</h3>'
+    + '<table class="yoy-table" style="font-size:12px">'
+    + '<thead><tr><th>Famille</th><th>État</th><th class="num">CA/j réf.</th>'
+    + '<th class="num">CA/j A</th><th class="num">Variation</th><th>Action recommandée</th></tr></thead>'
+    + '<tbody>' + rows + '</tbody>'
+    + '</table>'
+    + '</div>';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2101,8 +2284,10 @@ function yoyComputeDimensions(rowsA, rowsRef, metaA, metaRef) {
       })();
   var bMapRef = _brandAggs.bMapRef;
   var bMapA   = _brandAggs.bMapA;
+  // v3.6.9 : slice(0,20) pour Section Analyse par famille (Top 20)
+  // Tous les consommateurs font .slice(0,10) explicitement → safe (audit C3 commit b)
   var topBrands = Object.keys(bMapRef)
-    .sort(function(a,b){ return bMapRef[b]-bMapRef[a]; }).slice(0,10)
+    .sort(function(a,b){ return bMapRef[b]-bMapRef[a]; }).slice(0,20)
     .map(function(m){
       var caRd = bMapRef[m]||0, caAd = bMapA[m]||0;
       return { marque:m, caRefPerDay:caRd, caAPerDay:caAd,
