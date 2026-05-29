@@ -131,6 +131,7 @@ Tout patch doit être minimal et ciblé :
 | v3.6.7 | ✅ **PROD** — mergé 27 mai 2026 | 6455588 (staging) |
 | v3.6.7.1 | ✅ **PROD** — mergé 27 mai 2026 | 584dfcb (staging) / 327d999 (preprod) |
 | v3.6.8.8 | ✅ **PROD** — mergé 29 mai 2026 / tag v3.6.8.8 | 5314253 (merge main) |
+| v3.6.8.9 | ✅ **PROD** — mergé 29 mai 2026 / tag v3.6.8.9 | 3067cd8 (merge main) |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
