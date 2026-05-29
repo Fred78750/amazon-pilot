@@ -5327,7 +5327,8 @@ function renderAsins() {
   if (!selectedAsin) {
     h += renderMarketTabs(c, filters.market);
     // ── Calcul des vues disponibles ──────────────────────────────
-    const allAsinsForViews = c.asins;
+    // v3.6.8.8 : si filtre YoY actif, compter dans le pool filtré (pas tout le catalogue)
+    const allAsinsForViews = (asinView === 'yoy-warning') ? displayAsins : c.asins;
     const totalCAAll = allAsinsForViews.reduce((s,a) => s+(getRevenue(a,c)||0), 0);
     const countLowStock = allAsinsForViews.filter(a => {
       const oos = parseNum(a.oosPct);
@@ -5355,7 +5356,8 @@ function renderAsins() {
     views.forEach(v => {
       const isActive = asinView === v.id;
       const hasAlert = (v.id === 'lowstock' && v.count > 0) || (v.id === 'declining' && v.count > 0);
-      h += '<button class="btn btn-sm' + (isActive ? ' btn-p' : '') + '" style="position:relative;' + (hasAlert && !isActive ? 'border-color:var(--' + v.color + ');color:var(--' + v.color + ')' : '') + '" onclick="goFilteredAsins(' + JSON.stringify(v.id) + ')">';
+      // Fix v3.6.8.8 : JSON.stringify(v.id) produisait "lowstock" avec guillemets → onclick cassé
+      h += '<button class="btn btn-sm' + (isActive ? ' btn-p' : '') + '" style="position:relative;' + (hasAlert && !isActive ? 'border-color:var(--' + v.color + ');color:var(--' + v.color + ')' : '') + '" onclick="goFilteredAsins(\'' + v.id + '\')">';
       h += v.icon + ' ' + v.label;
       if (v.count > 0) h += ' <span style="font-size:10px;font-weight:700;margin-left:3px;padding:1px 5px;background:var(--s2);border-radius:8px">' + v.count + '</span>';
       h += '</button>';
@@ -9497,7 +9499,7 @@ function renderSEOSection(a, c) {
       const ml = MARKET_LANG[mkt];
       const done = !!res[mkt] && !res[mkt].error;
       const isActive = activeTab === mkt;
-      h += '<button class="btn btn-sm ' + (isActive ? 'btn-p' : '') + '" onclick="seoActiveTab=' + JSON.stringify(mkt) + ';render()">';
+      h += '<button class="btn btn-sm ' + (isActive ? 'btn-p' : '') + '" onclick="seoActiveTab=\'' + mkt + '\';render()">';
       h += (ml?.flag || '') + ' ' + (ml?.label || mkt);
       if (seoLoading && !res[mkt]) h += ' <span class="spin" style="font-size:10px">⏳</span>';
       else if (done) h += ' ✓';
@@ -9548,7 +9550,7 @@ function renderSEOSection(a, c) {
     h += '<div style="margin-bottom:6px;padding:8px 12px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd)">';
     h += '<div style="font-size:10px;font-weight:700;color:var(--or);margin-bottom:3px">• ' + (i + 1) + '</div>';
     h += '<div style="font-size:12px;line-height:1.5">' + esc(b) + '</div>';
-    h += '<button class="btn btn-xs" style="margin-top:4px" onclick="copySEOField(' + asinJson + ',' + mktJson + ',' + JSON.stringify(bulletField) + ')">📋</button>';
+    h += '<button class="btn btn-xs" style="margin-top:4px" onclick="copySEOField(' + asinJson + ',' + mktJson + ',\'' + bulletField + '\')">📋</button>';
     h += '</div>';
   });
   h += '</div>';
@@ -9901,7 +9903,6 @@ function goFilteredAsins(preset) {
   screen = 'asins';
   selectedAsin = null;
   aiResult = '';
-  asinView = preset;
   asinLimit = 9999;
   filters.segment = 'all';
   asinSearch = '';
@@ -9909,11 +9910,21 @@ function goFilteredAsins(preset) {
   const c = cl();
   if (!c) { render(); return; }
   const allAsins = [...c.asins];
-  const totalCA  = allAsins.reduce((s,a) => s+(getRevenue(a,c)||0), 0);
+
+  // v3.6.8.8 — Si filtre YoY actif et sous-filtre demandé : travailler dans le pool YoY
+  // (ne pas exploser vers tout le catalogue, préserver le contexte de navigation)
+  const yoyActive = asinViewCustomIds && asinViewCustomIds.length > 0 && preset !== 'yoy-warning' && preset !== 'all';
+  const pool = yoyActive
+    ? allAsins.filter(function(a) { return asinViewCustomIds.indexOf(a.asin) > -1; })
+    : allAsins;
+  const totalCA = pool.reduce((s,a) => s+(getRevenue(a,c)||0), 0);
+
+  // Garder 'yoy-warning' pour préserver le badge YoY si sous-filtre dans contexte YoY
+  asinView = yoyActive ? 'yoy-warning' : preset;
 
   if (preset === 'lowstock') {
     asinSort = 'stock_asc';
-    asinViewAsins = allAsins.filter(a => {
+    asinViewAsins = pool.filter(a => {
       const oos = parseNum(a.oosPct);
       return (getRevenue(a,c)||0) > 50 && (
         (oos > 0 && oos < 90) ||
@@ -9922,25 +9933,33 @@ function goFilteredAsins(preset) {
     }).map(a => a.asin);
   } else if (preset === 'declining') {
     asinSort = 'baisse';
-    asinViewAsins = allAsins.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) <= -10)
+    asinViewAsins = pool.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) <= -10)
       .map(a => a.asin);
   } else if (preset === 'growing') {
     asinSort = 'hausse';
-    asinViewAsins = allAsins.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) >= 20)
+    asinViewAsins = pool.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) >= 20)
       .map(a => a.asin);
   } else if (preset === 'seg-a') {
     asinSort = 'ca_desc';
-    asinViewAsins = allAsins.filter(a => calcSegment(a, totalCA, c) === 'A').map(a => a.asin);
+    asinViewAsins = pool.filter(a => calcSegment(a, totalCA, c) === 'A').map(a => a.asin);
   } else if (preset === 'seg-b') {
     asinSort = 'ca_desc';
-    asinViewAsins = allAsins.filter(a => calcSegment(a, totalCA, c) === 'B').map(a => a.asin);
+    asinViewAsins = pool.filter(a => calcSegment(a, totalCA, c) === 'B').map(a => a.asin);
   } else if (preset === 'seg-c') {
     asinSort = 'ca_desc';
-    asinViewAsins = allAsins.filter(a => calcSegment(a, totalCA, c) === 'C').map(a => a.asin);
+    asinViewAsins = pool.filter(a => calcSegment(a, totalCA, c) === 'C').map(a => a.asin);
   } else if (preset === 'yoy-warning') {
     // v3.6.7 — CTA 11 / CTA 12 : filtre YoY par liste d'ASIN IDs
     asinSort = 'baisse';
     asinViewAsins = (asinViewCustomIds && asinViewCustomIds.length) ? asinViewCustomIds.slice() : [];
+  } else if (preset === 'all') {
+    asinSort = 'ca_desc';
+    if (asinViewCustomIds && asinViewCustomIds.length) {
+      // Dans contexte YoY, "Tous" = revenir à l'ensemble des ASINs YoY (pas tout le catalogue)
+      asinViewAsins = asinViewCustomIds.slice();
+    } else {
+      asinViewAsins = null;
+    }
   } else {
     asinSort = 'ca_desc';
     asinViewAsins = null;
