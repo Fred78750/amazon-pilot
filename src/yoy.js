@@ -342,7 +342,7 @@ function renderYoYWarningCards(warnings, analysis) {
     var borderColor = isCrit ? '#b91c1c' : '#d97706';
     var bgColor     = isCrit ? 'rgba(185,28,28,0.06)' : 'rgba(217,119,6,0.06)';
     var icon        = isCrit ? '🔴' : '🟠';
-    var asinIdsJson = JSON.stringify(w.asinIds || []);
+    var asinIdsJson = JSON.stringify(w.asinIds || []).replace(/"/g, '&quot;');  // &quot; évite la collision avec onclick="..."
     // Échapper les apostrophes pour l'attribut onclick inline
     var filterLabelJs = (w.filterLabel || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     html += '<div style="border:1.5px solid ' + borderColor + ';border-radius:10px;padding:14px 16px;'
@@ -419,7 +419,7 @@ function renderEveil8020Block(c) {
   var data = calcEveil8020(c);
   if (!data) return '';
   var asinIds      = data.asins.map(function(a){ return a.asin; });
-  var asinIdsJson  = JSON.stringify(asinIds);
+  var asinIdsJson  = JSON.stringify(asinIds).replace(/"/g, '&quot;');
   var montantFmt   = data.montant.toLocaleString('fr-FR') + ' €/mois';
   var filterLabel  = 'Longue traîne en érosion';
   var filterLabelJs = filterLabel.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -687,7 +687,7 @@ function renderYoYResult() {
   // v3.6.8 — CTA 3 : Filtrer les disparus dans Analyse ASINs
   const _disparusIds = (dim7.disparus || []).map(a => a.asin);
   const _cta3Html = disparusN > 0
-    ? `<div style="margin-top:10px"><button class="btn btn-p btn-sm" onclick="goToAsinsYoY(${JSON.stringify(_disparusIds)}, 'YoY — ${disparusN} disparus')">Filtrer les ${disparusN} disparus dans Analyse ASINs →</button></div>`
+    ? `<div style="margin-top:10px"><button class="btn btn-p btn-sm" onclick="goToAsinsYoY(${JSON.stringify(_disparusIds).replace(/"/g,'&quot;')}, 'YoY — ${disparusN} disparus')">Filtrer les ${disparusN} disparus dans Analyse ASINs →</button></div>`
     : '';
 
   // ── Section 3 : Concentration portefeuille (dim9)
@@ -765,7 +765,7 @@ function renderYoYResult() {
         const label = 'YoY — Marques en chute: ' + names.slice(0,3).join(', ');
         // Fix v3.6.8e : JSON.stringify(label) produisait "..." qui terminait l'attribut onclick
         const labelSafe = label.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-        return `<div style="margin-top:10px"><button class="btn btn-sm" onclick="goToAsinsYoY(${JSON.stringify(chutingIds)}, '${labelSafe}')">Explorer les marques en chute dans Analyse ASINs →</button></div>`;
+        return `<div style="margin-top:10px"><button class="btn btn-sm" onclick="goToAsinsYoY(${JSON.stringify(chutingIds).replace(/"/g,'&quot;')}, '${labelSafe}')">Explorer les marques en chute dans Analyse ASINs →</button></div>`;
       })()
     : '';
 
@@ -1165,7 +1165,7 @@ function renderYoYResult() {
 
     <!-- v3.6.8 — CTA 1 + CTA 2 bloc hero -->
     ${sign === 'negative' ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
-      <button class="btn btn-p" onclick="goToAsinsYoY(${JSON.stringify((dim7.enBaisse||[]).map(a=>a.asin))}, 'YoY — ASINs en baisse')">Examiner les ASINs en baisse dans Analyse ASINs →</button>
+      <button class="btn btn-p" onclick="goToAsinsYoY(${JSON.stringify((dim7.enBaisse||[]).map(a=>a.asin)).replace(/"/g,'&quot;')}, 'YoY — ASINs en baisse')">Examiner les ASINs en baisse dans Analyse ASINs →</button>
       <button class="btn btn-sm" onclick="go('diagnostic')">Voir le Diagnostic CA détaillé →</button>
     </div>` : ''}
 

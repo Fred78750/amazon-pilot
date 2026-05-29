@@ -14430,7 +14430,13 @@ function goFilteredAsins(preset) {
 // v3.6.8 α+γ : pushState pour Back navigateur + _yoyReturnCtx pour bandeau retour
 function goToAsinsYoY(asinIds, label) {
   _yoyReturnCtx = { scrollY: window.scrollY, label: 'Analyse comparée' };
-  try { history.pushState({ _yoyReturn: true, scrollY: window.scrollY }, ''); } catch(e) {}
+  try {
+    // replaceState marque l'entrée COURANTE (page YoY) avec scrollY
+    // pushState crée une nouvelle entrée vide pour la vue ASINs
+    // → Back navigue de l'entrée ASINs à l'entrée YoY → popstate reçoit { _yoyPage:true }
+    history.replaceState({ _yoyPage: true, scrollY: window.scrollY }, '');
+    history.pushState({ _asinsFromYoy: true }, '');
+  } catch(e) {}
   asinViewCustomIds = Array.isArray(asinIds) && asinIds.length ? asinIds : [];
   asinViewLabel     = label || 'Filtré par YoY';
   goFilteredAsins('yoy-warning');
@@ -14444,9 +14450,11 @@ function yoyGoBack() {
   if (ctx && ctx.scrollY) setTimeout(function() { try { window.scrollTo(0, ctx.scrollY); } catch(e) {} }, 80);
 }
 
-// v3.6.8 γ : handler popstate — uniquement pour les états poussés par goToAsinsYoY
+// v3.6.8 γ : handler popstate — déclenché quand on revient à l'entrée YoY (replaceState)
 window.addEventListener('popstate', function(e) {
-  if (!e.state || !e.state._yoyReturn) return;  // ignorer tout autre popstate
+  // popstate reçoit l'état de l'entrée VERS LAQUELLE on navigue
+  // On ne réagit que si c'est notre entrée YoY marquée par replaceState
+  if (!e.state || !e.state._yoyPage) return;
   var sy = e.state.scrollY || 0;
   _yoyReturnCtx = null;
   go('yoy');
@@ -15778,7 +15786,7 @@ function renderEnqueteSection(client, dims, dRef) {
     });
     html += '</tbody></table>';
     var top3Ids = top3Cat2.map(function(i) { return i.asin; });
-    html += '<button class="btn btn-p" onclick="goToAsinsYoY(' + JSON.stringify(top3Ids) + ', \'Enquête P1 — Top 3 ASINs\')">🚀 Démarrer l\'audit dans Analyse ASINs →</button>';
+    html += '<button class="btn btn-p" onclick="goToAsinsYoY(' + JSON.stringify(top3Ids).replace(/"/g,'&quot;') + ', \'Enquête P1 — Top 3 ASINs\')">🚀 Démarrer l\'audit dans Analyse ASINs →</button>';
     html += '<span style="font-size:10px;color:var(--tx3);margin-left:12px">Vue Free — 3 ASINs prioritaires</span>';
     html += '</div>';
   }
@@ -16450,7 +16458,7 @@ function renderYoYWarningCards(warnings, analysis) {
     var borderColor = isCrit ? '#b91c1c' : '#d97706';
     var bgColor     = isCrit ? 'rgba(185,28,28,0.06)' : 'rgba(217,119,6,0.06)';
     var icon        = isCrit ? '🔴' : '🟠';
-    var asinIdsJson = JSON.stringify(w.asinIds || []);
+    var asinIdsJson = JSON.stringify(w.asinIds || []).replace(/"/g, '&quot;');  // &quot; évite la collision avec onclick="..."
     // Échapper les apostrophes pour l'attribut onclick inline
     var filterLabelJs = (w.filterLabel || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     html += '<div style="border:1.5px solid ' + borderColor + ';border-radius:10px;padding:14px 16px;'
@@ -16527,7 +16535,7 @@ function renderEveil8020Block(c) {
   var data = calcEveil8020(c);
   if (!data) return '';
   var asinIds      = data.asins.map(function(a){ return a.asin; });
-  var asinIdsJson  = JSON.stringify(asinIds);
+  var asinIdsJson  = JSON.stringify(asinIds).replace(/"/g, '&quot;');
   var montantFmt   = data.montant.toLocaleString('fr-FR') + ' €/mois';
   var filterLabel  = 'Longue traîne en érosion';
   var filterLabelJs = filterLabel.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -16795,7 +16803,7 @@ function renderYoYResult() {
   // v3.6.8 — CTA 3 : Filtrer les disparus dans Analyse ASINs
   const _disparusIds = (dim7.disparus || []).map(a => a.asin);
   const _cta3Html = disparusN > 0
-    ? `<div style="margin-top:10px"><button class="btn btn-p btn-sm" onclick="goToAsinsYoY(${JSON.stringify(_disparusIds)}, 'YoY — ${disparusN} disparus')">Filtrer les ${disparusN} disparus dans Analyse ASINs →</button></div>`
+    ? `<div style="margin-top:10px"><button class="btn btn-p btn-sm" onclick="goToAsinsYoY(${JSON.stringify(_disparusIds).replace(/"/g,'&quot;')}, 'YoY — ${disparusN} disparus')">Filtrer les ${disparusN} disparus dans Analyse ASINs →</button></div>`
     : '';
 
   // ── Section 3 : Concentration portefeuille (dim9)
@@ -16873,7 +16881,7 @@ function renderYoYResult() {
         const label = 'YoY — Marques en chute: ' + names.slice(0,3).join(', ');
         // Fix v3.6.8e : JSON.stringify(label) produisait "..." qui terminait l'attribut onclick
         const labelSafe = label.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-        return `<div style="margin-top:10px"><button class="btn btn-sm" onclick="goToAsinsYoY(${JSON.stringify(chutingIds)}, '${labelSafe}')">Explorer les marques en chute dans Analyse ASINs →</button></div>`;
+        return `<div style="margin-top:10px"><button class="btn btn-sm" onclick="goToAsinsYoY(${JSON.stringify(chutingIds).replace(/"/g,'&quot;')}, '${labelSafe}')">Explorer les marques en chute dans Analyse ASINs →</button></div>`;
       })()
     : '';
 
@@ -17273,7 +17281,7 @@ function renderYoYResult() {
 
     <!-- v3.6.8 — CTA 1 + CTA 2 bloc hero -->
     ${sign === 'negative' ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
-      <button class="btn btn-p" onclick="goToAsinsYoY(${JSON.stringify((dim7.enBaisse||[]).map(a=>a.asin))}, 'YoY — ASINs en baisse')">Examiner les ASINs en baisse dans Analyse ASINs →</button>
+      <button class="btn btn-p" onclick="goToAsinsYoY(${JSON.stringify((dim7.enBaisse||[]).map(a=>a.asin)).replace(/"/g,'&quot;')}, 'YoY — ASINs en baisse')">Examiner les ASINs en baisse dans Analyse ASINs →</button>
       <button class="btn btn-sm" onclick="go('diagnostic')">Voir le Diagnostic CA détaillé →</button>
     </div>` : ''}
 

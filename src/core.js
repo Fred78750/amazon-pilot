@@ -9951,7 +9951,13 @@ function goFilteredAsins(preset) {
 // v3.6.8 α+γ : pushState pour Back navigateur + _yoyReturnCtx pour bandeau retour
 function goToAsinsYoY(asinIds, label) {
   _yoyReturnCtx = { scrollY: window.scrollY, label: 'Analyse comparée' };
-  try { history.pushState({ _yoyReturn: true, scrollY: window.scrollY }, ''); } catch(e) {}
+  try {
+    // replaceState marque l'entrée COURANTE (page YoY) avec scrollY
+    // pushState crée une nouvelle entrée vide pour la vue ASINs
+    // → Back navigue de l'entrée ASINs à l'entrée YoY → popstate reçoit { _yoyPage:true }
+    history.replaceState({ _yoyPage: true, scrollY: window.scrollY }, '');
+    history.pushState({ _asinsFromYoy: true }, '');
+  } catch(e) {}
   asinViewCustomIds = Array.isArray(asinIds) && asinIds.length ? asinIds : [];
   asinViewLabel     = label || 'Filtré par YoY';
   goFilteredAsins('yoy-warning');
@@ -9965,9 +9971,11 @@ function yoyGoBack() {
   if (ctx && ctx.scrollY) setTimeout(function() { try { window.scrollTo(0, ctx.scrollY); } catch(e) {} }, 80);
 }
 
-// v3.6.8 γ : handler popstate — uniquement pour les états poussés par goToAsinsYoY
+// v3.6.8 γ : handler popstate — déclenché quand on revient à l'entrée YoY (replaceState)
 window.addEventListener('popstate', function(e) {
-  if (!e.state || !e.state._yoyReturn) return;  // ignorer tout autre popstate
+  // popstate reçoit l'état de l'entrée VERS LAQUELLE on navigue
+  // On ne réagit que si c'est notre entrée YoY marquée par replaceState
+  if (!e.state || !e.state._yoyPage) return;
   var sy = e.state.scrollY || 0;
   _yoyReturnCtx = null;
   go('yoy');
