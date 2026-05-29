@@ -15680,7 +15680,8 @@ function renderEnqueteSection(client, dims, dRef) {
         + '</div>'
         + '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'
         + '<a href="' + esc(vcUrl) + '" target="_blank" class="btn btn-xs" style="text-decoration:none">↗ Fiche VC</a>'
-        + '<button class="btn btn-xs" onclick="event.stopPropagation();goToAsinsYoY([' + JSON.stringify(item.asin) + '],\'Enquête: ' + esc(item.asin) + '\')">🔍 Analyse ASINs →</button>'
+        // Fix v3.6.8e : JSON.stringify(asin) → '"B01..."' terminait l'attribut — utiliser single-quote
+        + '<button class="btn btn-xs" onclick="event.stopPropagation();goToAsinsYoY([\'' + item.asin + '\'],\'Enquête: ' + esc(item.asin) + '\')">🔍 Analyse ASINs →</button>'
         + '</div>'
         + '</td></tr>';
     });
@@ -16839,7 +16840,9 @@ function renderYoYResult() {
           .filter(function(a) { return names.indexOf((a.marque||'').trim().toUpperCase()) > -1 || names.indexOf((a.marque||'').trim()) > -1; })
           .map(function(a) { return a.asin; });
         const label = 'YoY — Marques en chute: ' + names.slice(0,3).join(', ');
-        return `<div style="margin-top:10px"><button class="btn btn-sm" onclick="goToAsinsYoY(${JSON.stringify(chutingIds)}, ${JSON.stringify(label)})">Explorer les marques en chute dans Analyse ASINs →</button></div>`;
+        // Fix v3.6.8e : JSON.stringify(label) produisait "..." qui terminait l'attribut onclick
+        const labelSafe = label.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        return `<div style="margin-top:10px"><button class="btn btn-sm" onclick="goToAsinsYoY(${JSON.stringify(chutingIds)}, '${labelSafe}')">Explorer les marques en chute dans Analyse ASINs →</button></div>`;
       })()
     : '';
 
@@ -16876,16 +16879,16 @@ function renderYoYResult() {
   const dim12 = d.dim12 || {};
   const s6Title = YOY_TITLES.s6[sign];
   const anomPairs = dim12.anomPairs || [];
-  // v3.6.8 — CTA 7 : "Fusionner" par ligne + "Ouvrir un cas de fusion catalogue"
-  const _clientRef = cl();
+  // v3.6.8e — CTA 7 : fix onclick double-quote collision (JSON.stringify→single-quote)
   const s6Rows = anomPairs.slice(0, 10).map(p => {
     const simFmt = p.similarity != null ? yoyFmtPct(p.similarity * 100) : '—';
     const cFmt   = p.caTot != null ? yoyFmtEur(p.caTot) : '—';
-    // Bouton Fusionner : crée un alias canonical=marque1, variants=[marque2] avec confirmation
-    const m1j = JSON.stringify(p.marque1||''), m2j = JSON.stringify(p.marque2||'');
-    const fusionBtn = `<button class="btn btn-xs" onclick="yoyFusionnerMarques(${m1j},${m2j})" title="Créer un alias : ${esc(p.marque2||'')} → ${esc(p.marque1||'')}">Fusionner</button>`;
-    // CTA 7 : Ouvrir cas Vendor Central (renderCaseModal si disponible)
-    const casBtn = `<button class="btn btn-xs" onclick="typeof renderCaseModal==='function'?renderCaseModal(null,'fusion_catalogue',{m1:${m1j},m2:${m2j}}):go('buybox')" title="Ouvrir un cas de fusion catalogue dans Vendor Central">Cas VC →</button>`;
+    // Échapper pour JS single-quoted string dans attribut HTML double-quoté
+    const m1s = (p.marque1||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const m2s = (p.marque2||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const fusionBtn = `<button class="btn btn-xs" onclick="yoyFusionnerMarques('${m1s}','${m2s}')" title="Créer un alias : ${esc(p.marque2||'')} → ${esc(p.marque1||'')}">Fusionner</button>`;
+    // yoyCasVCFusion : wrapper pour éviter objet littéral {m1:"..."} dans attribut onclick
+    const casBtn = `<button class="btn btn-xs" onclick="yoyCasVCFusion('${m1s}','${m2s}')" title="Ouvrir un cas de fusion catalogue dans Vendor Central">Cas VC →</button>`;
     return `<tr>
       <td>${esc(p.marque1||'—')}</td><td>${esc(p.marque2||'—')}</td>
       <td class="num">${simFmt}</td>
@@ -17300,6 +17303,16 @@ function yoyFusionnerMarques(m1, m2) {
   if (typeof _enqueteCache !== 'undefined') _enqueteCache.posHash = null;
   save(); render();
   showToast('✅ Alias créé : "' + m2 + '" → "' + m1 + '"', 'alr-g');
+}
+
+/**
+ * yoyCasVCFusion(m1, m2)
+ * Wrapper pour CTA 7 "Cas VC →" — évite de sérialiser un objet {m1:"...",m2:"..."}
+ * dans un attribut onclick (guillemets doubles = collision HTML).
+ */
+function yoyCasVCFusion(m1, m2) {
+  if (typeof renderCaseModal === 'function') renderCaseModal(null, 'fusion_catalogue', { m1: m1, m2: m2 });
+  else go('buybox');
 }
 
 /**

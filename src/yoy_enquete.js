@@ -383,7 +383,8 @@ function renderEnqueteSection(client, dims, dRef) {
         + '</div>'
         + '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'
         + '<a href="' + esc(vcUrl) + '" target="_blank" class="btn btn-xs" style="text-decoration:none">↗ Fiche VC</a>'
-        + '<button class="btn btn-xs" onclick="event.stopPropagation();goToAsinsYoY([' + JSON.stringify(item.asin) + '],\'Enquête: ' + esc(item.asin) + '\')">🔍 Analyse ASINs →</button>'
+        // Fix v3.6.8e : JSON.stringify(asin) → '"B01..."' terminait l'attribut — utiliser single-quote
+        + '<button class="btn btn-xs" onclick="event.stopPropagation();goToAsinsYoY([\'' + item.asin + '\'],\'Enquête: ' + esc(item.asin) + '\')">🔍 Analyse ASINs →</button>'
         + '</div>'
         + '</td></tr>';
     });
