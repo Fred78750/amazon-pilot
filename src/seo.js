@@ -587,7 +587,7 @@ function renderAgentVC() {
       h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">';
       markets.forEach(function(mkt) {
         var ml = MARKET_LANG[mkt];
-        h += '<button class="btn' + (s.market === mkt ? ' btn-p' : '') + '" onclick="agentVCState.market=' + JSON.stringify(mkt) + ';render()">';
+        h += '<button class="btn' + (s.market === mkt ? ' btn-p' : '') + '" onclick="agentVCState.market=\'' + mkt + '\';render()">';
         h += (ml && ml.flag ? ml.flag : '') + ' ' + mkt + '</button>';
       });
       h += '</div>';
@@ -885,7 +885,7 @@ function refreshSEODrawer() {
   if (!seoLoading) {
     h += '<div style="margin-top:6px">';
     var _safeMarket = ctrlMkt || (c.mainMarket || '.fr');
-    h += '<button class="btn btn-xs btn-p" style="width:100%" onclick="runSEOFiche(' + asinJ + ',' + JSON.stringify(_safeMarket) + ',seoMotcle[' + asinJ + ']||extractSearchKeyword(' + asinJ + ',cl()))">'
+    h += '<button class="btn btn-xs btn-p" style="width:100%" onclick="runSEOFiche(' + asinJ + ',\'' + _safeMarket + '\',seoMotcle[' + asinJ + ']||extractSearchKeyword(' + asinJ + ',cl()))">'
       + (r && !r.error ? '🔄 Regénérer avec enrichissement web' : '✍️ Générer avec enrichissement web') + '</button>';
     h += '</div>';
   }
@@ -931,7 +931,7 @@ function refreshSEODrawer() {
         var ml = MARKET_LANG[mkt];
         var done = !!(res[mkt] && !res[mkt].error);
         var isAct = activeMkt === mkt;
-        h += '<button class="btn btn-sm' + (isAct?' btn-p':'') + '" onclick="seoActiveTab=' + JSON.stringify(mkt) + ';refreshSEODrawer()">' + (ml?ml.flag+' '+ml.label:mkt) + (done?' ✓':'') + '</button>';
+        h += '<button class="btn btn-sm' + (isAct?' btn-p':'') + '" onclick="seoActiveTab=\'' + mkt + '\';refreshSEODrawer()">' + (ml?ml.flag+' '+ml.label:mkt) + (done?' ✓':'') + '</button>';
       });
       h += '</div>';
     }
@@ -973,7 +973,7 @@ function refreshSEODrawer() {
     var _vcDate   = c.ficheOptimisee && c.ficheOptimisee[asin] ? c.ficheOptimisee[asin].lastVCUpdate : null;
     h += '<div style="padding:12px 16px;border-top:1px solid var(--bd);display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0">';
     if (r && !r.error) {
-      h += '<button class="btn btn-sm btn-p" onclick="copySEOTitreMkt('+asinJ+','+JSON.stringify(activeMkt)+')">📋 Tout copier</button>';
+      h += '<button class="btn btn-sm btn-p" onclick="copySEOTitreMkt('+asinJ+',\''+activeMkt+'\')">📋 Tout copier</button>';
       var _vcBtnLabel = _vcStatus === 'pending' ? '⏳ En cours' : _vcStatus === 'success' ? '✅ VC à jour' : '📤 Modifier VC';
       h += '<button class="btn btn-sm" style="background:var(--accent);color:#fff;border-color:var(--accent)" onclick="seoLaunchModify('+asinJ+')">' + _vcBtnLabel + '</button>';
       if (_vcStatus === 'pending') {
@@ -990,7 +990,7 @@ function refreshSEODrawer() {
         h += '<button class="btn btn-sm" style="background:var(--r);color:#fff;border-color:var(--r)" onclick="seoOpenCase('+asinJ+')">🆘 Cas support</button>';
       }
       h += '<button class="btn btn-sm" style="background:var(--or);color:#fff;border-color:var(--or)" '
-        + 'onclick="runSEOFiche(' + asinJ + ',' + JSON.stringify(_safeMarket) + ',seoMotcle[' + asinJ + ']||extractSearchKeyword(' + asinJ + ',cl()))">'
+        + 'onclick="runSEOFiche(' + asinJ + ',\'' + _safeMarket + '\',seoMotcle[' + asinJ + ']||extractSearchKeyword(' + asinJ + ',cl()))">'
         + '🔄 Régénérer</button>';
     }
     h += '</div>';
@@ -1004,7 +1004,7 @@ function drawSEOContent(asin, activeMkt, res, mtp, compact) {
   if (!r || r.error) return '';
   var h = '';
   var asinJ = "'" + asin + "'";
-  var mktJ  = JSON.stringify(activeMkt);
+  var mktJ  = "'" + activeMkt + "'";
 
   // Nom type produit
   if (r.nomType) {
@@ -1034,7 +1034,7 @@ function drawSEOContent(asin, activeMkt, res, mtp, compact) {
     h += '<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--tx3);margin-bottom:6px">BULLET POINTS</div>';
     (r.bullets||[]).forEach(function(b,i) {
       if (!b) return;
-      var bf = JSON.stringify('bullet'+(i+1));
+      var bf = "'bullet" + (i+1) + "'";
       h += '<div style="margin-bottom:5px;padding:7px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd)">';
       h += '<div style="font-size:9px;font-weight:700;color:var(--or);margin-bottom:2px">• '+(i+1)+'</div>';
       h += '<div style="font-size:11px;line-height:1.5">' + esc(b) + '</div>';
