@@ -450,7 +450,7 @@ function renderEnqueteSection(client, dims, dRef) {
     });
     html += '</tbody></table>';
     var top3Ids = top3Cat2.map(function(i) { return i.asin; });
-    html += '<button class="btn btn-p" onclick="goToAsinsYoY(' + JSON.stringify(top3Ids) + ', \'Enquête P1 — Top 3 ASINs\')">🚀 Démarrer l\'audit dans Analyse ASINs →</button>';
+    html += '<button class="btn btn-p" onclick="goToAsinsYoY(' + JSON.stringify(top3Ids).replace(/"/g,'&quot;') + ', \'Enquête P1 — Top 3 ASINs\')">🚀 Démarrer l\'audit dans Analyse ASINs →</button>';
     html += '<span style="font-size:10px;color:var(--tx3);margin-left:12px">Vue Free — 3 ASINs prioritaires</span>';
     html += '</div>';
   }
