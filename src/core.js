@@ -9956,7 +9956,8 @@ function goToAsinsYoY(asinIds, label) {
     // pushState crée une nouvelle entrée vide pour la vue ASINs
     // → Back navigue de l'entrée ASINs à l'entrée YoY → popstate reçoit { _yoyPage:true }
     history.replaceState({ _yoyPage: true, scrollY: window.scrollY }, '');
-    history.pushState({ _asinsFromYoy: true }, '');
+    // Stocker asinIds + label dans l'entrée ASINs pour que Forward puisse restaurer le filtre
+    history.pushState({ _asinsFromYoy: true, asinIds: (Array.isArray(asinIds) ? asinIds : []), label: (label || 'Filtré par YoY') }, '');
   } catch(e) {}
   asinViewCustomIds = Array.isArray(asinIds) && asinIds.length ? asinIds : [];
   asinViewLabel     = label || 'Filtré par YoY';
@@ -9971,15 +9972,24 @@ function yoyGoBack() {
   if (ctx && ctx.scrollY) setTimeout(function() { try { window.scrollTo(0, ctx.scrollY); } catch(e) {} }, 80);
 }
 
-// v3.6.8 γ : handler popstate — déclenché quand on revient à l'entrée YoY (replaceState)
+// v3.6.8 γ : handler popstate — Back (→ YoY) ET Forward (→ ASINs filtrés)
 window.addEventListener('popstate', function(e) {
-  // popstate reçoit l'état de l'entrée VERS LAQUELLE on navigue
-  // On ne réagit que si c'est notre entrée YoY marquée par replaceState
-  if (!e.state || !e.state._yoyPage) return;
-  var sy = e.state.scrollY || 0;
-  _yoyReturnCtx = null;
-  go('yoy');
-  if (sy) setTimeout(function() { try { window.scrollTo(0, sy); } catch(ex) {} }, 100);
+  if (!e.state) return;
+
+  if (e.state._yoyPage) {
+    // BACK : retour à la page YoY
+    var sy = e.state.scrollY || 0;
+    _yoyReturnCtx = null;
+    go('yoy');
+    if (sy) setTimeout(function() { try { window.scrollTo(0, sy); } catch(ex) {} }, 100);
+
+  } else if (e.state._asinsFromYoy) {
+    // FORWARD : retour vers la vue ASINs filtrée (après un Back)
+    _yoyReturnCtx = { scrollY: 0, label: 'Analyse comparée' };
+    asinViewCustomIds = Array.isArray(e.state.asinIds) ? e.state.asinIds : [];
+    asinViewLabel     = e.state.label || 'Filtré par YoY';
+    goFilteredAsins('yoy-warning');
+  }
 });
 
 function selClient(id) { activeId = id; screen = 'dashboard'; selectedAsin = null; aiResult = ''; render(); }
