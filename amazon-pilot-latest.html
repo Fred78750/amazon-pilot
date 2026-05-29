@@ -704,7 +704,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.6.9';
+const APP_VERSION = '3.6.9.1';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -19408,41 +19408,56 @@ async function yoyCallDim16(dims1_15, causePrincipale, meta) {
     return '<w:r>' + (rpr ? '<w:rPr>' + rpr + '</w:rPr>' : '') + '<w:t xml:space="preserve">' + _xmlEsc(text) + '</w:t></w:r>';
   }
 
+  // v3.6.9.1 : zéro référence à des styles nommés (Heading1/TableGrid) → inline uniquement
+  // Les styles nommés causaient un crash Word "mode protégé" sans ouverture effective
   function _ooPar(text, opts) {
     opts = opts || {};
     var ppr = '';
-    if (opts.style)   ppr += '<w:pStyle w:val="' + opts.style + '"/>';
-    if (opts.spacing) ppr += '<w:spacing w:after="' + opts.spacing + '"/>';
+    if (opts.before || opts.after) {
+      ppr += '<w:spacing'
+        + (opts.before ? ' w:before="' + opts.before + '"' : '')
+        + (opts.after  ? ' w:after="'  + opts.after  + '"' : '')
+        + '/>';
+    }
+    if (opts.indent) ppr += '<w:ind w:left="' + opts.indent + '"/>';
     return '<w:p>' + (ppr ? '<w:pPr>' + ppr + '</w:pPr>' : '') + _ooRun(text, opts) + '</w:p>';
   }
 
   function _ooTable(headers, rows) {
     var W = Math.floor(9200 / Math.max(headers.length, 1));
     function cell(txt, isHdr) {
-      return '<w:tc><w:tcPr><w:tcW w:w="' + W + '" w:type="dxa"/>'
-        + '<w:shd w:val="clear" w:color="auto" w:fill="' + (isHdr ? 'E8ECF0' : 'FFFFFF') + '"/></w:tcPr>'
+      return '<w:tc>'
+        + '<w:tcPr>'
+        + '<w:tcW w:w="' + W + '" w:type="dxa"/>'
+        + '<w:tcBorders>'
+        + '<w:top w:val="single" w:sz="4" w:color="BBBBBB"/>'
+        + '<w:bottom w:val="single" w:sz="4" w:color="BBBBBB"/>'
+        + '<w:left w:val="single" w:sz="4" w:color="BBBBBB"/>'
+        + '<w:right w:val="single" w:sz="4" w:color="BBBBBB"/>'
+        + '</w:tcBorders>'
+        + (isHdr ? '<w:shd w:val="clear" w:fill="E8ECF0"/>' : '')
+        + '</w:tcPr>'
         + '<w:p><w:pPr><w:spacing w:after="40"/></w:pPr>'
         + _ooRun(String(txt != null ? txt : ''), isHdr ? { bold: true, size: 18 } : { size: 18 })
         + '</w:p></w:tc>';
     }
     function row(cells, isHdr) {
-      return '<w:tr>' + cells.map(function(c) { return cell(c, isHdr); }).join('') + '</w:tr>';
+      return '<w:tr><w:trPr>' + (isHdr ? '<w:tblHeader/>' : '') + '</w:trPr>'
+        + cells.map(function(c) { return cell(c, isHdr); }).join('') + '</w:tr>';
     }
     return '<w:tbl>'
-      + '<w:tblPr><w:tblStyle w:val="TableGrid"/>'
-      + '<w:tblW w:w="0" w:type="auto"/>'
+      + '<w:tblPr><w:tblW w:w="0" w:type="auto"/>'
       + '<w:tblBorders>'
-      + '<w:top w:val="single" w:sz="4" w:color="CCCCCC"/>'
-      + '<w:left w:val="single" w:sz="4" w:color="CCCCCC"/>'
-      + '<w:bottom w:val="single" w:sz="4" w:color="CCCCCC"/>'
-      + '<w:right w:val="single" w:sz="4" w:color="CCCCCC"/>'
-      + '<w:insideH w:val="single" w:sz="4" w:color="CCCCCC"/>'
-      + '<w:insideV w:val="single" w:sz="4" w:color="CCCCCC"/>'
+      + '<w:top w:val="single" w:sz="4" w:color="BBBBBB"/>'
+      + '<w:bottom w:val="single" w:sz="4" w:color="BBBBBB"/>'
+      + '<w:left w:val="single" w:sz="4" w:color="BBBBBB"/>'
+      + '<w:right w:val="single" w:sz="4" w:color="BBBBBB"/>'
+      + '<w:insideH w:val="single" w:sz="4" w:color="DDDDDD"/>'
+      + '<w:insideV w:val="single" w:sz="4" w:color="DDDDDD"/>'
       + '</w:tblBorders></w:tblPr>'
       + row(headers, true)
       + rows.map(function(r) { return row(r, false); }).join('')
-      + '</w:tbl>'
-      + '<w:p/>';
+      + '</w:tbl><w:p/>';
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -19466,13 +19481,13 @@ async function yoyCallDim16(dims1_15, causePrincipale, meta) {
     var body = '';
 
     // ── 1. Page de garde ──
-    body += _ooPar('Analyse comparée — ' + (c.name || ''), { style:'Heading1', bold:true, size:32 });
+    body += _ooPar('Analyse comparée — ' + (c.name || ''), { bold:true, size:32, before:240, after:120 });
     body += _ooPar(pAL + '  vs  ' + pRL, { size:22 });
     body += _ooPar('Généré le ' + new Date().toLocaleDateString('fr-FR') + ' · Amazon Pilot v3.6.9', { size:18, color:'888888' });
     body += '<w:p/>';
 
     // ── 2. KPI hero ──
-    body += _ooPar('1 — Évolution du chiffre d\'affaires', { style:'Heading2', bold:true, size:26 });
+    body += _ooPar('1 — Évolution du chiffre d\'affaires', { bold:true, size:26, before:200, after:80 });
     body += _ooTable(['Indicateur','Valeur'], [
       ['Δ CA annualisé',  d1.deltaCAAnnu != null ? yoyFmtEurSigned(d1.deltaCAAnnu)+'/an' : '—'],
       ['Δ CA %',          d1.deltaCAPct  != null ? yoyFmtPct(d1.deltaCAPct,true)         : '—'],
@@ -19481,7 +19496,7 @@ async function yoyCallDim16(dims1_15, causePrincipale, meta) {
     ]);
 
     // ── 3. Catalogue ──
-    body += _ooPar('2 — Dynamique catalogue', { style:'Heading2', bold:true, size:26 });
+    body += _ooPar('2 — Dynamique catalogue', { bold:true, size:26, before:200, after:80 });
     body += _ooTable(['Catégorie','ASINs','Impact annuel'], [
       ['Disparus',  String(dis), d7.sumDisparusRef ? yoyFmtEur(d7.sumDisparusRef*365)+'/an' : '—'],
       ['Apparus',   String(app), d7.sumApparusA   ? yoyFmtEur(d7.sumApparusA*365)+'/an'   : '—'],
@@ -19492,7 +19507,7 @@ async function yoyCallDim16(dims1_15, causePrincipale, meta) {
 
     // ── 4. Concentration ──
     if (d9.concRef && d9.concA) {
-      body += _ooPar('3 — Concentration du portefeuille', { style:'Heading2', bold:true, size:26 });
+      body += _ooPar('3 — Concentration du portefeuille', { bold:true, size:26, before:200, after:80 });
       body += _ooTable(['Indicateur','Référence','Période A'], [
         ['Top 10',  d9.concRef.top10  != null ? yoyFmtPct(d9.concRef.top10)  : '—', d9.concA.top10  != null ? yoyFmtPct(d9.concA.top10)  : '—'],
         ['Top 20',  d9.concRef.top20  != null ? yoyFmtPct(d9.concRef.top20)  : '—', d9.concA.top20  != null ? yoyFmtPct(d9.concA.top20)  : '—'],
@@ -19502,7 +19517,7 @@ async function yoyCallDim16(dims1_15, causePrincipale, meta) {
     }
 
     // ── 5. Marques ──
-    body += _ooPar('4 — Dynamique marques (Top 10)', { style:'Heading2', bold:true, size:26 });
+    body += _ooPar('4 — Dynamique marques (Top 10)', { bold:true, size:26, before:200, after:80 });
     body += _ooTable(['Marque','CA/j réf.','Part réf.','CA/j A','Part A','Var. €/j'],
       (d10.topBrands||[]).slice(0,10).map(function(b) {
         return [b.marque||'—',
@@ -19516,7 +19531,7 @@ async function yoyCallDim16(dims1_15, causePrincipale, meta) {
     // ── 6. Anomalies ──
     var anomPairs = (d12.anomPairs||[]).slice(0,10);
     if (anomPairs.length > 0) {
-      body += _ooPar('5 — Doublons orthographiques', { style:'Heading2', bold:true, size:26 });
+      body += _ooPar('5 — Doublons orthographiques', { bold:true, size:26, before:200, after:80 });
       body += _ooTable(['Marque 1','Marque 2','Similarité','CA combiné'],
         anomPairs.map(function(p) {
           return [p.marque1||'—', p.marque2||'—',
@@ -19526,7 +19541,7 @@ async function yoyCallDim16(dims1_15, causePrincipale, meta) {
     }
 
     // ── 7. Top mouvements ──
-    body += _ooPar('6 — Top mouvements ASIN', { style:'Heading2', bold:true, size:26 });
+    body += _ooPar('6 — Top mouvements ASIN', { bold:true, size:26, before:200, after:80 });
     if ((d11.perdants||[]).length > 0) {
       body += _ooPar('Top 10 perdants', { bold:true, size:22 });
       body += _ooTable(['ASIN','Titre','Marque','Δ €/j'],
@@ -19545,7 +19560,7 @@ async function yoyCallDim16(dims1_15, causePrincipale, meta) {
     }
 
     // ── 8. Enquête ──
-    body += _ooPar('7 — Enquête ASINs disparus', { style:'Heading2', bold:true, size:26 });
+    body += _ooPar('7 — Enquête ASINs disparus', { bold:true, size:26, before:200, after:80 });
     var eq = (typeof _enqueteCache !== 'undefined' && _enqueteCache && _enqueteCache.result) ? _enqueteCache.result : null;
     if (eq) {
       body += _ooTable(['Catégorie','ASINs'], [
@@ -19564,7 +19579,7 @@ async function yoyCallDim16(dims1_15, causePrincipale, meta) {
     }
 
     // ── 9. Plan d'action ──
-    body += _ooPar('8 — Plan d\'action priorisé', { style:'Heading2', bold:true, size:26 });
+    body += _ooPar('8 — Plan d\'action priorisé', { bold:true, size:26, before:200, after:80 });
     if (sign === 'negative') {
       body += _ooPar('Priorité 1 — Auditer les ASINs disparus de poids significatif', { bold:true, size:22 });
       var top5dis = (d7.disparus||[]).slice().sort(function(a,b){return (b.caRefPerDay||0)-(a.caRefPerDay||0);}).slice(0,5);
@@ -19587,7 +19602,7 @@ async function yoyCallDim16(dims1_15, causePrincipale, meta) {
     }
 
     // ── 10. Analyse par famille ──
-    body += _ooPar('9 — Analyse par famille — actions recommandées', { style:'Heading2', bold:true, size:26 });
+    body += _ooPar('9 — Analyse par famille — actions recommandées', { bold:true, size:26, before:200, after:80 });
     var famBrands = (d10.topBrands||[]).slice(0,20).sort(function(a,b){return (a.delta||0)-(b.delta||0);});
     if (famBrands.length > 0) {
       function famState(pct) {
@@ -19611,14 +19626,14 @@ async function yoyCallDim16(dims1_15, causePrincipale, meta) {
     }
 
     // ── 11. Mon diagnostic ──
-    body += _ooPar('10 — Mon diagnostic', { style:'Heading2', bold:true, size:26 });
+    body += _ooPar('10 — Mon diagnostic', { bold:true, size:26, before:200, after:80 });
     if (c.aiCache && c.aiCache.diagnosticV1 && c.aiCache.diagnosticV1.content) {
       body += _ooPar('Cause la plus probable', { bold:true, size:22 });
       body += _ooPar(c.aiCache.diagnosticV1.content, { size:20 });
     }
 
     // ── 12. Conclusion ──
-    body += _ooPar('11 — Conclusion générale', { style:'Heading2', bold:true, size:26 });
+    body += _ooPar('11 — Conclusion générale', { bold:true, size:26, before:200, after:80 });
     if (typeof tplConclusion === 'function') {
       var txt = tplConclusion(d, sign, c.name||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
       body += _ooPar(txt, { size:20 });
@@ -19672,19 +19687,19 @@ async function yoyCallDim16(dims1_15, causePrincipale, meta) {
         + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
         + '</Relationships>';
 
+      // v3.6.9.1 : styles minimalistes — uniquement Normal avec Calibri 11
+      // Aucune référence à des styles nommés dans le document → formatage 100% inline
       var STYLES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        + '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        + '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+        + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
         + '<w:docDefaults><w:rPrDefault><w:rPr>'
         + '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/>'
         + '<w:sz w:val="22"/><w:szCs w:val="22"/>'
         + '</w:rPr></w:rPrDefault></w:docDefaults>'
-        + '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/>'
-        + '<w:pPr><w:spacing w:after="240"/></w:pPr>'
-        + '<w:rPr><w:b/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr></w:style>'
-        + '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/>'
-        + '<w:pPr><w:spacing w:before="240" w:after="120"/></w:pPr>'
-        + '<w:rPr><w:b/><w:sz w:val="26"/><w:szCs w:val="26"/></w:rPr></w:style>'
-        + '<w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/></w:style>'
+        + '<w:style w:type="paragraph" w:default="1" w:styleId="Normal">'
+        + '<w:name w:val="Normal"/>'
+        + '<w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr>'
+        + '</w:style>'
         + '</w:styles>';
 
       var zip = _buildZip([
