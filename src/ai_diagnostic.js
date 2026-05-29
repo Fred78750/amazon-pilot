@@ -153,13 +153,22 @@ function initAIDiagnostic(c, dims, dRef, sign, placeholderId, clientIdAtLaunch) 
     return;
   }
 
-  // Cache miss → appel Lambda
+  // Cache miss → appel Lambda (format API Amazon Pilot : messages[], feature, Authorization)
   var prompt = buildDiagnosticPrompt(c, dims, dRef, sign);
+  var idToken = localStorage.getItem('ap-id-token') || '';
 
   fetch(_AI_LAMBDA_URL + '/ai/complete', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt: prompt, model: 'claude-sonnet-4-5', maxTokens: 300 })
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + idToken
+    },
+    body: JSON.stringify({
+      messages: [{ role: 'user', content: prompt }],
+      feature: 'revue',
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 350
+    })
   })
   .then(function(resp) {
     if (!resp.ok) throw new Error('Lambda ' + resp.status);
