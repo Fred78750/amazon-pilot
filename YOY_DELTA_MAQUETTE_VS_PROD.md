@@ -1,10 +1,11 @@
 # YOY_DELTA_MAQUETTE_VS_PROD.md
 
-**Document de suivi du delta entre la maquette cible YoY V3 (`maquette_yoy_cogex_v3.html`) et la prod actuelle (v3.6.6.2)**
+**Document de suivi du delta entre la maquette cible YoY V3 (`maquette_yoy_cogex_v3.html`) et la prod actuelle**
 
-**Date production** : 26 mai 2026
-**Auteur** : Claude Orchestrateur
-**Statut** : v1 — document vivant, à mettre à jour à chaque livraison v3.6.x
+**Date production** : 26 mai 2026  
+**Dernière mise à jour** : 28 mai 2026 (v3.6.8 staging)  
+**Auteur** : Claude Orchestrateur  
+**Statut** : v2 — mise à jour post-livraison v3.6.8  
 **Cible commerciale** : été 2026 (3-4 mois de runway)
 
 ---
@@ -55,17 +56,17 @@ La maquette est structurée en 8 grandes sections (lecture top-down) :
 |---|---|---|---|
 | 3 grands KPIs (CA perdu / ASINs disparus / Concentration) | Tableau de bord d'indicateurs bruts livré | Partiel — pas le format "hero" 3 KPIs en gros | **v3.6.7** (refonte visuelle KPI hero block) |
 | Delta % et delta absolu par KPI | Présent | ✅ Pas de delta | — |
-| CTA `Examiner les ASINs en baisse dans Analyse ASINs →` (CTA 1) | **ABSENT** | CTA non implémenté | **v3.6.8** (YoY Étape 3a — Enquête) |
-| CTA `Voir le Diagnostic CA détaillé →` (CTA 2) | **ABSENT** | CTA non implémenté | **v3.6.8** |
+| CTA `Examiner les ASINs en baisse dans Analyse ASINs →` (CTA 1) | ✅ Livré v3.6.8 | CTA implémenté | ~~**v3.6.8**~~ |
+| CTA `Voir le Diagnostic CA détaillé →` (CTA 2) | ✅ Livré v3.6.8 | CTA implémenté | ~~**v3.6.8**~~ |
 
 ### 3.3 Section Catalogue (ASINs disparus, nouveaux, mortalité)
 
 | Maquette V3 | Prod v3.6.6.2 | Delta | Chantier |
 |---|---|---|---|
 | Bloc "313 ASINs disparus en un an" avec narrative | Indicateur brut présent | Narrative absente | **v3.6.9** (rendu béotien) |
-| Classification 3 catégories (À CREUSER / Mortalité / Autres) | **ABSENTE** | Algorithme de classification 9 codes → 3 catégories non implémenté | **v3.6.8** (YoY Étape 3a) |
-| Détail ASIN par ASIN avec investigation | **ABSENT** | Fiche détail enquête non implémentée | **v3.6.8** |
-| CTA `Filtrer les 313 disparus dans Analyse ASINs →` (CTA 3) | **ABSENT** | CTA non implémenté | **v3.6.8** |
+| Classification 3 catégories (À CREUSER / Mortalité / Autres) | ✅ Livré v3.6.8 | Algorithme 9 codes → 3 catégories implémenté (`yoy_enquete.js`) | ~~**v3.6.8**~~ |
+| Détail ASIN par ASIN avec investigation | ✅ Livré v3.6.8 | Fiche détail expandable (option α) implémentée | ~~**v3.6.8**~~ |
+| CTA `Filtrer les 313 disparus dans Analyse ASINs →` (CTA 3) | ✅ Livré v3.6.8 | CTA implémenté | ~~**v3.6.8**~~ |
 | CTA `Ouvrir des cas Vendor Central depuis Buy Box →` (CTA 4) | **ABSENT** | CTA non implémenté | **v3.6.10** (BOL Mismatch + purchase hold) |
 
 ### 3.4 Section Concentration (Top 10, Pareto, fragilité)
@@ -80,33 +81,36 @@ La maquette est structurée en 8 grandes sections (lecture top-down) :
 
 | Maquette V3 | Prod v3.6.6.2 | Delta | Chantier |
 |---|---|---|---|
-| Tableau marques avec delta + tag (chute / croissance / sortie) | **ABSENT** | Vue par marque non implémentée | **v3.6.8** (YoY Étape 3a) |
-| CTA `Explorer les marques en chute dans Analyse ASINs →` (CTA 6) | **ABSENT** | CTA non implémenté | **v3.6.8** |
+| Tableau marques 6 colonnes (Marque · CA/j réf. · Part réf. · CA/j A · Part A · Variation €/j) | ✅ Livré v3.6.8d | 6 colonnes brief §3.5 implémentées (patch v3.6.8d — manquaient Part réf./A et variation €/j) | ~~**v3.6.8**~~ |
+| CTA `Explorer les marques en chute dans Analyse ASINs →` (CTA 6) | ✅ Livré v3.6.8 | CTA implémenté | ~~**v3.6.8**~~ |
 
 ### 3.6 Section Anomalies (cas atypiques détectés)
 
 | Maquette V3 | Prod v3.6.6.2 | Delta | Chantier |
 |---|---|---|---|
-| Détection automatique des cas atypiques (CA YoY > 1000% sur ASIN unique = fusion catalogue) | **ABSENTE** | Algorithme détection cas atypiques non implémenté | **v3.6.8** |
-| CTA `Ouvrir un cas de fusion catalogue →` (CTA 7) | **ABSENT** | CTA non implémenté | **v3.6.8** |
+| Détection automatique des cas atypiques (CA YoY > 1000% sur ASIN unique = fusion catalogue) | ✅ Livré v3.6.8 | Algorithme dim12 + Section Anomalies implémentés | ~~**v3.6.8**~~ |
+| CTA `Ouvrir un cas de fusion catalogue →` (CTA 7) | ✅ Livré v3.6.8 | CTA "Cas VC →" implémenté dans la table Anomalies | ~~**v3.6.8**~~ |
 
 ### 3.7 Plan d'action 5 priorités (vue Pro)
 
 | Maquette V3 | Prod v3.6.6.2 | Delta | Chantier |
 |---|---|---|---|
-| Bloc "Plan d'action 5 priorités" (vue Pro débloquée) | **ABSENT** | Vue Pro entière à construire | **v3.6.9** |
-| Priorité 1 : Audit ASINs en baisse | **ABSENTE** | Logique de priorisation non implémentée | **v3.6.9** |
-| CTA `Démarrer l'audit dans Analyse ASINs →` (CTA 8) | **ABSENT** | CTA non implémenté | **v3.6.8** |
-| Priorité 2 : Surveillance Buy Box | **ABSENTE** | Bloc non implémenté | **v3.6.10** |
-| CTA `Surveillance Buy Box des best-sellers →` (CTA 9) | **ABSENT** | CTA non implémenté | **v3.6.10** |
+| Plan d'action Priorité 1 (ASINs disparus) | ✅ Livré v3.6.8 | Priorité 1 implémentée dans Section Enquête | ~~**v3.6.9**~~ |
+| CTA `Démarrer l'audit dans Analyse ASINs →` (CTA 8) | ✅ Livré v3.6.8 | CTA implémenté (top 3 ASINs enquête) | ~~**v3.6.8**~~ |
+| Plan d'action P2 + P3 (anticipation v3.6.9) | ✅ Livré v3.6.8 *(anticipation)* | P2 Buy Box + P3 Marques livrées en bonus — pas de paywall back-end | ~~**v3.6.9**~~ → **recadrage v3.6.9** |
+| Bloc "Mon diagnostic" narratif (anticipation v3.6.9) | ✅ Livré v3.6.8 *(anticipation)* | Narrative pré-rédigée livrée en bonus | ~~**v3.6.9**~~ → **recadrage v3.6.9** |
+| Conclusion générale narrative (anticipation v3.6.9) | ✅ Livré v3.6.8 *(anticipation)* | Narrative pré-rédigée livrée en bonus | ~~**v3.6.9**~~ → **recadrage v3.6.9** |
+| Bloc "Plan d'action 5 priorités" complet (vue Pro débloquée) | Partiel — toggle Free/Pro absent | P1+P2+P3 livrés, P4+P5 et freemium reste | **v3.6.9** |
 | Section "Analyse par famille — actions recommandées" (PRO) | **ABSENTE** | Vue tableau par famille non implémentée | **v3.6.9** |
 | Bandeau "Accès complet à l'analyse causale" CTA Pro | **ABSENT** | Logique freemium non implémentée | **v3.6.9** |
+| Priorité 2 : Surveillance Buy Box | ⚠️ CTA seulement | Bloc complet non implémenté | **v3.6.10** |
+| CTA `Surveillance Buy Box des best-sellers →` (CTA 9) | **ABSENT** | CTA non implémenté | **v3.6.10** |
 
 ### 3.8 Synthèse exécutive
 
 | Maquette V3 | Prod v3.6.6.2 | Delta | Chantier |
 |---|---|---|---|
-| Bloc texte narratif synthèse pour dirigeant | **ABSENT** | Narrative IA Claude non implémentée | **v3.6.9** (avec plan B : narrative pré-rédigée si IA non prête pour été) |
+| Bloc texte narratif synthèse pour dirigeant | ⚠️ Partiel — narrative pré-rédigée livrée en v3.6.8 *(anticipation)*, narrative IA absente | Narrative IA Claude non implémentée | **v3.6.9** (narrative IA enrichie + export Word) |
 | Export Word automatisé | **ABSENT** | Génération document Word non implémentée | **v3.6.9** |
 
 ---
@@ -117,14 +121,14 @@ Synthèse du mapping CTA, à conserver comme référence opérationnelle. 9 CTA 
 
 | # | CTA | Localisation maquette | Version cible |
 |---|---|---|---|
-| 1 | Examiner les ASINs en baisse dans Analyse ASINs → | KPI hero | v3.6.8 |
-| 2 | Voir le Diagnostic CA détaillé → | KPI hero | v3.6.8 |
-| 3 | Filtrer les 313 disparus dans Analyse ASINs → | Section Catalogue | v3.6.8 |
+| 1 | Examiner les ASINs en baisse dans Analyse ASINs → | KPI hero | ✅ v3.6.8 |
+| 2 | Voir le Diagnostic CA détaillé → | KPI hero | ✅ v3.6.8 |
+| 3 | Filtrer les 313 disparus dans Analyse ASINs → | Section Catalogue | ✅ v3.6.8 |
 | 4 | Ouvrir des cas Vendor Central depuis Buy Box → | Section Catalogue | **v3.6.10** |
 | 5 | Sécuriser les best-sellers via Buy Box → | Section Concentration | **v3.6.10** |
-| 6 | Explorer les marques en chute dans Analyse ASINs → | Section Marques | v3.6.8 |
-| 7 | Ouvrir un cas de fusion catalogue → | Section Anomalies | v3.6.8 |
-| 8 | Démarrer l'audit dans Analyse ASINs → | Plan d'action P1 | v3.6.8 |
+| 6 | Explorer les marques en chute dans Analyse ASINs → | Section Marques | ✅ v3.6.8 |
+| 7 | Ouvrir un cas de fusion catalogue → | Section Anomalies | ✅ v3.6.8 |
+| 8 | Démarrer l'audit dans Analyse ASINs → | Plan d'action P1 | ✅ v3.6.8 |
 | 9 | Surveillance Buy Box des best-sellers → | Plan d'action P2 | **v3.6.10** |
 | 10 | 📋 ASINs purchase hold (BOL mismatch) → | Buy Box + YoY | **v3.6.10** |
 | 11 | Enquêter → (générique warning) | Sur chaque alerte warning | **v3.6.7** |
@@ -157,11 +161,17 @@ Synthèse du mapping CTA, à conserver comme référence opérationnelle. 9 CTA 
 
 **Risque** : moyen. Beaucoup de logique métier à coder (table VC_AVAILABILITY_CODES, algorithme branchements).
 
-### v3.6.9 — Rendu béotien + export Word + Pro (~3 sem)
+### v3.6.9 — Rendu béotien + export Word + Pro (~3 sem) — scope recadré
 
-**Objectif** : derniers éléments pour la commercialisation. Synthèse exécutive narrative, segmentation freemium Free/Pro, export Word.
+**Objectif** : derniers éléments pour la commercialisation. Narrative IA enrichie, segmentation freemium Free/Pro, export Word.
 
-**Approche** : narrative IA Claude (plan B si trop ambitieux : sections fixes pré-rédigées). Toggle Vue Free/Vue Pro. Génération Word via docx-js ou ReportLab (à arbitrer).
+**Scope recadré post-v3.6.8** : les sections Top mouvements ASIN, Mon diagnostic, Plan d'action P2+P3 et Conclusion générale ont été anticipées en v3.6.8. v3.6.9 ne les relivrera pas — elles existent déjà (sans paywall). v3.6.9 ajoute :
+- Narrative IA Claude (vs pré-rédigée livrée en v3.6.8)
+- Toggle Vue Free / Vue Pro (freemium back-end ou UI-only selon arbitrage commercial)
+- Export Word téléchargeable
+- Section "Analyse par famille" (P4+P5 du plan d'action)
+
+**Approche** : narrative IA Claude (plan B si trop ambitieux : enrichissement des textes pré-rédigés v3.6.8). Toggle Vue Free/Vue Pro. Génération Word via docx-js ou ReportLab (à arbitrer).
 
 **CTA livrés** : 13, 14, 15.
 
@@ -240,6 +250,24 @@ Si cette démo en 10 minutes peut être faite sur Cogex avec données réelles, 
 
 ---
 
+---
+
+## 9. Processus — règle scope-vs-livré (décision Fred, 2026-05-28)
+
+**Avant tout push staging**, produire un mini mapping scope-livré vs scope-brief (tableau ligne par ligne du brief concerné). Si débordement détecté, le signaler **avant** le push, pas après.
+
+Format attendu :
+
+| Item brief | Scope prévu | Livré | Écart |
+|---|---|---|---|
+| Section X | v3.6.N | ✅ Livré v3.6.N | — |
+| Section Y | v3.6.N+1 | ✅ Anticipé v3.6.N | ⚠️ Anticip. — signaler |
+| Section Z | v3.6.N | ❌ Non livré | Sous-livré — patch requis |
+
+Objectif : pas de surprise lors du tour de table. Les débordements positifs sont acceptés mais doivent être tracés explicitement pour éviter le redoublement de travail dans la version suivante.
+
+---
+
 **FIN DU DOCUMENT DELTA**
 
-[Claude Orchestrateur — 26 mai 2026]
+[Claude Orchestrateur — 26 mai 2026 | Mis à jour Claude Code — 28 mai 2026]

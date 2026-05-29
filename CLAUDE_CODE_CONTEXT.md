@@ -1,6 +1,6 @@
 ﻿# CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 27 mai 2026 (v3.6.7.1 PROD — YoY warnings W1/W2/W3 + éveil 80/20 + CTA 11/12 + Parser ERP Gers)
+**Dernière mise à jour :** 29 mai 2026 (v3.6.8.8 PREPROD — YoY Étape 3a Enquête ASINs + parser_po + pattern retour + 9 fixes onclick JSON.stringify)
 
 ---
 

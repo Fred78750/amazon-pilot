@@ -342,7 +342,7 @@ function renderYoYWarningCards(warnings, analysis) {
     var borderColor = isCrit ? '#b91c1c' : '#d97706';
     var bgColor     = isCrit ? 'rgba(185,28,28,0.06)' : 'rgba(217,119,6,0.06)';
     var icon        = isCrit ? '🔴' : '🟠';
-    var asinIdsJson = JSON.stringify(w.asinIds || []);
+    var asinIdsJson = JSON.stringify(w.asinIds || []).replace(/"/g, '&quot;');  // &quot; évite la collision avec onclick="..."
     // Échapper les apostrophes pour l'attribut onclick inline
     var filterLabelJs = (w.filterLabel || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     html += '<div style="border:1.5px solid ' + borderColor + ';border-radius:10px;padding:14px 16px;'
@@ -419,7 +419,7 @@ function renderEveil8020Block(c) {
   var data = calcEveil8020(c);
   if (!data) return '';
   var asinIds      = data.asins.map(function(a){ return a.asin; });
-  var asinIdsJson  = JSON.stringify(asinIds);
+  var asinIdsJson  = JSON.stringify(asinIds).replace(/"/g, '&quot;');
   var montantFmt   = data.montant.toLocaleString('fr-FR') + ' €/mois';
   var filterLabel  = 'Longue traîne en érosion';
   var filterLabelJs = filterLabel.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -684,6 +684,11 @@ function renderYoYResult() {
   const _tpl2     = tplCatalogue(d, sign);
   const s2Lecture = _tpl2.lecture ? '<div class="yoy-section-lecture">Lecture</div>' + _tpl2.lecture : '';
   const s2Verdict = _tpl2.verdict;
+  // v3.6.8 — CTA 3 : Filtrer les disparus dans Analyse ASINs
+  const _disparusIds = (dim7.disparus || []).map(a => a.asin);
+  const _cta3Html = disparusN > 0
+    ? `<div style="margin-top:10px"><button class="btn btn-p btn-sm" onclick="goToAsinsYoY(${JSON.stringify(_disparusIds).replace(/"/g,'&quot;')}, 'YoY — ${disparusN} disparus')">Filtrer les ${disparusN} disparus dans Analyse ASINs →</button></div>`
+    : '';
 
   // ── Section 3 : Concentration portefeuille (dim9)
   const dim9 = d.dim9 || {};
@@ -709,23 +714,60 @@ function renderYoYResult() {
   const dim10 = d.dim10 || {};
   const s4Title = YOY_TITLES.s4[sign];
   const topBrands = dim10.topBrands || [];
+  // v3.6.8d — 6 colonnes brief §3.5 : Marque · CA/j réf. · Part réf. · CA/j A · Part A · Variation €/j
   const s4Rows = topBrands.slice(0, 10).map(b => {
-    // backward compat : deltaPct ajouté en v3.6.5.4, calculer à la volée si absent
+    // backward compat : deltaPct calculé à la volée si absent (pré-v3.6.5.4)
     const dp = b.deltaPct != null ? b.deltaPct
              : (b.caRefPerDay > 0 ? (b.caAPerDay / b.caRefPerDay - 1) * 100 : null);
-    const dClass = dp != null ? yoyDeltaClass(dp) : 'muted';
-    return `<tr><td>${esc(b.marque || '—')}</td>
-      <td class="num">${b.caAPerDay != null ? yoyFmtEur(b.caAPerDay) : '—'}</td>
+    const dEur = (b.caAPerDay != null && b.caRefPerDay != null) ? b.caAPerDay - b.caRefPerDay : null;
+    const dClass = dEur != null ? yoyDeltaClass(dEur) : 'muted';
+    const shareRefFmt = b.shareRef != null ? yoyFmtPct(b.shareRef) : '—';
+    const shareAFmt   = b.shareA   != null ? yoyFmtPct(b.shareA)   : '—';
+    // Variation €/j (principal) + % en secondaire
+    const dpSub = dp != null ? `<span style="font-size:9px;color:var(--tx3);margin-left:3px">${yoyFmtPct(dp, true)}</span>` : '';
+    return `<tr>
+      <td>${esc(b.marque || '—')}</td>
       <td class="num">${b.caRefPerDay != null ? yoyFmtEur(b.caRefPerDay) : '—'}</td>
-      <td class="num ${dClass}">${dp != null ? yoyFmtPct(dp, true) : '—'}</td></tr>`;
-  }).join('') || `<tr><td colspan="4" class="muted" style="text-align:center">Données insuffisantes</td></tr>`;
+      <td class="num" style="font-size:11px;color:var(--tx3)">${shareRefFmt}</td>
+      <td class="num">${b.caAPerDay != null ? yoyFmtEur(b.caAPerDay) : '—'}</td>
+      <td class="num" style="font-size:11px;color:var(--tx3)">${shareAFmt}</td>
+      <td class="num ${dClass}">${dEur != null ? yoyFmtEurSigned(dEur) : '—'}${dpSub}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="6" class="muted" style="text-align:center">Données insuffisantes</td></tr>`;
   const s4Table = `<table class="yoy-table">
-    <thead><tr><th>Marque</th><th>CA/j Période A</th><th>CA/j Réf</th><th>Δ</th></tr></thead>
+    <thead><tr>
+      <th>Marque</th>
+      <th class="num">CA/j réf.</th>
+      <th class="num" style="font-size:10px;color:var(--tx3)">Part réf.</th>
+      <th class="num">CA/j A</th>
+      <th class="num" style="font-size:10px;color:var(--tx3)">Part A</th>
+      <th class="num">Variation €/j</th>
+    </tr></thead>
     <tbody>${s4Rows}</tbody>
   </table>`;
   const _tpl4     = tplMarques(d, sign);
   const s4Lecture = _tpl4.lecture ? '<div class="yoy-section-lecture">Lecture</div>' + _tpl4.lecture : '';
   const s4Verdict = _tpl4.verdict;
+  // v3.6.8 — CTA 6 : Explorer les marques en chute dans Analyse ASINs
+  // Critère Q9=(c) : Top 3 chute absolue €/j parmi le Top 10 (valeur absolue décroissante)
+  const _brandsDeclining = topBrands
+    .filter(b => (b.delta || 0) < 0)
+    .sort((a, b) => (a.delta || 0) - (b.delta || 0))  // plus négatif en premier
+    .slice(0, 3);
+  const _cta6Html = _brandsDeclining.length > 0
+    ? (function() {
+        const names = _brandsDeclining.map(b => b.marque);
+        // Récupérer les ASIN IDs des marques en chute depuis dim7 (tous buckets)
+        const allBucketAsins = [].concat(dim7.disparus||[], dim7.enBaisse||[], dim7.stables||[], dim7.enHausse||[]);
+        const chutingIds = allBucketAsins
+          .filter(function(a) { return names.indexOf((a.marque||'').trim().toUpperCase()) > -1 || names.indexOf((a.marque||'').trim()) > -1; })
+          .map(function(a) { return a.asin; });
+        const label = 'YoY — Marques en chute: ' + names.slice(0,3).join(', ');
+        // Fix v3.6.8e : JSON.stringify(label) produisait "..." qui terminait l'attribut onclick
+        const labelSafe = label.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        return `<div style="margin-top:10px"><button class="btn btn-sm" onclick="goToAsinsYoY(${JSON.stringify(chutingIds).replace(/"/g,'&quot;')}, '${labelSafe}')">Explorer les marques en chute dans Analyse ASINs →</button></div>`;
+      })()
+    : '';
 
   // ── Section 5 : Top mouvements ASIN (dim11)
   const dim11 = d.dim11 || {};
@@ -760,13 +802,25 @@ function renderYoYResult() {
   const dim12 = d.dim12 || {};
   const s6Title = YOY_TITLES.s6[sign];
   const anomPairs = dim12.anomPairs || [];
-  const s6Rows = anomPairs.slice(0, 10).map(p =>
-    `<tr><td>${esc(p.marque1||'—')}</td><td>${esc(p.marque2||'—')}</td>
-      <td class="num">${p.similarity != null ? yoyFmtPct(p.similarity * 100) : '—'}</td>
-      <td class="num muted">${p.caTot != null ? yoyFmtEur(p.caTot) : '—'}</td></tr>`
-  ).join('') || `<tr><td colspan="4" class="muted" style="text-align:center">Aucune anomalie détectée</td></tr>`;
+  // v3.6.8e — CTA 7 : fix onclick double-quote collision (JSON.stringify→single-quote)
+  const s6Rows = anomPairs.slice(0, 10).map(p => {
+    const simFmt = p.similarity != null ? yoyFmtPct(p.similarity * 100) : '—';
+    const cFmt   = p.caTot != null ? yoyFmtEur(p.caTot) : '—';
+    // Échapper pour JS single-quoted string dans attribut HTML double-quoté
+    const m1s = (p.marque1||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const m2s = (p.marque2||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const fusionBtn = `<button class="btn btn-xs" onclick="yoyFusionnerMarques('${m1s}','${m2s}')" title="Créer un alias : ${esc(p.marque2||'')} → ${esc(p.marque1||'')}">Fusionner</button>`;
+    // yoyCasVCFusion : wrapper pour éviter objet littéral {m1:"..."} dans attribut onclick
+    const casBtn = `<button class="btn btn-xs" onclick="yoyCasVCFusion('${m1s}','${m2s}')" title="Ouvrir un cas de fusion catalogue dans Vendor Central">Cas VC →</button>`;
+    return `<tr>
+      <td>${esc(p.marque1||'—')}</td><td>${esc(p.marque2||'—')}</td>
+      <td class="num">${simFmt}</td>
+      <td class="num muted">${cFmt}</td>
+      <td style="white-space:nowrap">${fusionBtn} ${casBtn}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="5" class="muted" style="text-align:center">Aucune anomalie détectée</td></tr>`;
   const s6Table = `<table class="yoy-table">
-    <thead><tr><th>Marque 1</th><th>Marque 2</th><th>Similarité</th><th>CA combiné</th></tr></thead>
+    <thead><tr><th>Marque 1</th><th>Marque 2</th><th>Similarité</th><th>CA combiné</th><th></th></tr></thead>
     <tbody>${s6Rows}</tbody>
   </table>`;
   const _tpl6     = tplAnomalies(d, sign);
@@ -1108,14 +1162,24 @@ function renderYoYResult() {
       </div>
 
     </div>
+
+    <!-- v3.6.8 — CTA 1 + CTA 2 bloc hero -->
+    ${sign === 'negative' ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
+      <button class="btn btn-p" onclick="goToAsinsYoY(${JSON.stringify((dim7.enBaisse||[]).map(a=>a.asin)).replace(/"/g,'&quot;')}, 'YoY — ASINs en baisse')">Examiner les ASINs en baisse dans Analyse ASINs →</button>
+      <button class="btn btn-sm" onclick="go('diagnostic')">Voir le Diagnostic CA détaillé →</button>
+    </div>` : ''}
+
     ${_warningCardsHtml}
     <!-- 6 sections analytiques -->
     ${sec('s1', s1Title, s1Table, s1Lecture, s1Verdict)}
-    ${sec('s2', s2Title, s2Table, s2Lecture, s2Verdict)}
+    ${sec('s2', s2Title, s2Table + _cta3Html, s2Lecture, s2Verdict)}
     ${sec('s3', s3Title, s3Table, s3Lecture, s3Verdict)}
-    ${sec('s4', s4Title, s4Table, s4Lecture, s4Verdict)}
+    ${sec('s4', s4Title, s4Table + _cta6Html, s4Lecture, s4Verdict)}
     ${sec('s5', s5Title, s5Table, s5Lecture, s5Verdict)}
     ${sec('s6', s6Title, s6Table, s6Lecture, s6Verdict)}
+
+    <!-- v3.6.8 — Section Enquête ASINs disparus (après s6, avant diagnostic) -->
+    ${typeof renderEnqueteSection === 'function' ? renderEnqueteSection(c, d, dRef) : ''}
 
     ${s7Html}
     ${s8Html}
@@ -1127,6 +1191,97 @@ function renderYoYResult() {
     </div>
 
   </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// v3.6.8 — FUSION MARQUES (CTA 7 — crée alias dans c.brandAliases)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * yoyFusionnerMarques(m1, m2)
+ * Crée un alias canonical=m1, variants=[m2] dans c.brandAliases avec confirmation.
+ * Invalide le cache enquête et les agrégats marques.
+ */
+function yoyFusionnerMarques(m1, m2) {
+  var c = cl(); if (!c) return;
+  if (!confirm('Fusionner "' + m2 + '" → "' + m1 + '" ?\n\nLes ASINs marqués "' + m2 + '" seront regroupés sous "' + m1 + '" dans la Section Marques.')) return;
+  if (!c.brandAliases) c.brandAliases = [];
+  // Chercher si canonical m1 existe déjà
+  var existing = c.brandAliases.find(function(a) {
+    return (typeof normalizeBrand === 'function' ? normalizeBrand(a.canonical) : a.canonical.toUpperCase()) ===
+           (typeof normalizeBrand === 'function' ? normalizeBrand(m1) : m1.toUpperCase());
+  });
+  var normM2 = typeof normalizeBrand === 'function' ? normalizeBrand(m2) : m2.toUpperCase();
+  if (existing) {
+    if (!existing.variants.some(function(v) {
+      var normV = typeof normalizeBrand === 'function' ? normalizeBrand(v) : v.toUpperCase();
+      return normV === normM2;
+    })) {
+      existing.variants.push(m2);
+    }
+  } else {
+    c.brandAliases.push({ canonical: m1, variants: [m2] });
+  }
+  // Invalider le cache enquête
+  if (typeof _enqueteCache !== 'undefined') _enqueteCache.posHash = null;
+  save(); render();
+  showToast('✅ Alias créé : "' + m2 + '" → "' + m1 + '"', 'alr-g');
+}
+
+/**
+ * yoyCasVCFusion(m1, m2)
+ * Wrapper pour CTA 7 "Cas VC →" — évite de sérialiser un objet {m1:"...",m2:"..."}
+ * dans un attribut onclick (guillemets doubles = collision HTML).
+ */
+function yoyCasVCFusion(m1, m2) {
+  if (typeof renderCaseModal === 'function') renderCaseModal(null, 'fusion_catalogue', { m1: m1, m2: m2 });
+  else go('buybox');
+}
+
+/**
+ * yoyAddAliasPrompt()
+ * UI prompt pour créer un alias manuellement : demande le canonical puis les variants.
+ */
+function yoyAddAliasPrompt() {
+  var c = cl(); if (!c) return;
+  var canonical = (prompt('Marque canonique (référence) :\nEx : VILMORIN') || '').trim();
+  if (!canonical) return;
+  var variantsRaw = (prompt('Variante(s) à fusionner vers "' + canonical + '" :\n(séparées par des virgules)\nEx : Vilmorin, VILMORIN SA') || '').trim();
+  if (!variantsRaw) return;
+  var variants = variantsRaw.split(',').map(function(v) { return v.trim(); }).filter(Boolean);
+  if (!variants.length) return;
+  if (!c.brandAliases) c.brandAliases = [];
+  var normCanon = typeof normalizeBrand === 'function' ? normalizeBrand(canonical) : canonical.toUpperCase();
+  var existing = c.brandAliases.find(function(a) {
+    return (typeof normalizeBrand === 'function' ? normalizeBrand(a.canonical) : a.canonical.toUpperCase()) === normCanon;
+  });
+  if (existing) {
+    variants.forEach(function(v) {
+      var normV = typeof normalizeBrand === 'function' ? normalizeBrand(v) : v.toUpperCase();
+      var already = existing.variants.some(function(ev) {
+        return (typeof normalizeBrand === 'function' ? normalizeBrand(ev) : ev.toUpperCase()) === normV;
+      });
+      if (!already) existing.variants.push(v);
+    });
+  } else {
+    c.brandAliases.push({ canonical: canonical, variants: variants });
+  }
+  if (typeof _enqueteCache !== 'undefined') _enqueteCache.posHash = null;
+  save(); render();
+  showToast('✅ Alias "' + canonical + '" ← [' + variants.join(', ') + ']', 'alr-g');
+}
+
+/**
+ * yoyDeleteAlias(idx)
+ * Supprime l'alias à l'index idx dans c.brandAliases.
+ */
+function yoyDeleteAlias(idx) {
+  var c = cl(); if (!c) return;
+  if (!c.brandAliases || !c.brandAliases[idx]) return;
+  var removed = c.brandAliases.splice(idx, 1)[0];
+  if (typeof _enqueteCache !== 'undefined') _enqueteCache.posHash = null;
+  save(); render();
+  showToast('🗑 Alias supprimé : "' + (removed.canonical || '') + '"', 'alr-a');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1931,10 +2086,21 @@ function yoyComputeDimensions(rowsA, rowsRef, metaA, metaRef) {
     return sorted.slice(0,n).reduce(function(s,r){ return s+(r.ca_cmd||0); },0) / total * 100;
   };
 
-  // ── Dim 10 — Marques ─────────────────────────────────────────
-  var bMapRef = {}, bMapA = {};
-  rowsRef.forEach(function(r){ var m=(r.marque||'Inconnue').trim(); bMapRef[m]=(bMapRef[m]||0)+(r.ca_cmd||0)/dRef; });
-  rowsA.forEach(function(r){   var m=(r.marque||'Inconnue').trim(); bMapA[m]  =(bMapA[m]  ||0)+(r.ca_cmd||0)/dA;  });
+  // ── Dim 10 — Marques (v3.6.8 : normalisation + alias via calcBrandAggs) ──────
+  // calcBrandAggs défini dans yoy_enquete.js (injecté avant)
+  var _clientForYoy = cl();
+  var _brandAliases = _clientForYoy ? (_clientForYoy.brandAliases || []) : [];
+  var _brandAggs = (typeof calcBrandAggs === 'function')
+    ? calcBrandAggs(rowsRef, rowsA, dRef, dA, _brandAliases)
+    : (function() {
+        // Fallback si yoy_enquete non chargé
+        var br = {}, ba = {};
+        rowsRef.forEach(function(r){ var m=(r.marque||'Inconnue').trim(); br[m]=(br[m]||0)+(r.ca_cmd||0)/dRef; });
+        rowsA.forEach(function(r){   var m=(r.marque||'Inconnue').trim(); ba[m]=(ba[m]||0)+(r.ca_cmd||0)/dA;  });
+        return { bMapRef: br, bMapA: ba };
+      })();
+  var bMapRef = _brandAggs.bMapRef;
+  var bMapA   = _brandAggs.bMapA;
   var topBrands = Object.keys(bMapRef)
     .sort(function(a,b){ return bMapRef[b]-bMapRef[a]; }).slice(0,10)
     .map(function(m){
@@ -1957,22 +2123,33 @@ function yoyComputeDimensions(rowsA, rowsRef, metaA, metaRef) {
   var perdants = llList.slice().sort(function(a,b){ return a.deltaPerDay-b.deltaPerDay; }).slice(0,15);
   var gagnants = llList.slice().sort(function(a,b){ return b.deltaPerDay-a.deltaPerDay; }).slice(0,15);
 
-  // ── Dim 12 — Anomalies catalogue ─────────────────────────────
-  // Normaliser la casse avant matching (P7 — Cogex vs COGEX)
-  var allBrandNames = Object.keys(Object.assign({},bMapRef,bMapA)).filter(function(m){ return m&&m!=='Inconnue'; });
+  // ── Dim 12 — Anomalies catalogue (v3.6.8 : threshold client + filtre asymétrie) ──
+  // Seuil : c.anomalyThreshold (défaut 80%) — brief §3.6 + §3.2
+  var _anomThresh = (_clientForYoy && _clientForYoy.anomalyThreshold != null)
+    ? _clientForYoy.anomalyThreshold / 100
+    : 0.80;
+  // Post-normalisation + alias : les paires identiques post-alias disparaissent (brief §3.6)
+  var allBrandNames = Object.keys(Object.assign({},bMapRef,bMapA)).filter(function(m){ return m&&m!=='INCONNUE'&&m!=='Inconnue'; });
   var allBrandNamesLow = allBrandNames.map(function(m){ return m.toLowerCase(); });
   var anomPairs = [];
   for (var bi=0; bi<allBrandNames.length; bi++) {
     for (var bj=bi+1; bj<allBrandNames.length; bj++) {
       var ma=allBrandNames[bi], mb=allBrandNames[bj];
       var maL=allBrandNamesLow[bi], mbL=allBrandNamesLow[bj];
-      if (maL === mbL) { // même nom, casse différente → similarité max
-        anomPairs.push({ marque1:ma, marque2:mb, similarity:0.99, caTot:(bMapRef[ma]||0)+(bMapRef[mb]||0)+(bMapA[ma]||0)+(bMapA[mb]||0) });
-        continue;
+      if (maL === mbL) { // même nom post-normalisation → paire 100%, pas une anomalie
+        continue; // déjà fusionnées par calcBrandAggs — ne pas signaler
       }
       if (Math.abs(ma.length-mb.length)>6) continue;
-      var sim=yoySimilarity(maL,mbL); // comparer en minuscules
-      if (sim>0.75&&sim<1) anomPairs.push({ marque1:ma, marque2:mb, similarity:sim, caTot:(bMapRef[ma]||0)+(bMapRef[mb]||0)+(bMapA[ma]||0)+(bMapA[mb]||0) });
+      var sim=yoySimilarity(maL,mbL);
+      if (sim >= _anomThresh && sim < 1) {
+        var caTot = (bMapRef[ma]||0)+(bMapRef[mb]||0)+(bMapA[ma]||0)+(bMapA[mb]||0);
+        // Filtre asymétrie : min/max CA < 0.5% → probablement pas un vrai doublon
+        var caM1 = (bMapRef[ma]||0)+(bMapA[ma]||0);
+        var caM2 = (bMapRef[mb]||0)+(bMapA[mb]||0);
+        var minCA = Math.min(caM1, caM2), maxCA = Math.max(caM1, caM2);
+        if (maxCA > 0 && minCA / maxCA < 0.005) continue;
+        anomPairs.push({ marque1:ma, marque2:mb, similarity:sim, caTot:caTot });
+      }
     }
   }
   anomPairs.sort(function(a,b){ return b.similarity-a.similarity; });

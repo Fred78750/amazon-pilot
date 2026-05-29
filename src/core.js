@@ -108,6 +108,7 @@ let asinView   = 'all';    // 'all' | 'lowstock' | 'declining' | 'growing' | 'se
 let asinViewAsins = null;  // liste des ASINs filtrés par la vue active (null = pas de filtre)
 let asinViewCustomIds = null; // v3.6.7 — liste ASIN IDs pour filtre YoY (CTA 11 / CTA 12)
 let asinViewLabel = '';       // v3.6.7 — libellé du badge filtre YoY
+var _yoyReturnCtx = null;     // v3.6.8 α+γ — contexte retour YoY { scrollY, label } — session only
 let asinSearch = ''; // recherche texte ASIN/SKU/titre
 let _searchTimer = null;
 function debouncedRender() {
@@ -675,7 +676,12 @@ function freshClient() {
     bolSource: '',               // 'ERP' | 'CMS' | 'OMS' | 'TRANSPORTEUR' | 'INCONNU' | ''
     bolSourceDetail: '',         // texte libre : 'Navision', 'SAP', 'Shopify Plus', etc.
     // ── Buy Box v3.6.1 — Cas d'enquête ──
-    buyboxCases: []  // [{ id, asin, status, openedAt, closedAt, facts: {snapshot, computedAt}, hypotheses: [{id, status, evidence, updatedAt}], journal: [{ts, type, content, author}], conclusion: {state, proposedAction, outcome, closedAt} }]
+    buyboxCases: [], // [{ id, asin, status, openedAt, closedAt, facts: {snapshot, computedAt}, hypotheses: [{id, status, evidence, updatedAt}], journal: [{ts, type, content, author}], conclusion: {state, proposedAction, outcome, closedAt} }]
+    // ── YoY Enquête v3.6.8 ──
+    brandAliases:         [],   // [{ canonical: string, variants: string[] }] — alias marques pour Section Marques
+    enquetePeriodMonths:  4,    // fenêtre PO pour algo classification (slider 1-12, défaut 4)
+    anomalyThreshold:     80,   // seuil similarité Levenshtein anomalies (50-100%, défaut 80%)
+    poItemExportRawLines: 0     // total lignes brutes du dernier import POItemExport (avant déduplication)
   };
 }
 
@@ -3940,12 +3946,14 @@ function renderImport() {
   // ══════════════════════════════════════════════════════
   // ÉTAPE 3 — Bons de commande (POs confirmés)
   // ══════════════════════════════════════════════════════
-  const posLoaded  = (c.pos||[]).length > 0;
-  const posCount   = (c.pos||[]).length;
-  const poAsins    = new Set((c.pos||[]).map(p=>p.asin)).size;
-  const lastPO     = posLoaded ? (c.pos||[]).slice().sort((a,b)=>(b.importedAt||'').localeCompare(a.importedAt||''))[0] : null;
-  const lastPODate = lastPO?.importedAt ? new Date(lastPO.importedAt).toLocaleDateString('fr-FR') : null;
-  const _poMkt     = c.mainMarket || '.fr';
+  const posLoaded          = (c.pos||[]).length > 0;
+  const posCount           = (c.pos||[]).length;
+  const poAsins            = new Set((c.pos||[]).map(p=>p.asin)).size;
+  const lastPO             = posLoaded ? (c.pos||[]).slice().sort((a,b)=>(b.importedAt||'').localeCompare(a.importedAt||''))[0] : null;
+  const lastPODate         = lastPO?.importedAt ? new Date(lastPO.importedAt).toLocaleDateString('fr-FR') : null;
+  const _poMkt             = c.mainMarket || '.fr';
+  // Hoisted ici pour usage dans le bandeau BO + badge POItemExport plus bas
+  const _poItemExportCount = (c.pos||[]).filter(function(p){ return p.source === 'POItemExport'; }).length;
 
   h += '<div class="cd" id="po-section-3">';
   h += '<div class="cd-t space"><span>3 — Bons de commande <span style="font-size:10px;font-weight:400;color:var(--tx3)">(confirmés — mise à jour libre)</span></span>' + (posLoaded ? '<span class="pill pill-g">✓ Chargés</span>' : '<span class="pill pill-gr">Non chargé</span>') + '</div>';
@@ -3954,17 +3962,46 @@ function renderImport() {
   // ── Comptes BO attendus (si c.accounts renseigné) ──
   var boAccts = (c.accounts || []).filter(function(a) { return a.role === 'BO'; });
   if (boAccts.length > 0) {
+    // Pays distincts = nombre de fichiers POItemExport attendus (1 fichier VC par marketplace)
+    var _boMarketsSet = {}, _boMarkets = [];
+    for (var bmi = 0; bmi < boAccts.length; bmi++) {
+      var _mkt = boAccts[bmi].market || '';
+      if (_mkt && !_boMarketsSet[_mkt]) { _boMarketsSet[_mkt] = true; _boMarkets.push(_mkt); }
+    }
+    var _boFilesN = _boMarkets.length || 1;
+    var _boMarketsStr = _boMarkets.map(function(m) { return m.replace('.','').toUpperCase(); }).join(', ');
+
+    // Sous-comptes BO couverts par au moins 1 PO POItemExport
+    var _poItemExportVCs = {};
+    (c.pos||[]).forEach(function(p) { if (p.source === 'POItemExport' && p.vendorCode) _poItemExportVCs[p.vendorCode] = true; });
+    var _boVCCoveredCount = boAccts.filter(function(a) { return !!_poItemExportVCs[a.vendorCode]; }).length;
+    var _boMarketsCoveredSet = {};
+    boAccts.forEach(function(a) { if (_poItemExportVCs[a.vendorCode] && a.market) _boMarketsCoveredSet[a.market] = true; });
+    var _boMarketsCoveredN = Object.keys(_boMarketsCoveredSet).length;
+
     h += '<div style="padding:10px 14px;background:var(--b-bg,#e8f0fb);border:1px solid var(--b-bd,#b0c8f0);border-radius:var(--rdl);margin-bottom:12px;font-size:12px">';
-    h += '<div style="font-weight:600;margin-bottom:4px">📦 Comptes Bon de Commande — ' + boAccts.length + ' PO attendus</div>';
-    h += '<div style="color:var(--tx2)">';
+    if (_poItemExportCount > 0) {
+      // Au moins 1 PO POItemExport chargé → afficher l'état réel
+      h += '<div style="font-weight:600;margin-bottom:4px">📦 Pays détectés : ' + (_boMarketsStr||'—')
+        + ' — <span style="font-weight:400;color:var(--g)">'
+        + _boMarketsCoveredN + '/' + _boFilesN + ' fichier' + (_boFilesN > 1 ? 's' : '') + ' chargé' + (_boMarketsCoveredN > 1 ? 's' : '')
+        + ' — ' + _boVCCoveredCount + '/' + boAccts.length + ' sous-compte' + (boAccts.length > 1 ? 's' : '') + ' couvert' + (_boVCCoveredCount > 1 ? 's' : '')
+        + '</span></div>';
+    } else {
+      // Aucun POItemExport → invite au chargement
+      h += '<div style="font-weight:600;margin-bottom:4px">📦 Pays détectés : ' + (_boMarketsStr||'—')
+        + ' — <span style="font-weight:400">' + _boFilesN + ' fichier' + (_boFilesN > 1 ? 's' : '') + ' POItemExport attendu' + (_boFilesN > 1 ? 's' : '') + '</span></div>';
+    }
+    h += '<div style="color:var(--tx2);font-size:11px">';
     var boLabels = [];
     for (var bai = 0; bai < boAccts.length; bai++) {
       var ba = boAccts[bai];
       var bamp = MARKETPLACES_FULL.find(function(m) { return m.market === ba.market; });
       var baflag = bamp ? bamp.flag : '';
-      boLabels.push(baflag + ' ' + ba.vendorCode + ' (' + ba.market.replace('.', '').toUpperCase() + ')');
+      var baMktCode = ba.market ? ba.market.replace('.','').toUpperCase() : '—';
+      boLabels.push(baflag + ' ' + baMktCode + ' ' + ba.vendorCode);
     }
-    h += boLabels.join(' · ');
+    h += 'Sous-comptes : ' + boLabels.join(' · ');
     h += '</div></div>';
   }
 
@@ -3999,14 +4036,73 @@ function renderImport() {
       h += '</div>';
     }
   }
+  // v3.6.8 — Afficher les POs POItemExport déjà chargés (_poItemExportCount hoisted en haut de section)
+  const _poItemExportDate  = _poItemExportCount > 0
+    ? (c.pos||[]).filter(function(p){ return p.source === 'POItemExport'; })
+        .sort(function(a,b){ return (b.importedAt||'').localeCompare(a.importedAt||''); })[0]?.importedAt
+    : null;
+  const _poItemExportDateStr = _poItemExportDate ? new Date(_poItemExportDate).toLocaleDateString('fr-FR') : null;
+  // v3.6.8c — Lignes brutes vs uniques (disambiguation 5851 vs 5569)
+  const _poRawLines    = c.poItemExportRawLines || 0;
+  const _poDuplicates  = (_poRawLines > _poItemExportCount) ? (_poRawLines - _poItemExportCount) : 0;
+
+  if (_poItemExportCount > 0) {
+    var _poRawDetail = (_poRawLines > 0 && _poDuplicates > 0)
+      ? '<span style="font-size:10px;color:var(--tx3);display:block;margin-top:2px">'
+        + _poRawLines.toLocaleString('fr-FR') + ' lignes brutes — ' + _poDuplicates.toLocaleString('fr-FR') + ' doublons fusionnés</span>'
+      : '';
+    h += '<div style="padding:8px 12px;background:var(--g-bg);border:1px solid var(--g-bd);border-radius:var(--rd);margin-bottom:8px;font-size:12px">'
+      + '✅ <strong>' + _poItemExportCount.toLocaleString('fr-FR') + ' POs uniques</strong> — dernier import : ' + (_poItemExportDateStr||'—')
+      + _poRawDetail
+      + '</div>';
+  }
+
   h += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
-  h += '<label class="btn btn-sm" style="cursor:pointer">📁 ' + (posLoaded?'Recharger les POs':'Charger les POs (XLS/CSV)') + '<input type="file" accept=".xls,.xlsx,.csv,.txt" multiple onchange="handlePOFile(this)" style="display:none"/></label>';
+  h += '<label class="btn btn-sm" style="cursor:pointer">📁 ' + (posLoaded?'Recharger les POs (ancien format)':'Charger les POs (XLS/CSV)') + '<input type="file" accept=".xls,.xlsx,.csv,.txt" multiple onchange="handlePOFile(this)" style="display:none"/></label>';
+  // v3.6.8 — Bouton import POItemExport CSV (nouveau format enrichi)
+  h += '<label class="btn btn-sm btn-p" style="cursor:pointer" title="Import depuis VC → Commandes → Gestion des commandes → Export CSV">📥 POItemExport CSV<input type="file" accept=".csv,.txt" multiple onchange="handlePOItemExportFile(this)" style="display:none"/></label>';
   h += '<a href="' + getVCLink('pos',_poMkt) + '" target="_blank" class="btn btn-sm" style="text-decoration:none">↗ Ouvrir dans Vendor Central</a>'
   if (posLoaded) {
     h += '<button class="btn btn-xs" onclick="exportPOsXlsx()" style="margin-left:4px">⬇ XLSX</button>';
     h += '<button class="btn btn-xs" onclick="if(confirm(\'Supprimer tous les POs ?\')){deletePOs()}" style="margin-left:auto;color:var(--r);border-color:var(--r-bd)">🗑 Supprimer</button>';
   }
+  h += '</div>';
+
+  // v3.6.8 — Section Paramètres YoY (fenêtre PO + seuil anomalies)
+  h += '<div style="margin-top:12px;padding:10px 12px;background:var(--b-bg,#e8f0fb);border:1px solid var(--b-bd,#b0c8f0);border-radius:var(--rd);font-size:12px">';
+  h += '<div style="font-weight:600;margin-bottom:8px;color:var(--tx)">⚙ Paramètres YoY — Enquête</div>';
+  h += '<div style="display:flex;gap:16px;flex-wrap:wrap">';
+  h += '<div style="flex:1;min-width:160px"><label style="display:block;margin-bottom:3px;color:var(--tx2)">Fenêtre PO (mois)</label>'
+    + '<input type="range" min="1" max="12" value="' + (c.enquetePeriodMonths||4) + '" '
+    + 'oninput="this.nextElementSibling.textContent=this.value+\' mois\';updClient(\'enquetePeriodMonths\',+this.value)" style="width:100%">'
+    + '<span style="font-size:11px;color:var(--tx3)">' + (c.enquetePeriodMonths||4) + ' mois</span></div>';
+  h += '<div style="flex:1;min-width:160px"><label style="display:block;margin-bottom:3px;color:var(--tx2)">Seuil anomalies marques (%)</label>'
+    + '<input type="range" min="50" max="100" value="' + (c.anomalyThreshold||80) + '" '
+    + 'oninput="this.nextElementSibling.textContent=this.value+\'%\';updClient(\'anomalyThreshold\',+this.value)" style="width:100%">'
+    + '<span style="font-size:11px;color:var(--tx3)">' + (c.anomalyThreshold||80) + '%</span></div>';
   h += '</div></div>';
+
+  // v3.6.8 — Section Alias Marques
+  var aliases = c.brandAliases || [];
+  h += '<div style="margin-top:12px">';
+  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">';
+  h += '<span style="font-weight:600;font-size:12px">🏷 Alias Marques (' + aliases.length + ')</span>';
+  h += '<button class="btn btn-xs" onclick="yoyAddAliasPrompt()">+ Alias</button>';
+  h += '</div>';
+  if (aliases.length > 0) {
+    h += '<table class="yoy-table" style="font-size:11px"><thead><tr><th>Nom canonique</th><th>Variantes fusionnées</th><th></th></tr></thead><tbody>';
+    aliases.forEach(function(al, idx) {
+      h += '<tr><td><strong>' + esc(al.canonical||'') + '</strong></td>'
+        + '<td style="color:var(--tx2)">' + esc((al.variants||[]).join(', ')) + '</td>'
+        + '<td><button class="btn btn-xs" onclick="yoyDeleteAlias(' + idx + ')" style="color:var(--r)">✕</button></td></tr>';
+    });
+    h += '</tbody></table>';
+  } else {
+    h += '<div style="font-size:11px;color:var(--tx3);padding:6px 0">Aucun alias — les fusions de marques orthographiques seront proposées dans la Section Anomalies YoY.</div>';
+  }
+  h += '</div>';
+
+  h += '</div>'; // ferme cd po-section-3
 
   // ══════════════════════════════════════════════════════
   // ÉTAPE 4 — PPM Nette
@@ -5219,10 +5315,20 @@ function renderAsins() {
   const withRevenue = displayAsins.filter(a => (getRevenue(a,c)||0) > 0);
   let h = '';
 
+  // v3.6.8 α — Bandeau retour YoY (affiché seulement si arrivé via goToAsinsYoY)
+  if (!selectedAsin && _yoyReturnCtx) {
+    h += '<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--b-bg,#e8f0fb);border:1px solid var(--b-bd,#b0c8f0);border-radius:var(--rd);margin-bottom:12px">'
+      + '<button class="btn btn-sm" onclick="yoyGoBack()" style="flex-shrink:0;gap:4px">← Analyse comparée</button>'
+      + '<span style="font-size:12px;color:var(--tx2)">Filtré par : <strong>' + esc(asinViewLabel || 'YoY') + '</strong></span>'
+      + '<span style="font-size:10px;color:var(--tx3);margin-left:auto">ou utilisez le bouton ← du navigateur</span>'
+      + '</div>';
+  }
+
   if (!selectedAsin) {
     h += renderMarketTabs(c, filters.market);
     // ── Calcul des vues disponibles ──────────────────────────────
-    const allAsinsForViews = c.asins;
+    // v3.6.8.8 : si filtre YoY actif, compter dans le pool filtré (pas tout le catalogue)
+    const allAsinsForViews = (asinView === 'yoy-warning') ? displayAsins : c.asins;
     const totalCAAll = allAsinsForViews.reduce((s,a) => s+(getRevenue(a,c)||0), 0);
     const countLowStock = allAsinsForViews.filter(a => {
       const oos = parseNum(a.oosPct);
@@ -5250,7 +5356,8 @@ function renderAsins() {
     views.forEach(v => {
       const isActive = asinView === v.id;
       const hasAlert = (v.id === 'lowstock' && v.count > 0) || (v.id === 'declining' && v.count > 0);
-      h += '<button class="btn btn-sm' + (isActive ? ' btn-p' : '') + '" style="position:relative;' + (hasAlert && !isActive ? 'border-color:var(--' + v.color + ');color:var(--' + v.color + ')' : '') + '" onclick="goFilteredAsins(' + JSON.stringify(v.id) + ')">';
+      // Fix v3.6.8.8 : JSON.stringify(v.id) produisait "lowstock" avec guillemets → onclick cassé
+      h += '<button class="btn btn-sm' + (isActive ? ' btn-p' : '') + '" style="position:relative;' + (hasAlert && !isActive ? 'border-color:var(--' + v.color + ');color:var(--' + v.color + ')' : '') + '" onclick="goFilteredAsins(\'' + v.id + '\')">';
       h += v.icon + ' ' + v.label;
       if (v.count > 0) h += ' <span style="font-size:10px;font-weight:700;margin-left:3px;padding:1px 5px;background:var(--s2);border-radius:8px">' + v.count + '</span>';
       h += '</button>';
@@ -9392,7 +9499,7 @@ function renderSEOSection(a, c) {
       const ml = MARKET_LANG[mkt];
       const done = !!res[mkt] && !res[mkt].error;
       const isActive = activeTab === mkt;
-      h += '<button class="btn btn-sm ' + (isActive ? 'btn-p' : '') + '" onclick="seoActiveTab=' + JSON.stringify(mkt) + ';render()">';
+      h += '<button class="btn btn-sm ' + (isActive ? 'btn-p' : '') + '" onclick="seoActiveTab=\'' + mkt + '\';render()">';
       h += (ml?.flag || '') + ' ' + (ml?.label || mkt);
       if (seoLoading && !res[mkt]) h += ' <span class="spin" style="font-size:10px">⏳</span>';
       else if (done) h += ' ✓';
@@ -9443,7 +9550,7 @@ function renderSEOSection(a, c) {
     h += '<div style="margin-bottom:6px;padding:8px 12px;background:var(--s2);border:1px solid var(--bd);border-radius:var(--rd)">';
     h += '<div style="font-size:10px;font-weight:700;color:var(--or);margin-bottom:3px">• ' + (i + 1) + '</div>';
     h += '<div style="font-size:12px;line-height:1.5">' + esc(b) + '</div>';
-    h += '<button class="btn btn-xs" style="margin-top:4px" onclick="copySEOField(' + asinJson + ',' + mktJson + ',' + JSON.stringify(bulletField) + ')">📋</button>';
+    h += '<button class="btn btn-xs" style="margin-top:4px" onclick="copySEOField(' + asinJson + ',' + mktJson + ',\'' + bulletField + '\')">📋</button>';
     h += '</div>';
   });
   h += '</div>';
@@ -9593,6 +9700,7 @@ function copyPrompt(i) {
   setTimeout(() => el.textContent = '📋 Copier', 1500);
 }
 function go(s) {
+  _yoyReturnCtx = null;  // toute navigation via go() = manuelle → efface le contexte retour YoY
   screen = s;
   aiResult = '';
   if (s !== 'asins') { selectedAsin = null; asinView = 'all'; asinViewAsins = null; }
@@ -9795,7 +9903,6 @@ function goFilteredAsins(preset) {
   screen = 'asins';
   selectedAsin = null;
   aiResult = '';
-  asinView = preset;
   asinLimit = 9999;
   filters.segment = 'all';
   asinSearch = '';
@@ -9803,11 +9910,21 @@ function goFilteredAsins(preset) {
   const c = cl();
   if (!c) { render(); return; }
   const allAsins = [...c.asins];
-  const totalCA  = allAsins.reduce((s,a) => s+(getRevenue(a,c)||0), 0);
+
+  // v3.6.8.8 — Si filtre YoY actif et sous-filtre demandé : travailler dans le pool YoY
+  // (ne pas exploser vers tout le catalogue, préserver le contexte de navigation)
+  const yoyActive = asinViewCustomIds && asinViewCustomIds.length > 0 && preset !== 'yoy-warning' && preset !== 'all';
+  const pool = yoyActive
+    ? allAsins.filter(function(a) { return asinViewCustomIds.indexOf(a.asin) > -1; })
+    : allAsins;
+  const totalCA = pool.reduce((s,a) => s+(getRevenue(a,c)||0), 0);
+
+  // Garder 'yoy-warning' pour préserver le badge YoY si sous-filtre dans contexte YoY
+  asinView = yoyActive ? 'yoy-warning' : preset;
 
   if (preset === 'lowstock') {
     asinSort = 'stock_asc';
-    asinViewAsins = allAsins.filter(a => {
+    asinViewAsins = pool.filter(a => {
       const oos = parseNum(a.oosPct);
       return (getRevenue(a,c)||0) > 50 && (
         (oos > 0 && oos < 90) ||
@@ -9816,25 +9933,33 @@ function goFilteredAsins(preset) {
     }).map(a => a.asin);
   } else if (preset === 'declining') {
     asinSort = 'baisse';
-    asinViewAsins = allAsins.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) <= -10)
+    asinViewAsins = pool.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) <= -10)
       .map(a => a.asin);
   } else if (preset === 'growing') {
     asinSort = 'hausse';
-    asinViewAsins = allAsins.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) >= 20)
+    asinViewAsins = pool.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) >= 20)
       .map(a => a.asin);
   } else if (preset === 'seg-a') {
     asinSort = 'ca_desc';
-    asinViewAsins = allAsins.filter(a => calcSegment(a, totalCA, c) === 'A').map(a => a.asin);
+    asinViewAsins = pool.filter(a => calcSegment(a, totalCA, c) === 'A').map(a => a.asin);
   } else if (preset === 'seg-b') {
     asinSort = 'ca_desc';
-    asinViewAsins = allAsins.filter(a => calcSegment(a, totalCA, c) === 'B').map(a => a.asin);
+    asinViewAsins = pool.filter(a => calcSegment(a, totalCA, c) === 'B').map(a => a.asin);
   } else if (preset === 'seg-c') {
     asinSort = 'ca_desc';
-    asinViewAsins = allAsins.filter(a => calcSegment(a, totalCA, c) === 'C').map(a => a.asin);
+    asinViewAsins = pool.filter(a => calcSegment(a, totalCA, c) === 'C').map(a => a.asin);
   } else if (preset === 'yoy-warning') {
     // v3.6.7 — CTA 11 / CTA 12 : filtre YoY par liste d'ASIN IDs
     asinSort = 'baisse';
     asinViewAsins = (asinViewCustomIds && asinViewCustomIds.length) ? asinViewCustomIds.slice() : [];
+  } else if (preset === 'all') {
+    asinSort = 'ca_desc';
+    if (asinViewCustomIds && asinViewCustomIds.length) {
+      // Dans contexte YoY, "Tous" = revenir à l'ensemble des ASINs YoY (pas tout le catalogue)
+      asinViewAsins = asinViewCustomIds.slice();
+    } else {
+      asinViewAsins = null;
+    }
   } else {
     asinSort = 'ca_desc';
     asinViewAsins = null;
@@ -9842,11 +9967,49 @@ function goFilteredAsins(preset) {
   render();
 }
 // v3.6.7 — CTA 11 / CTA 12 : navigation vers Analyse ASINs avec filtre YoY
+// v3.6.8 α+γ : pushState pour Back navigateur + _yoyReturnCtx pour bandeau retour
 function goToAsinsYoY(asinIds, label) {
+  _yoyReturnCtx = { scrollY: window.scrollY, label: 'Analyse comparée' };
+  try {
+    // replaceState marque l'entrée COURANTE (page YoY) avec scrollY
+    // pushState crée une nouvelle entrée vide pour la vue ASINs
+    // → Back navigue de l'entrée ASINs à l'entrée YoY → popstate reçoit { _yoyPage:true }
+    history.replaceState({ _yoyPage: true, scrollY: window.scrollY }, '');
+    // Stocker asinIds + label dans l'entrée ASINs pour que Forward puisse restaurer le filtre
+    history.pushState({ _asinsFromYoy: true, asinIds: (Array.isArray(asinIds) ? asinIds : []), label: (label || 'Filtré par YoY') }, '');
+  } catch(e) {}
   asinViewCustomIds = Array.isArray(asinIds) && asinIds.length ? asinIds : [];
   asinViewLabel     = label || 'Filtré par YoY';
   goFilteredAsins('yoy-warning');
 }
+
+// v3.6.8 α+γ : retour YoY depuis bandeau "← Analyse comparée"
+function yoyGoBack() {
+  var ctx = _yoyReturnCtx;
+  _yoyReturnCtx = null;
+  go('yoy');
+  if (ctx && ctx.scrollY) setTimeout(function() { try { window.scrollTo(0, ctx.scrollY); } catch(e) {} }, 80);
+}
+
+// v3.6.8 γ : handler popstate — Back (→ YoY) ET Forward (→ ASINs filtrés)
+window.addEventListener('popstate', function(e) {
+  if (!e.state) return;
+
+  if (e.state._yoyPage) {
+    // BACK : retour à la page YoY
+    var sy = e.state.scrollY || 0;
+    _yoyReturnCtx = null;
+    go('yoy');
+    if (sy) setTimeout(function() { try { window.scrollTo(0, sy); } catch(ex) {} }, 100);
+
+  } else if (e.state._asinsFromYoy) {
+    // FORWARD : retour vers la vue ASINs filtrée (après un Back)
+    _yoyReturnCtx = { scrollY: 0, label: 'Analyse comparée' };
+    asinViewCustomIds = Array.isArray(e.state.asinIds) ? e.state.asinIds : [];
+    asinViewLabel     = e.state.label || 'Filtré par YoY';
+    goFilteredAsins('yoy-warning');
+  }
+});
 
 function selClient(id) { activeId = id; screen = 'dashboard'; selectedAsin = null; aiResult = ''; render(); }
 function startOnboarding() { newClient = freshClient(); wizStep = 0; screen = 'onboarding'; render(); }
