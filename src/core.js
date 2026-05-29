@@ -108,6 +108,7 @@ let asinView   = 'all';    // 'all' | 'lowstock' | 'declining' | 'growing' | 'se
 let asinViewAsins = null;  // liste des ASINs filtrés par la vue active (null = pas de filtre)
 let asinViewCustomIds = null; // v3.6.7 — liste ASIN IDs pour filtre YoY (CTA 11 / CTA 12)
 let asinViewLabel = '';       // v3.6.7 — libellé du badge filtre YoY
+var _yoyReturnCtx = null;     // v3.6.8 α+γ — contexte retour YoY { scrollY, label } — session only
 let asinSearch = ''; // recherche texte ASIN/SKU/titre
 let _searchTimer = null;
 function debouncedRender() {
@@ -5314,6 +5315,15 @@ function renderAsins() {
   const withRevenue = displayAsins.filter(a => (getRevenue(a,c)||0) > 0);
   let h = '';
 
+  // v3.6.8 α — Bandeau retour YoY (affiché seulement si arrivé via goToAsinsYoY)
+  if (!selectedAsin && _yoyReturnCtx) {
+    h += '<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--b-bg,#e8f0fb);border:1px solid var(--b-bd,#b0c8f0);border-radius:var(--rd);margin-bottom:12px">'
+      + '<button class="btn btn-sm" onclick="yoyGoBack()" style="flex-shrink:0;gap:4px">← Analyse comparée</button>'
+      + '<span style="font-size:12px;color:var(--tx2)">Filtré par : <strong>' + esc(asinViewLabel || 'YoY') + '</strong></span>'
+      + '<span style="font-size:10px;color:var(--tx3);margin-left:auto">ou utilisez le bouton ← du navigateur</span>'
+      + '</div>';
+  }
+
   if (!selectedAsin) {
     h += renderMarketTabs(c, filters.market);
     // ── Calcul des vues disponibles ──────────────────────────────
@@ -9688,6 +9698,7 @@ function copyPrompt(i) {
   setTimeout(() => el.textContent = '📋 Copier', 1500);
 }
 function go(s) {
+  _yoyReturnCtx = null;  // toute navigation via go() = manuelle → efface le contexte retour YoY
   screen = s;
   aiResult = '';
   if (s !== 'asins') { selectedAsin = null; asinView = 'all'; asinViewAsins = null; }
@@ -9937,11 +9948,31 @@ function goFilteredAsins(preset) {
   render();
 }
 // v3.6.7 — CTA 11 / CTA 12 : navigation vers Analyse ASINs avec filtre YoY
+// v3.6.8 α+γ : pushState pour Back navigateur + _yoyReturnCtx pour bandeau retour
 function goToAsinsYoY(asinIds, label) {
+  _yoyReturnCtx = { scrollY: window.scrollY, label: 'Analyse comparée' };
+  try { history.pushState({ _yoyReturn: true, scrollY: window.scrollY }, ''); } catch(e) {}
   asinViewCustomIds = Array.isArray(asinIds) && asinIds.length ? asinIds : [];
   asinViewLabel     = label || 'Filtré par YoY';
   goFilteredAsins('yoy-warning');
 }
+
+// v3.6.8 α+γ : retour YoY depuis bandeau "← Analyse comparée"
+function yoyGoBack() {
+  var ctx = _yoyReturnCtx;
+  _yoyReturnCtx = null;
+  go('yoy');
+  if (ctx && ctx.scrollY) setTimeout(function() { try { window.scrollTo(0, ctx.scrollY); } catch(e) {} }, 80);
+}
+
+// v3.6.8 γ : handler popstate — uniquement pour les états poussés par goToAsinsYoY
+window.addEventListener('popstate', function(e) {
+  if (!e.state || !e.state._yoyReturn) return;  // ignorer tout autre popstate
+  var sy = e.state.scrollY || 0;
+  _yoyReturnCtx = null;
+  go('yoy');
+  if (sy) setTimeout(function() { try { window.scrollTo(0, sy); } catch(ex) {} }, 100);
+});
 
 function selClient(id) { activeId = id; screen = 'dashboard'; selectedAsin = null; aiResult = ''; render(); }
 function startOnboarding() { newClient = freshClient(); wizStep = 0; screen = 'onboarding'; render(); }
