@@ -1,6 +1,6 @@
 ﻿# CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 27 mai 2026 (v3.6.7.1 PROD — YoY warnings W1/W2/W3 + éveil 80/20 + CTA 11/12 + Parser ERP Gers)
+**Dernière mise à jour :** 29 mai 2026 (v3.6.8.8 PREPROD — YoY Étape 3a Enquête ASINs + parser_po + pattern retour + 9 fixes onclick JSON.stringify)
 
 ---
 
@@ -63,6 +63,29 @@ Tout patch doit être minimal et ciblé :
 - Ne jamais grouper plusieurs corrections non liées dans un même commit
 - Si le patch touche `drawSEOContent` ou `parseSEOResponse` → test smoke obligatoire
   sur un ASIN avec fiche déjà générée ET sur une nouvelle génération
+
+## 6. RÈGLE SSOT FRAÎCHEUR (gravée v3.6.8.9 — 29 mai 2026)
+
+**Avant tout code touchant la fraîcheur/import, appeler `getEnrichedFreshness` ou `getDataFreshness`. Jamais recalculer depuis `c.pos`, `c.forecastData`, `c.ppmData` ou `c.ytdData` directement dans une fonction de rendu.**
+
+- Source de vérité : `getDataFreshness(c)` pour ventes/trafic/stock (hebdo)
+- Source enrichie : `getEnrichedFreshness(c)` pour tous types (POs, FC, PPM, YTD, Appros)
+- Symptôme à éviter : deux écrans du même client affichant des dates divergentes au même instant
+
+## 7. RÈGLE FACTORISATION GÉNÉRALE (gravée v3.6.8.9 — 29 mai 2026)
+
+**Toute logique métier (calcul, format, normalisation, parsing, construction URL) DOIT être extraite en utilitaire partagé dès qu'elle apparaît à plus de 1 endroit. Avant ajout d'une 2e implémentation, extraction obligatoire.**
+
+- Helper existants : `daysSinceDate(isoDate)`, `getISOWeek(date)`, `yoyFmtEur(v)`, `esc(s)`, etc.
+- Critère de revue automatique avant commit : chercher `Math.floor.*86400000` (daysSince), `JSON.stringify.*onclick` (pattern cassé), `c\.pos\.\|c\.forecastData\.\|c\.ppmData\.` dans les render functions
+
+## 8. RÈGLES MÉTIER CAPITALISÉES
+
+| Règle | Valeur | Décision |
+|---|---|---|
+| Prévisions Amazon (Forecast) — tolérance fraîcheur | **Bimensuel (2 semaines OK)** — Amazon édite les forecasts tous les 15j, pas chaque semaine | Fred, 29 mai 2026 |
+| POs (Bons de commande) — fraîcheur | **Libre (ok < 90j, stale < 180j)** — import ad-hoc selon arrivée BdC, pas hebdomadaire | Fred, 29 mai 2026 |
+| `JSON.stringify(string)` dans `onclick="..."` | **TOUJOURS cassé** — utiliser `'\'' + str + '\''` ou `.replace(/"/g,'&quot;')` | Règle technique v3.6.8.8 |
 
 ## 5. VERSIONS STABLES DE RÉFÉRENCE
 

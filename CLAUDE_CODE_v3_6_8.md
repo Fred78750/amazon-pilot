@@ -1,10 +1,87 @@
 # CLAUDE_CODE_v3_6_8.md
 **Chantier** : v3.6.8 — YoY Étape 3a — Enquête ASINs disparus
 **Date production brief** : 27 mai 2026
-**Producteur** : Claude Orchestrateur
-**Cible commerciale** : été 2026 — chantier le plus dense pré-commercialisation
-**Durée estimée** : ~4 semaines
-**Statut prod amont** : v3.6.7.1 mergée le 27 mai (YoY Étape 1 + 2 + patch parser ERP Gers "Extraction")
+**Date livraison** : 29 mai 2026 — v3.6.8.8 sur PREPROD — en attente GO Fred pour merge main
+**Producteur** : Claude Orchestrateur (brief) + Claude Code (implémentation)
+**Statut prod amont** : v3.6.7.1 mergée le 27 mai
+
+---
+
+## LIVRAISON RÉELLE v3.6.8.8 (29 mai 2026)
+
+### Fichiers créés
+- `src/yoy_enquete.js` — VC_AVAILABILITY_CODES (9 codes), classifyMissingASINs (algo A1/A2/B/C/D1/D2/R), renderEnqueteSection, calcBrandAggs, normalizeBrand, resolveBrandAlias, cache session enquête
+- `src/parser_po.js` — parsePOItemExport (FR/EN), mergePOItemsIntoClient, autoDetectVendorCodes, handlePOItemExportFile
+
+### Fichiers modifiés
+- `src/core.js` — freshClient (brandAliases, enquetePeriodMonths, anomalyThreshold, poItemExportRawLines), fiche client PO enrichie, goToAsinsYoY α+γ, yoyGoBack, popstate handler, goFilteredAsins (pool YoY), 3 fixes onclick JSON.stringify
+- `src/yoy.js` — dim10 alias marques, dim12 seuil+filtre asymétrie, CTAs 1-7, section Enquête, yoyFusionnerMarques, yoyCasVCFusion, yoyAddAliasPrompt, yoyDeleteAlias, Section Marques 6 colonnes, 4 fixes onclick JSON.stringify
+- `src/yoy_enquete.js` — fix scoping stockByAsin/subcatColors, fix JSON.stringify onclick détail row
+- `src/seo.js` — 7 fixes onclick JSON.stringify (market codes + bulletField)
+- `build.py` — injection yoy_enquete → parser_po → yoy (ordre dépendance)
+
+### Sous-versions patches (chronologie)
+| Version | Commit | Contenu |
+|---|---|---|
+| 3.6.8 | 602cbc3 | Livraison initiale (tous les nouveaux modules) |
+| 3.6.8.1 | dbe7638 | Corrections UI libellé BO + KPI brutes/uniques |
+| 3.6.8.2 | 34c471f | Patch Dériveur bandeau BO conditionnel |
+| 3.6.8.3 | 28f9008 | Section Marques 6 colonnes (brief §3.5) |
+| 3.6.8.4 | fcbefb9 | Fix 4 boutons KO (Fusionner, Cas VC, CTA6 label, détail enquête) |
+| 3.6.8.5 | ad1c1ab | Pattern retour α+γ initial |
+| 3.6.8.6 | 3b1cab7 | Fix back arrows : JSON.stringify &quot; + popstate replaceState |
+| 3.6.8.7 | 8923aae | Fix Forward navigateur (stocker asinIds dans pushState) |
+| 3.6.8.8 | 8f1b45e | Audit exhaustif JSON.stringify onclick (9 sites) + goFilteredAsins pool YoY |
+
+### Anticipations v3.6.9 livrées en bonus (sans paywall)
+- Top mouvements ASIN (perdants + gagnants)
+- Mon diagnostic (narrative pré-rédigée)
+- Plan d'action P2+P3 (en plus de P1)
+- Conclusion générale narrative
+→ Brief v3.6.9 à recadrer pour ne pas redoubler
+
+### Bugs production découverts (pré-existants, corrigés en v3.6.8.x)
+1. **JSON.stringify dans onclick** — pattern `onclick="fn(JSON.stringify(str))"` cassait TOUS les boutons concernés. 9 occurrences : onglets filtres Analyse ASINs, seoActiveTab, copySEOField, agentVCState.market, runSEOFiche, copySEOTitreMkt, mktJ/bf variables
+2. **goFilteredAsins** — sous-filtres recalculés sur c.asins complet au lieu du pool YoY → Segment C montrait 1672 au lieu de ~40 dans le contexte YoY
+
+### Pattern JSON.stringify dans onclick — règle définitive
+```
+❌ TOUJOURS CASSÉ :
+onclick="fn(" + JSON.stringify(str) + ")"
+→ produit onclick="fn("valeur")" → " termine l'attribut
+
+✅ CORRECT pour strings simples :
+onclick="fn(\'" + str + "\')"
+→ produit onclick="fn('valeur')"
+
+✅ CORRECT pour arrays/objets :
+onclick="fn(" + JSON.stringify(arr).replace(/"/g,'&quot;') + ")"
+→ produit onclick="fn([&quot;val&quot;,...])"
+→ HTML parser decode &quot; → " avant exécution JS
+```
+
+### Pattern deploy S3 preprod/prod — règle définitive
+```bash
+# ❌ INTERDIT — aws s3 cp convertit CRLF/LF Windows → bytes corrompus
+aws s3 cp file.html s3://bucket/index.html
+
+# ✅ OBLIGATOIRE — upload bytes bruts
+aws s3api put-object --bucket BUCKET --key index.html --body "file.html" \
+  --content-type "text/html; charset=utf-8" \
+  --cache-control "no-cache,no-store,must-revalidate"
+
+# Vérification systématique après upload
+aws s3api head-object --bucket BUCKET --key index.html --query "ContentLength"
+# Doit correspondre exactement à la taille du fichier local
+```
+
+### Prochaines étapes (attente GO Fred)
+- [ ] Validation Fred bout en bout sur preprod.amazon.foliow.app
+- [ ] Smoke tests formels (Bloc 1-4)
+- [ ] GO Fred explicite → merge main + invalidation CloudFront E3ERL241475BJI
+- [ ] v3.6.9 : toggle Free/Pro, export Word, narrative IA enrichie, analyse par famille
+
+---
 
 ---
 
