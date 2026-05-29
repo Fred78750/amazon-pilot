@@ -17,10 +17,12 @@ function downloadYoYWord() {
 
   try {
     var rtf = _generateRTF(c, a);
-    var blob = new Blob([rtf], { type: 'application/rtf' });
+    // Extension .doc : Word ouvre les fichiers RTF avec extension .doc sans conversion
+    // (contenu RTF, icône et association Word standard pour l'utilisateur)
+    var blob = new Blob([rtf], { type: 'application/msword' });
     var slug  = (c.name || 'client').replace(/[^a-z0-9]/gi, '_').toLowerCase();
     var today = new Date().toISOString().slice(0, 10);
-    var filename = 'Analyse_comparee_' + slug + '_' + today + '.rtf';
+    var filename = 'Analyse_comparee_' + slug + '_' + today + '.doc';
     var url = URL.createObjectURL(blob);
     var link = document.createElement('a');
     link.href = url; link.download = filename;
