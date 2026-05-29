@@ -704,7 +704,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.6.8.8';
+const APP_VERSION = '3.6.8.9';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -3516,6 +3516,20 @@ function getISOWeek(date) {
   return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
 }
 
+/**
+ * daysSinceDate(isoDateOrStr)
+ * v3.6.8.9 — Helper partagé SSOT pour le calcul "jours depuis un import".
+ * Remplace les 3+ implémentations ad hoc de Math.floor((Date.now() - new Date(x)) / 86400000).
+ * @param {string|Date|null} isoDateOrStr — date ISO string ou objet Date
+ * @returns {number|null} — entier >= 0, ou null si date invalide/absente
+ */
+function daysSinceDate(isoDateOrStr) {
+  if (!isoDateOrStr) return null;
+  const d = new Date(isoDateOrStr);
+  if (isNaN(d.getTime())) return null;
+  return Math.floor((Date.now() - d.getTime()) / 86400000);
+}
+
 // Couleur du point sidebar selon fraîcheur globale
 function clientFreshnessColor(c) {
   if (!c.csvImported) return 'var(--a)'; // orange = pas de données
@@ -3643,7 +3657,9 @@ function renderYTDComparison(c) {
 function renderFreshnessBanner(c) {
   if (!c) return '';
   if (isAway(c)) return ''; // Pas de bannière pendant les congés
-  const f = getDataFreshness(c);
+  // v3.6.8.9 SSOT : getEnrichedFreshness inclut YTD (source : c.imports) — remplace doublon c.ytdData
+  const ef_banner = getEnrichedFreshness(c);
+  const f = ef_banner;
   const now = new Date();
   const currentWeek = getISOWeek(now);
   const year = now.getFullYear();
@@ -3691,10 +3707,10 @@ function renderFreshnessBanner(c) {
   });
 
   h += `</div>`;
-  // Ajouter statut YTD si disponible
-  const ytdInfo = c.ytdData?.ventes;
-  if (ytdInfo) {
-    const ytdDays = Math.floor((new Date() - new Date(ytdInfo.importedAt||ytdInfo.periodEnd)) / 86400000);
+  // Statut YTD via SSOT getEnrichedFreshness (source : c.imports, pas c.ytdData)
+  const ytdEntry = ef_banner.ytd;
+  if (ytdEntry && ytdEntry.days !== null) {
+    const ytdDays  = ytdEntry.days;
     const ytdColor = ytdDays < 8 ? 'var(--g)' : ytdDays < 15 ? 'var(--a)' : 'var(--r)';
     h += `<div style="margin-top:8px;display:flex;align-items:center;gap:8px">
       <span style="font-size:11px;color:var(--tx3)">📈 YTD ${new Date().getFullYear()} :</span>
@@ -3829,11 +3845,10 @@ function generateWeeklyActions(client) {
   const targetWeekAction = freshness.ventes.targetWeek || (getISOWeek(new Date()) - 1);
   const lastWeekCovered  = freshness.ventes.lastWeek;
 
+  // v3.6.8.9 SSOT : daysSinceImport = freshness.ventes.daysSince (calculé par getDataFreshness)
   const lastImport = client.imports?.filter(i => i.periodType === 'weekly' || !i.periodType)
     .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
-  const daysSinceImport = lastImport
-    ? Math.floor((Date.now() - new Date(lastImport.date)) / 86400000)
-    : null;
+  const daysSinceImport = freshness.ventes.daysSince ?? null;
 
   // Gestion congés
   const clientAway = isAway(client);
@@ -5743,8 +5758,9 @@ function renderImport() {
   // ══════════════════════════════════════════════════════
   const ppmCount  = Object.keys(c.ppmData || {}).length;
   const ppmLoaded = ppmCount > 0;
-  const lastPPMDate = ppmLoaded ? Object.values(c.ppmData).sort((a,b)=>(b.importedAt||'').localeCompare(a.importedAt||''))[0]?.importedAt : null;
-  const lastPPMStr  = lastPPMDate ? new Date(lastPPMDate).toLocaleDateString('fr-FR') : null;
+  // v3.6.8.9 SSOT : source de date unifiée via getEnrichedFreshness (même calcul que Agent Import)
+  const _efImport  = getEnrichedFreshness(c);
+  const lastPPMStr = _efImport.ppm.lastDate ? new Date(_efImport.ppm.lastDate).toLocaleDateString('fr-FR') : null;
 
   h += '<div class="cd">';
   h += '<div class="cd-t space"><span>4 — PPM Nette <span style="font-size:10px;font-weight:400;color:var(--tx3)">(optionnel — mise à jour mensuelle)</span></span>'
@@ -5767,8 +5783,8 @@ function renderImport() {
   // ══════════════════════════════════════════════════════
   const fcCount  = Object.keys(c.forecastData || {}).length;
   const fcLoaded = fcCount > 0;
-  const lastFCDate = fcLoaded ? Object.values(c.forecastData).sort((a,b)=>(b.importedAt||'').localeCompare(a.importedAt||''))[0]?.importedAt : null;
-  const lastFCStr  = lastFCDate ? new Date(lastFCDate).toLocaleDateString('fr-FR') : null;
+  // v3.6.8.9 SSOT : source de date unifiée via getEnrichedFreshness (même calcul que Agent Import)
+  const lastFCStr = _efImport.previsions.lastDate ? new Date(_efImport.previsions.lastDate).toLocaleDateString('fr-FR') : null;
 
   h += '<div class="cd">';
   h += '<div class="cd-t space"><span>5 — Prévisions Amazon <span style="font-size:10px;font-weight:400;color:var(--tx3)">(optionnel — 48 semaines glissantes)</span></span>'
@@ -8822,27 +8838,35 @@ function getEnrichedFreshness(c) {
     return 'missing';
   }
 
-  // ── POs : logique hebdo (semaine précédente) ────────────────────
-  const lastPO = (c.pos||[]).slice().sort((a,b)=>(b.importedAt||'').localeCompare(a.importedAt||''))[0];
-  const posDays = lastPO ? Math.floor((nowMs - new Date(lastPO.importedAt)) / 86400000) : null;
-  const posWB   = lastPO ? weeksBehindFromDate(lastPO.importedAt) : null;
+  // ── POs : logique LIBRE (pas hebdomadaire — import ad-hoc selon arrivée des BdC) ──
+  // Règle : ok < 90j, stale < 180j, missing sinon. Pas de weeksBehind pour les POs.
+  function posStatus(days) {
+    if (days === null) return 'missing';
+    if (days <= 90)  return 'ok';    // 3 mois : fraîcheur normale pour BdC
+    if (days <= 180) return 'stale'; // 6 mois : à renouveler
+    return 'missing';
+  }
+  const lastPO  = (c.pos||[]).slice().sort((a,b)=>(b.importedAt||'').localeCompare(a.importedAt||''))[0];
+  const posDays = daysSinceDate(lastPO?.importedAt);
 
   // ── Prévisions : bimensuel — OK si importé dans les 2 dernières semaines ISO ──
   const fcDates  = Object.values(c.forecastData||{}).map(p=>p.importedAt).filter(Boolean).sort().reverse();
-  const fcDays   = fcDates.length ? Math.floor((nowMs - new Date(fcDates[0])) / 86400000) : null;
+  const fcDays   = daysSinceDate(fcDates[0]);
   const fcWB     = fcDates.length ? weeksBehindFromDate(fcDates[0]) : null;
-  // Prévisions OK si weeksBehind <= 2 (tolérance bimensuelle)
+  // Tolérance bimensuelle intentionnelle : Amazon édite les prévisions tous les 15 jours,
+  // pas chaque semaine. Ne pas aligner sur la règle hebdo des autres données.
+  // Décision Fred validée le 29 mai 2026 (post v3.6.8.8).
   function fcStatus(wb) {
     if (wb === null) return 'missing';
     if (wb <= 0) return 'ok';
-    if (wb <= 2) return 'ok';   // bimensuel : 2 semaines OK
+    if (wb <= 2) return 'ok';   // 2 semaines OK — cadence réelle Amazon Forecast
     if (wb <= 4) return 'stale';
     return 'missing';
   }
 
   // ── PPM nette : mensuel — OK si importé le mois en cours ou le mois précédent ──
   const ppmDates = Object.values(c.ppmData||{}).map(p=>p.importedAt).filter(Boolean).sort().reverse();
-  const ppmDays  = ppmDates.length ? Math.floor((nowMs - new Date(ppmDates[0])) / 86400000) : null;
+  const ppmDays  = daysSinceDate(ppmDates[0]);
   function ppmStatus(days) {
     if (days === null) return 'missing';
     // Mois courant ou mois précédent (tolérance jusqu'au 28e jour)
@@ -8858,9 +8882,10 @@ function getEnrichedFreshness(c) {
 
   // ── YTD — même logique que hebdo (doit être de la semaine précédente) ──
   const ytdImport = (c.imports||[])
-    .filter(i => i.periodType === 'ytd' || i.type === 'ventes' && i.periodType === 'ytd')
+    .filter(i => i.periodType === 'ytd' && i.type === 'ventes')
     .sort((a,b) => new Date(b.date) - new Date(a.date))[0];
-  const ytdWB = ytdImport ? weeksBehindFromDate(ytdImport.date) : null;
+  const ytdWB   = ytdImport ? weeksBehindFromDate(ytdImport.date) : null;
+  const ytdDays = daysSinceDate(ytdImport?.date);
 
   // Fraîcheur ventes/stock Approvisionnement (imports avec distributorView='appro')
   const lastVentesAppro = (c.imports||[]).filter(i=>i.type==='ventes'&&i.distributorView==='appro'&&i.periodType==='weekly').sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
@@ -8871,22 +8896,37 @@ function getEnrichedFreshness(c) {
   const hasFabBrands = (c.brands||[]).some(b=>b.role==='fabricant');
 
   return {
+    // ── Données hebdo (ventes/trafic/stock) — lastWeek propagé depuis getDataFreshness ──
     ventes:      { days: f?.ventes.daysSince ?? null,   status: f?.ventes.status   ?? 'missing', freq: 7,
-                 weeksBehind: f?.ventes.weeksBehind ?? null, targetWeek: targetWeekHebdo },
-    ventesAppro: { days: lastVentesAppro ? Math.floor((nowMs-new Date(lastVentesAppro.date))/86400000) : null,
-                 status: hasFabBrands ? weekStatus(vaWB) : 'ok', weeksBehind: vaWB, freq: 7, targetWeek: targetWeekHebdo, optional: !hasFabBrands },
+                   weeksBehind: f?.ventes.weeksBehind ?? null, targetWeek: targetWeekHebdo,
+                   lastWeek: f?.ventes.lastWeek ?? null },
+    ventesAppro: { days: daysSinceDate(lastVentesAppro?.date),
+                   status: hasFabBrands ? weekStatus(vaWB) : 'ok', weeksBehind: vaWB, freq: 7,
+                   targetWeek: targetWeekHebdo, optional: !hasFabBrands },
     trafic:      { days: f?.trafic.daysSince ?? null,   status: f?.trafic.status   ?? 'missing', freq: 7,
-                 weeksBehind: f?.trafic.weeksBehind ?? null, targetWeek: targetWeekHebdo },
+                   weeksBehind: f?.trafic.weeksBehind ?? null, targetWeek: targetWeekHebdo,
+                   lastWeek: f?.trafic.lastWeek ?? null },
     stock:       { days: f?.stock.daysSince  ?? null,   status: f?.stock.status    ?? 'missing', freq: 7,
-                 weeksBehind: f?.stock.weeksBehind ?? null,  targetWeek: targetWeekHebdo },
-    stockAppro:  { days: lastStockAppro ? Math.floor((nowMs-new Date(lastStockAppro.date))/86400000) : null,
-                 status: hasFabBrands ? weekStatus(saWB) : 'ok', weeksBehind: saWB, freq: 7, targetWeek: targetWeekHebdo, optional: !hasFabBrands },
-    pos:       { days: posDays,  weeksBehind: posWB,  status: weekStatus(posWB),      freq: 7,  targetWeek: targetWeekHebdo },
-    previsions:{ days: fcDays,   weeksBehind: fcWB,   status: fcStatus(fcWB),          freq: 14, targetWeek: targetWeekHebdo },
-    ppm:       { days: ppmDays,  status: ppmStatus(ppmDays),                            freq: 30 },
-    annuel:    { hasN1: hasAnnualN1, hasN2: hasAnnualN2,
-                 status: hasAnnualN1 ? 'ok' : 'missing',
-                 detail: hasAnnualN1 ? (hasAnnualN2 ? 'N-1 + N-2 présents' : 'N-1 présent, N-2 manquant') : 'Historique annuel absent' },
+                   weeksBehind: f?.stock.weeksBehind ?? null,  targetWeek: targetWeekHebdo,
+                   lastWeek: f?.stock.lastWeek ?? null },
+    stockAppro:  { days: daysSinceDate(lastStockAppro?.date),
+                   status: hasFabBrands ? weekStatus(saWB) : 'ok', weeksBehind: saWB, freq: 7,
+                   targetWeek: targetWeekHebdo, optional: !hasFabBrands },
+    // ── POs : fréquence libre, sans sémantique semaine ──
+    pos:         { days: posDays, weeksBehind: null, status: posStatus(posDays), freq: 0 },
+    // ── Prévisions : bimensuel, avec lastWeek calculé ──
+    previsions:  { days: fcDays, weeksBehind: fcWB, status: fcStatus(fcWB), freq: 14,
+                   targetWeek: targetWeekHebdo,
+                   lastWeek: fcDates.length ? getISOWeek(new Date(fcDates[0])) : null,
+                   lastDate: fcDates[0] || null },
+    // ── PPM : mensuel, avec lastDate pour affichage ──
+    ppm:         { days: ppmDays, status: ppmStatus(ppmDays), freq: 30,
+                   lastDate: ppmDates[0] || null },
+    annuel:      { hasN1: hasAnnualN1, hasN2: hasAnnualN2,
+                   status: hasAnnualN1 ? 'ok' : 'missing',
+                   detail: hasAnnualN1 ? (hasAnnualN2 ? 'N-1 + N-2 présents' : 'N-1 présent, N-2 manquant') : 'Historique annuel absent' },
+    // ── YTD : intégré ici pour éviter le doublon dans renderFreshnessBanner ──
+    ytd:         { days: ytdDays, weeksBehind: ytdWB, status: weekStatus(ytdWB) },
   };
 }
 
@@ -9414,7 +9454,7 @@ function renderAgent() {
     { key:'ventes',     icon:'💰', label:'Ventes',          freq:'Hebdo' },
     { key:'trafic',     icon:'👁',  label:'Trafic',          freq:'Hebdo' },
     { key:'stock',      icon:'📦', label:'Stock',           freq:'Hebdo' },
-    { key:'pos',        icon:'📋', label:'Bons de commande', freq:'Hebdo' },
+    { key:'pos',        icon:'📋', label:'Bons de commande', freq:'Libre' },
     { key:'previsions', icon:'📊', label:'Prévisions',      freq:'Bimensuel' },
     { key:'ppm',        icon:'💰', label:'PPM Nette',        freq:'Mensuel' },
     { key:'annuel',     icon:'📅', label:'Historique annuel',freq:'Annuel' },
@@ -9432,10 +9472,18 @@ function renderAgent() {
       detail = r.detail || 'Historique annuel';
     } else if (r.days === null) {
       detail = 'Jamais importé';
-    } else if (r.weeksBehind != null && r.weeksBehind > 0 && d.key !== 'ppm') {
-      detail = 'S' + r.targetWeek + ' manquante — dernier import S' + r.lastWeek + ' (il y a ' + r.days + 'j)';
+    } else if (d.key === 'pos') {
+      // BdC : fréquence libre, pas de sémantique semaine — affichage en jours uniquement
+      detail = 'Importés il y a ' + r.days + 'j';
+    } else if (d.key === 'ppm') {
+      // PPM : mensuel, pas de sémantique semaine
+      detail = 'Importée il y a ' + r.days + 'j';
+    } else if (r.weeksBehind != null && r.weeksBehind > 0) {
+      // Données hebdo en retard — garde '?' si lastWeek indisponible
+      detail = 'S' + r.targetWeek + ' manquante — dernier import S' + (r.lastWeek || '?') + ' (il y a ' + r.days + 'j)';
     } else if (r.days != null) {
-      detail = 'S' + r.lastWeek + ' couverte — importé il y a ' + r.days + 'j';
+      // Données hebdo à jour
+      detail = 'S' + (r.lastWeek || '?') + ' couverte — importé il y a ' + r.days + 'j';
     } else {
       detail = '—';
     }
@@ -15232,7 +15280,8 @@ function exportAllData(silent = false) {
       clientsSummary: clients.map(c => ({
         id: c.id, name: c.name, brand: c.brand, markets: c.markets,
         asinCount: c.asins?.length || 0,
-        lastImport: c.asins?.[0]?.periodEnd || null,
+        // v3.6.8.9 SSOT : source correcte = dernier import ventes depuis c.imports (pas c.asins[0].periodEnd)
+        lastImport: (c.imports||[]).filter(function(i){return i.type==='ventes'&&(i.periodType==='weekly'||!i.periodType);}).sort(function(a,b){return new Date(b.date)-new Date(a.date);})[0]?.date || null,
         hasHistorical: !!(c.annualData && Object.keys(c.annualData).length),
         hasAppros: !!(c.catalogue?.length),
       }))
