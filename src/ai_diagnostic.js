@@ -134,6 +134,33 @@ function buildDiagnosticPrompt(c, dims, dRef, sign) {
 
 var _AI_LAMBDA_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
+// ── Prix Anthropic USD/million tokens (règle 35 — v3.6.9.3) ───────
+// Source : Anthropic pricing officiel — à mettre à jour si changement tarif
+var AI_PRICING_USD_PER_MILLION_TOKENS = {
+  'claude-sonnet-4-20250514': { input: 3.00, output: 15.00 },
+  'claude-opus-4-20250514':   { input: 15.00, output: 75.00 }
+};
+
+/**
+ * persistAiUsageLog(entry)
+ * Écrit un enregistrement dans IDB ai_usage_log (v6, règle 35).
+ * Non bloquant : échec silencieux si IDB indisponible.
+ */
+function persistAiUsageLog(entry) {
+  try {
+    var req = indexedDB.open('AmazonPilot', 6);
+    req.onsuccess = function(e) {
+      try {
+        var db = e.target.result;
+        var tx = db.transaction('ai_usage_log', 'readwrite');
+        tx.objectStore('ai_usage_log').put(entry);
+        tx.oncomplete = function() { db.close(); };
+      } catch(err) { console.error('[ai_usage_log] Erreur écriture IDB:', err.message); }
+    };
+    req.onerror = function() { console.error('[ai_usage_log] Erreur ouverture IDB'); };
+  } catch(err) { console.error('[ai_usage_log] persistAiUsageLog:', err.message); }
+}
+
 /**
  * initAIDiagnostic(c, dims, dRef, sign, placeholderId, clientIdAtLaunch)
  * Lance la génération IA async et patche le div placeholder une fois terminé.
@@ -156,6 +183,26 @@ function initAIDiagnostic(c, dims, dRef, sign, placeholderId, clientIdAtLaunch) 
   // Cache miss → appel Lambda (format API Amazon Pilot : messages[], feature, Authorization)
   var prompt = buildDiagnosticPrompt(c, dims, dRef, sign);
   var idToken = localStorage.getItem('ap-id-token') || '';
+  var _model  = 'claude-sonnet-4-20250514';
+
+  // ── Logging règle 35 — initialisation entrée log ──
+  var _t0 = performance.now();
+  var _logEntry = {
+    id:              (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + '_' + Math.random()),
+    timestamp:       new Date().toISOString(),
+    model:           _model,
+    tokens_input:    null,
+    tokens_output:   null,
+    cost_input_usd:  null,
+    cost_output_usd: null,
+    cost_total_usd:  null,
+    client_id:       c.id,
+    feature:         'diagnostic_v1',
+    scope:           'client_' + c.id,
+    success:         null,
+    error_code:      null,
+    duration_ms:     null
+  };
 
   fetch(_AI_LAMBDA_URL + '/ai/complete', {
     method: 'POST',
@@ -166,12 +213,18 @@ function initAIDiagnostic(c, dims, dRef, sign, placeholderId, clientIdAtLaunch) 
     body: JSON.stringify({
       messages: [{ role: 'user', content: prompt }],
       feature: 'revue',
-      model: 'claude-sonnet-4-20250514',
+      model: _model,
       max_tokens: 350
     })
   })
   .then(function(resp) {
-    if (!resp.ok) throw new Error('Lambda ' + resp.status);
+    _logEntry.duration_ms = Math.round(performance.now() - _t0);
+    if (!resp.ok) {
+      _logEntry.success    = false;
+      _logEntry.error_code = 'HTTP_' + resp.status;
+      persistAiUsageLog(_logEntry); // log echec
+      throw new Error('Lambda ' + resp.status);
+    }
     return resp.json();
   })
   .then(function(data) {
@@ -179,6 +232,21 @@ function initAIDiagnostic(c, dims, dRef, sign, placeholderId, clientIdAtLaunch) 
       ? data.content[0].text.trim()
       : null;
     if (!text) throw new Error('Réponse Lambda vide');
+
+    // ── Compléter le log avec tokens + coûts ──
+    _logEntry.success       = true;
+    _logEntry.tokens_input  = (data.usage && data.usage.input_tokens)  || null;
+    _logEntry.tokens_output = (data.usage && data.usage.output_tokens) || null;
+    var _pricing = AI_PRICING_USD_PER_MILLION_TOKENS[_model];
+    if (_pricing && _logEntry.tokens_input !== null) {
+      _logEntry.cost_input_usd  = (_logEntry.tokens_input  / 1000000) * _pricing.input;
+      _logEntry.cost_output_usd = (_logEntry.tokens_output / 1000000) * _pricing.output;
+      _logEntry.cost_total_usd  = _logEntry.cost_input_usd + _logEntry.cost_output_usd;
+    } else if (!_pricing) {
+      _logEntry.error_code = 'PRICING_NOT_FOUND';
+      console.warn('[ai_usage_log] Tarif non trouvé pour modèle:', _model);
+    }
+    persistAiUsageLog(_logEntry); // log succès
 
     // Stocker en cache + save IDB
     var cNow = cl();
@@ -189,6 +257,13 @@ function initAIDiagnostic(c, dims, dRef, sign, placeholderId, clientIdAtLaunch) 
     _patchDiagnosticDiv(placeholderId, text, clientIdAtLaunch, false);
   })
   .catch(function(err) {
+    // Log erreur réseau / parsing si pas encore loggué
+    if (_logEntry.success === null) {
+      _logEntry.duration_ms = Math.round(performance.now() - _t0);
+      _logEntry.success     = false;
+      _logEntry.error_code  = err.name || 'UNKNOWN_ERROR';
+      persistAiUsageLog(_logEntry);
+    }
     console.warn('[ai_diagnostic] Lambda KO, fallback pré-rédigé :', err.message);
     _patchDiagnosticDiv(placeholderId, null, clientIdAtLaunch, true); // fallback
   });
@@ -233,7 +308,67 @@ function regenerateAIDiagnostic() {
   save(); render();
 }
 
+// ── Helpers debug / admin (règle 35 — pas d'UI v3.6.9.3, helpers console uniquement) ──
+
+/**
+ * getAiUsageLog(options)
+ * @param {{ from?, to?, client_id?, feature?, model? }} options
+ * @returns {Promise<Array>}
+ */
+window.getAiUsageLog = function(options) {
+  options = options || {};
+  return new Promise(function(resolve, reject) {
+    var req = indexedDB.open('AmazonPilot', 6);
+    req.onsuccess = function(e) {
+      var db = e.target.result;
+      var tx = db.transaction('ai_usage_log', 'readonly');
+      var store = tx.objectStore('ai_usage_log');
+      var all = [];
+      var cur = store.openCursor();
+      cur.onsuccess = function(ev) {
+        var cursor = ev.target.result;
+        if (!cursor) {
+          db.close();
+          // Filtres en mémoire
+          var results = all.filter(function(e) {
+            if (options.client_id && e.client_id !== options.client_id) return false;
+            if (options.feature   && e.feature   !== options.feature)   return false;
+            if (options.model     && e.model     !== options.model)     return false;
+            if (options.from      && e.timestamp < options.from)        return false;
+            if (options.to        && e.timestamp > options.to)          return false;
+            return true;
+          });
+          resolve(results);
+          return;
+        }
+        all.push(cursor.value);
+        cursor.continue();
+      };
+      cur.onerror = function() { db.close(); reject(cur.error); };
+    };
+    req.onerror = function() { reject(req.error); };
+  });
+};
+
+/**
+ * getAiUsageStats(options) — agrégats : calls, coût total, par modèle, par feature
+ */
+window.getAiUsageStats = function(options) {
+  return window.getAiUsageLog(options).then(function(entries) {
+    var stats = { total_calls: entries.length, total_cost_usd: 0, by_model: {}, by_feature: {}, errors: 0 };
+    entries.forEach(function(e) {
+      if (e.cost_total_usd) stats.total_cost_usd += e.cost_total_usd;
+      if (!e.success) stats.errors++;
+      stats.by_model[e.model]     = (stats.by_model[e.model]     || 0) + 1;
+      stats.by_feature[e.feature] = (stats.by_feature[e.feature] || 0) + 1;
+    });
+    stats.total_cost_usd = Math.round(stats.total_cost_usd * 100000) / 100000;
+    return stats;
+  });
+};
+
 // Exposer sur window
 window.initAIDiagnostic = initAIDiagnostic;
 window.regenerateAIDiagnostic = regenerateAIDiagnostic;
 window.computeDiagnosticHash = computeDiagnosticHash;
+window.persistAiUsageLog = persistAiUsageLog;

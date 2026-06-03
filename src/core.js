@@ -700,7 +700,7 @@ let _db = null;
 function openDB() {
   return new Promise((resolve, reject) => {
     if (_db) return resolve(_db);
-    const req = indexedDB.open('AmazonPilot', 5);  // v5 : ajout smoke_history
+    const req = indexedDB.open('AmazonPilot', 6);  // v6 : ajout ai_usage_log (règle 35)
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('clients')) {
@@ -722,6 +722,14 @@ function openDB() {
         const sh = db.createObjectStore('smoke_history', { keyPath: 'key' });
         sh.createIndex('clientId',  'clientId',  { unique: false });
         sh.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+      // v6 — logging coûts IA (règle 35 Orchestrateur V0.9)
+      if (!db.objectStoreNames.contains('ai_usage_log')) {
+        const al = db.createObjectStore('ai_usage_log', { keyPath: 'id' });
+        al.createIndex('by_timestamp', 'timestamp', { unique: false });
+        al.createIndex('by_client_id', 'client_id', { unique: false });
+        al.createIndex('by_feature',   'feature',   { unique: false });
+        al.createIndex('by_model',     'model',     { unique: false });
       }
     };
     req.onsuccess = e => { _db = e.target.result; resolve(_db); };
