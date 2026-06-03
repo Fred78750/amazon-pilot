@@ -704,7 +704,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.6.8.9';
+const APP_VERSION = '3.6.9.3';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -2315,7 +2315,10 @@ function freshClient() {
     brandAliases:         [],   // [{ canonical: string, variants: string[] }] — alias marques pour Section Marques
     enquetePeriodMonths:  4,    // fenêtre PO pour algo classification (slider 1-12, défaut 4)
     anomalyThreshold:     80,   // seuil similarité Levenshtein anomalies (50-100%, défaut 80%)
-    poItemExportRawLines: 0     // total lignes brutes du dernier import POItemExport (avant déduplication)
+    poItemExportRawLines: 0,    // total lignes brutes du dernier import POItemExport (avant déduplication)
+    // ── Analyse comparée v3.6.9 ──
+    viewMode: 'free',           // 'free' | 'pro' — toggle Free/Pro UI-only, persisté IDB
+    aiCache:  {}                // cache narratives IA { diagnosticV1: { hash, generatedAt, content, sign } }
   };
 }
 
@@ -2331,7 +2334,7 @@ let _db = null;
 function openDB() {
   return new Promise((resolve, reject) => {
     if (_db) return resolve(_db);
-    const req = indexedDB.open('AmazonPilot', 5);  // v5 : ajout smoke_history
+    const req = indexedDB.open('AmazonPilot', 6);  // v6 : ajout ai_usage_log (règle 35)
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if (!db.objectStoreNames.contains('clients')) {
@@ -2353,6 +2356,14 @@ function openDB() {
         const sh = db.createObjectStore('smoke_history', { keyPath: 'key' });
         sh.createIndex('clientId',  'clientId',  { unique: false });
         sh.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+      // v6 — logging coûts IA (règle 35 Orchestrateur V0.9)
+      if (!db.objectStoreNames.contains('ai_usage_log')) {
+        const al = db.createObjectStore('ai_usage_log', { keyPath: 'id' });
+        al.createIndex('by_timestamp', 'timestamp', { unique: false });
+        al.createIndex('by_client_id', 'client_id', { unique: false });
+        al.createIndex('by_feature',   'feature',   { unique: false });
+        al.createIndex('by_model',     'model',     { unique: false });
       }
     };
     req.onsuccess = e => { _db = e.target.result; resolve(_db); };
@@ -16193,6 +16204,380 @@ window.mergePOItemsIntoClient = mergePOItemsIntoClient;
 window.handlePOItemExportFile = handlePOItemExportFile;
 window.autoDetectVendorCodes = autoDetectVendorCodes;
 
+// Module : narrative IA semi-IA pour le sous-bloc "Cause la plus probable"
+// Décision F2 : IA uniquement pour sign='negative'. positive/stable = fallback pré-rédigé.
+// Architecture : jamais appeler api.anthropic.com directement — via Lambda /ai/complete.
+
+// ═══════════════════════════════════════════════════════════════
+// HASH DATA SOURCE (C1 : inclut enquetePeriodMonths + anomalyThreshold)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * computeDiagnosticHash(c, dims)
+ * Hash djb2-like des KPIs structurants + paramètres utilisateur.
+ * Inclut c.enquetePeriodMonths et c.anomalyThreshold (correction C1).
+ * Collision ~1/milliard — suffisant pour cache invalidation, pas crypto.
+ * @returns {string} e.g. 'v1_a3f2c1b8'
+ */
+function computeDiagnosticHash(c, dims) {
+  var d1  = (dims && dims.dim1)  || {};
+  var d7  = (dims && dims.dim7)  || {};
+  var d9  = (dims && dims.dim9)  || {};
+  var d10 = (dims && dims.dim10) || {};
+
+  var top3str = (d10.topBrands || []).slice(0, 3)
+    .map(function(b) { return (b.marque || '') + ':' + Math.round((b.delta || 0) * 100); })
+    .join('|');
+
+  var sources = [
+    c ? (c.name || '') : '',
+    Math.round(d1.deltaCAAnnu || 0),
+    (d7.disparus || []).length,
+    d1.deltaCAPct != null ? Math.round(d1.deltaCAPct * 10) : 0,
+    d9.concA && d9.concA.top10 != null ? Math.round(d9.concA.top10) : 0,
+    d9.concRef && d9.concRef.top10 != null ? Math.round(d9.concRef.top10) : 0,
+    top3str,
+    // C1 — paramètres utilisateur modifiant la sortie algorithme Enquête
+    c ? (c.enquetePeriodMonths || 4) : 4,
+    c ? (c.anomalyThreshold || 80) : 80
+  ].join('::');
+
+  // djb2
+  var h = 5381;
+  for (var i = 0; i < sources.length; i++) {
+    h = ((h << 5) + h) ^ sources.charCodeAt(i);
+    h = h & 0x7fffffff; // keep positive
+  }
+  return 'v1_' + h.toString(16);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CACHE IDB (sur c.aiCache.diagnosticV1)
+// ═══════════════════════════════════════════════════════════════
+
+function getCachedDiagnostic(c, hash) {
+  if (!c || !c.aiCache || !c.aiCache.diagnosticV1) return null;
+  var cached = c.aiCache.diagnosticV1;
+  if (cached.hash !== hash) return null; // hash mismatch → stale
+  return cached.content || null;
+}
+
+function setCachedDiagnostic(c, hash, content, sign) {
+  if (!c) return;
+  if (!c.aiCache) c.aiCache = {};
+  c.aiCache.diagnosticV1 = {
+    hash:        hash,
+    generatedAt: new Date().toISOString(),
+    content:     content,
+    sign:        sign
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PROMPT SONNET — "Cause la plus probable" (F1 : validé Fred 29 mai 2026)
+// ═══════════════════════════════════════════════════════════════
+
+function buildDiagnosticPrompt(c, dims, dRef, sign) {
+  var d1  = (dims && dims.dim1)  || {};
+  var d7  = (dims && dims.dim7)  || {};
+  var d9  = (dims && dims.dim9)  || {};
+  var d10 = (dims && dims.dim10) || {};
+
+  var clientName    = c ? (c.name || '?') : '?';
+  var deltaCAFmt    = d1.deltaCAAnnu != null ? yoyFmtEurSigned(d1.deltaCAAnnu) + '/an' : '?';
+  var deltaPctFmt   = d1.deltaCAPct  != null ? yoyFmtPct(d1.deltaCAPct, true)           : '?';
+  var disparusCount = (d7.disparus || []).length;
+  var totalRef      = disparusCount + (d7.stables||[]).length + (d7.enBaisse||[]).length + (d7.enHausse||[]).length;
+  var disparusPct   = totalRef > 0 ? yoyFmtPct(disparusCount / totalRef * 100) : '?';
+
+  var top3Chute = (d10.topBrands || [])
+    .filter(function(b) { return (b.delta || 0) < 0; })
+    .sort(function(a, b) { return (a.delta || 0) - (b.delta || 0); })
+    .slice(0, 3)
+    .map(function(b) { return esc(b.marque || '?') + ' (' + yoyFmtEurSigned(b.delta || 0) + '/j)'; })
+    .join(', ') || 'N/A';
+
+  // catégories Enquête si disponibles
+  var cat1 = 0, cat2 = 0, cat3 = 0;
+  if (typeof classifyMissingASINs === 'function' && c && (c.pos || []).length > 0 && disparusCount > 0) {
+    // estimation rapide depuis cache si disponible
+    if (c.aiCache && c.aiCache._enqueteSnap) {
+      cat1 = c.aiCache._enqueteSnap.cat1 || 0;
+      cat2 = c.aiCache._enqueteSnap.cat2 || 0;
+      cat3 = c.aiCache._enqueteSnap.cat3 || 0;
+    }
+  }
+
+  var concRefPct = d9.concRef && d9.concRef.top10 != null ? yoyFmtPct(d9.concRef.top10) : '?';
+  var concAPct   = d9.concA   && d9.concA.top10   != null ? yoyFmtPct(d9.concA.top10)   : '?';
+  var concDelta  = (d9.concA && d9.concA.top10 != null && d9.concRef && d9.concRef.top10 != null)
+    ? yoyFmtPts(d9.concA.top10 - d9.concRef.top10) : '?';
+
+  return 'Tu es consultant senior Amazon Vendor Central.\n'
+    + 'Produis UN seul paragraphe continu (80-120 mots) répondant à :\n'
+    + '"Quelle est la cause la plus probable du recul de ce compte ?"\n\n'
+    + '=== DONNÉES ===\n'
+    + 'Client : ' + clientName + '\n'
+    + 'Δ CA annualisé : ' + deltaCAFmt + ' (' + deltaPctFmt + ')\n'
+    + 'ASINs disparus : ' + disparusCount + ' (' + disparusPct + ' du catalogue réf.)\n'
+    + 'Top 3 marques en chute €/j : ' + top3Chute + '\n'
+    + (cat1 + cat2 + cat3 > 0
+      ? 'Répartition disparus : ' + cat1 + ' mortalité / ' + cat2 + ' à creuser / ' + cat3 + ' autres\n' : '')
+    + 'Concentration Top 10 : ' + concRefPct + ' → ' + concAPct + ' (' + concDelta + ')\n\n'
+    + '=== CONSIGNE ===\n'
+    + '1. Nommer UNE cause dominante (contraction catalogue / ruptures BdC /\n'
+    + '   problème pricing / logistique / baisse structurelle marché)\n'
+    + '2. Citer 2-3 chiffres précis pour étayer\n'
+    + '3. Terminer par : "La piste à creuser en priorité est [X]."\n\n'
+    + 'Règles : texte brut, pas de markdown, pas de bullets, pas de titre.\n'
+    + 'Jamais "il semblerait", jamais "potentiellement". Ton : rapport consultant.';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// APPEL LAMBDA + DOM PATCH
+// ═══════════════════════════════════════════════════════════════
+
+var _AI_LAMBDA_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
+
+// ── Prix Anthropic USD/million tokens (règle 35 — v3.6.9.3) ───────
+// Source : Anthropic pricing officiel — à mettre à jour si changement tarif
+var AI_PRICING_USD_PER_MILLION_TOKENS = {
+  'claude-sonnet-4-20250514': { input: 3.00, output: 15.00 },
+  'claude-opus-4-20250514':   { input: 15.00, output: 75.00 }
+};
+
+/**
+ * persistAiUsageLog(entry)
+ * Écrit un enregistrement dans IDB ai_usage_log (v6, règle 35).
+ * Non bloquant : échec silencieux si IDB indisponible.
+ */
+function persistAiUsageLog(entry) {
+  try {
+    var req = indexedDB.open('AmazonPilot', 6);
+    req.onsuccess = function(e) {
+      try {
+        var db = e.target.result;
+        var tx = db.transaction('ai_usage_log', 'readwrite');
+        tx.objectStore('ai_usage_log').put(entry);
+        tx.oncomplete = function() { db.close(); };
+      } catch(err) { console.error('[ai_usage_log] Erreur écriture IDB:', err.message); }
+    };
+    req.onerror = function() { console.error('[ai_usage_log] Erreur ouverture IDB'); };
+  } catch(err) { console.error('[ai_usage_log] persistAiUsageLog:', err.message); }
+}
+
+/**
+ * initAIDiagnostic(c, dims, dRef, sign, placeholderId, clientIdAtLaunch)
+ * Lance la génération IA async et patche le div placeholder une fois terminé.
+ * C2 gardes :
+ *   - Vérifie que c.id === clientIdAtLaunch avant patch (switch client pendant génération)
+ *   - Gère div === null silencieusement (toggle Free/Pro pendant génération)
+ */
+function initAIDiagnostic(c, dims, dRef, sign, placeholderId, clientIdAtLaunch) {
+  if (!c || sign !== 'negative') return; // F2 : IA uniquement pour sign='negative'
+
+  var hash = computeDiagnosticHash(c, dims);
+
+  // Cache hit → patch immédiat
+  var cached = getCachedDiagnostic(c, hash);
+  if (cached) {
+    _patchDiagnosticDiv(placeholderId, cached, clientIdAtLaunch, false);
+    return;
+  }
+
+  // Cache miss → appel Lambda (format API Amazon Pilot : messages[], feature, Authorization)
+  var prompt = buildDiagnosticPrompt(c, dims, dRef, sign);
+  var idToken = localStorage.getItem('ap-id-token') || '';
+  var _model  = 'claude-sonnet-4-20250514';
+
+  // ── Logging règle 35 — initialisation entrée log ──
+  var _t0 = performance.now();
+  var _logEntry = {
+    id:              (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + '_' + Math.random()),
+    timestamp:       new Date().toISOString(),
+    model:           _model,
+    tokens_input:    null,
+    tokens_output:   null,
+    cost_input_usd:  null,
+    cost_output_usd: null,
+    cost_total_usd:  null,
+    client_id:       c.id,
+    feature:         'diagnostic_v1',
+    scope:           'client_' + c.id,
+    success:         null,
+    error_code:      null,
+    duration_ms:     null
+  };
+
+  fetch(_AI_LAMBDA_URL + '/ai/complete', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + idToken
+    },
+    body: JSON.stringify({
+      messages: [{ role: 'user', content: prompt }],
+      feature: 'revue',
+      model: _model,
+      max_tokens: 350
+    })
+  })
+  .then(function(resp) {
+    _logEntry.duration_ms = Math.round(performance.now() - _t0);
+    if (!resp.ok) {
+      _logEntry.success    = false;
+      _logEntry.error_code = 'HTTP_' + resp.status;
+      persistAiUsageLog(_logEntry); // log echec
+      throw new Error('Lambda ' + resp.status);
+    }
+    return resp.json();
+  })
+  .then(function(data) {
+    var text = (data && data.content && data.content[0] && data.content[0].text)
+      ? data.content[0].text.trim()
+      : null;
+    if (!text) throw new Error('Réponse Lambda vide');
+
+    // ── Compléter le log avec tokens + coûts ──
+    _logEntry.success       = true;
+    _logEntry.tokens_input  = (data.usage && data.usage.input_tokens)  || null;
+    _logEntry.tokens_output = (data.usage && data.usage.output_tokens) || null;
+    var _pricing = AI_PRICING_USD_PER_MILLION_TOKENS[_model];
+    if (_pricing && _logEntry.tokens_input !== null) {
+      _logEntry.cost_input_usd  = (_logEntry.tokens_input  / 1000000) * _pricing.input;
+      _logEntry.cost_output_usd = (_logEntry.tokens_output / 1000000) * _pricing.output;
+      _logEntry.cost_total_usd  = _logEntry.cost_input_usd + _logEntry.cost_output_usd;
+    } else if (!_pricing) {
+      _logEntry.error_code = 'PRICING_NOT_FOUND';
+      console.warn('[ai_usage_log] Tarif non trouvé pour modèle:', _model);
+    }
+    persistAiUsageLog(_logEntry); // log succès
+
+    // Stocker en cache + save IDB
+    var cNow = cl();
+    if (cNow && cNow.id === clientIdAtLaunch) {
+      setCachedDiagnostic(cNow, hash, text, sign);
+      save();
+    }
+    _patchDiagnosticDiv(placeholderId, text, clientIdAtLaunch, false);
+  })
+  .catch(function(err) {
+    // Log erreur réseau / parsing si pas encore loggué
+    if (_logEntry.success === null) {
+      _logEntry.duration_ms = Math.round(performance.now() - _t0);
+      _logEntry.success     = false;
+      _logEntry.error_code  = err.name || 'UNKNOWN_ERROR';
+      persistAiUsageLog(_logEntry);
+    }
+    console.warn('[ai_diagnostic] Lambda KO, fallback pré-rédigé :', err.message);
+    _patchDiagnosticDiv(placeholderId, null, clientIdAtLaunch, true); // fallback
+  });
+}
+
+/**
+ * _patchDiagnosticDiv(placeholderId, content, clientIdAtLaunch, isFallback)
+ * Patche le div id=placeholderId avec le contenu narratif.
+ * C2 gardes :
+ *   - Guard 1 : vérifier c.id === clientIdAtLaunch avant tout accès DOM
+ *     (évite d'écrire la narrative client A sur l'écran client B après un switch)
+ *   - Guard 2 : div === null → silencieux (toggle Free/Pro a supprimé le placeholder)
+ */
+function _patchDiagnosticDiv(placeholderId, content, clientIdAtLaunch, isFallback) {
+  // Guard 1 — sécurité switch client
+  var cCurrent = cl();
+  if (!cCurrent || cCurrent.id !== clientIdAtLaunch) return;
+
+  // Guard 2 — placeholder supprimé (toggle Free/Pro pendant génération)
+  var div = document.getElementById(placeholderId);
+  if (!div) return;
+
+  if (content) {
+    div.innerHTML = '<p class="yoy-section-para">' + esc(content) + '</p>'
+      + (isFallback ? '' : '<div style="font-size:10px;color:var(--tx3);margin-top:6px">Généré par IA le '
+        + new Date().toLocaleDateString('fr-FR') + ' · <button class="btn btn-xs" '
+        + 'onclick="regenerateAIDiagnostic()" style="font-size:10px">↻ Régénérer</button></div>');
+  } else {
+    // Fallback (plan B 9.2) : narrative pré-rédigée en dur depuis renderYoYResult
+    div.innerHTML = '<p class="yoy-section-para" style="color:var(--tx3);font-style:italic">'
+      + 'Analyse causale non disponible (erreur réseau). Consultez les sections ci-dessus.</p>';
+  }
+}
+
+/**
+ * regenerateAIDiagnostic()
+ * Bouton "Régénérer" — force régénération même si cache valide.
+ */
+function regenerateAIDiagnostic() {
+  var c = cl(); if (!c) return;
+  if (c.aiCache) c.aiCache.diagnosticV1 = null;
+  save(); render();
+}
+
+// ── Helpers debug / admin (règle 35 — pas d'UI v3.6.9.3, helpers console uniquement) ──
+
+/**
+ * getAiUsageLog(options)
+ * @param {{ from?, to?, client_id?, feature?, model? }} options
+ * @returns {Promise<Array>}
+ */
+window.getAiUsageLog = function(options) {
+  options = options || {};
+  return new Promise(function(resolve, reject) {
+    var req = indexedDB.open('AmazonPilot', 6);
+    req.onsuccess = function(e) {
+      var db = e.target.result;
+      var tx = db.transaction('ai_usage_log', 'readonly');
+      var store = tx.objectStore('ai_usage_log');
+      var all = [];
+      var cur = store.openCursor();
+      cur.onsuccess = function(ev) {
+        var cursor = ev.target.result;
+        if (!cursor) {
+          db.close();
+          // Filtres en mémoire
+          var results = all.filter(function(e) {
+            if (options.client_id && e.client_id !== options.client_id) return false;
+            if (options.feature   && e.feature   !== options.feature)   return false;
+            if (options.model     && e.model     !== options.model)     return false;
+            if (options.from      && e.timestamp < options.from)        return false;
+            if (options.to        && e.timestamp > options.to)          return false;
+            return true;
+          });
+          resolve(results);
+          return;
+        }
+        all.push(cursor.value);
+        cursor.continue();
+      };
+      cur.onerror = function() { db.close(); reject(cur.error); };
+    };
+    req.onerror = function() { reject(req.error); };
+  });
+};
+
+/**
+ * getAiUsageStats(options) — agrégats : calls, coût total, par modèle, par feature
+ */
+window.getAiUsageStats = function(options) {
+  return window.getAiUsageLog(options).then(function(entries) {
+    var stats = { total_calls: entries.length, total_cost_usd: 0, by_model: {}, by_feature: {}, errors: 0 };
+    entries.forEach(function(e) {
+      if (e.cost_total_usd) stats.total_cost_usd += e.cost_total_usd;
+      if (!e.success) stats.errors++;
+      stats.by_model[e.model]     = (stats.by_model[e.model]     || 0) + 1;
+      stats.by_feature[e.feature] = (stats.by_feature[e.feature] || 0) + 1;
+    });
+    stats.total_cost_usd = Math.round(stats.total_cost_usd * 100000) / 100000;
+    return stats;
+  });
+};
+
+// Exposer sur window
+window.initAIDiagnostic = initAIDiagnostic;
+window.regenerateAIDiagnostic = regenerateAIDiagnostic;
+window.computeDiagnosticHash = computeDiagnosticHash;
+window.persistAiUsageLog = persistAiUsageLog;
+
 // v3.6.5.8 — C1-C3 : KPI sous-textes enrichis, structure causale freemium, respiration verdict
 // CP1 : Fondations techniques (routing, import, parser, sanity check, IndexedDB)
 // CP2 : Calculs 12 dimensions + KPI cards
@@ -16647,6 +17032,10 @@ function renderYoYResult() {
   const pRefLabel = a.periodRef && a.periodRef.label ? a.periodRef.label : '?';
   const c = cl();
   const clientName = c ? c.name : '—';
+
+  // ── v3.6.9 : Toggle Free/Pro ─────────────────────────────────
+  const viewMode = c ? (c.viewMode || 'free') : 'free';
+  const isPro    = viewMode === 'pro';
 
   // ── Détermination du signe global (dim1.deltaCAPct)
   const deltaCAPct = d.dim1 ? d.dim1.deltaCAPct : null;
@@ -17136,7 +17525,12 @@ function renderYoYResult() {
       + '</ol>'
       + '<div class="yoy-section-lecture" style="margin-top:22px">Ce que je ne vois PAS dans les chiffres</div>'
       + '<p class="yoy-section-para">Je ne vois pas de baisse du prix moyen (PMV ' + _pmvUpDown7 + ' de <strong>' + _pmvAbs7 + '</strong>). Je ne vois pas de problème logistique global (ratio expédié/commandé proche de 100 %). Je ne vois pas de dégradation qualité (taux de retours <strong>' + _retDir7 + '</strong>). Je ne chercherais donc pas en priorité du côté du prix, de l\'entrepôt ou des avis clients.</p>'
-      + '<p class="yoy-section-para">La cause la plus probable se situe en amont de la demande consommateur : <strong>commandes Amazon (PO) qui se sont raréfiées, perte de référencement actif, ruptures structurelles sur ASINs clés, suppressions de listings</strong>. C\'est l\'objet du plan d\'action.</p>'
+      // v3.6.9 — "Cause la plus probable" : placeholder IA (narrative Sonnet ou fallback pré-rédigée)
+      // Décision F2 : IA uniquement pour sign='negative'. initAIDiagnostic appelé après render().
+      + '<div class="yoy-section-lecture" style="margin-top:22px">Cause la plus probable</div>'
+      + '<div id="yoy-diag-cause-probable" style="min-height:48px">'
+      + '<p class="yoy-section-para" style="color:var(--tx3);font-style:italic">⏳ Analyse en cours…</p>'
+      + '</div>'
       + '</div>';
   } else if (sign === 'positive') {
     const _gainNames7 = _gainBrands7.slice(0, 3).map(function(b) { return '<strong>' + esc(b.n) + '</strong>'; }).join(', ') || 'plusieurs marques';
@@ -17163,6 +17557,15 @@ function renderYoYResult() {
       + '<div class="yoy-section-lecture" style="margin-top:22px">Ce que je ne vois PAS dans les chiffres</div>'
       + '<p class="yoy-section-para">Je ne vois pas de signal de risque imminent. Je ne vois pas non plus de moteur de croissance évident à activer.</p>'
       + '<p class="yoy-section-para">Le plan d\'action porte sur les opportunités identifiées au niveau ASIN ou marque (cf. sections précédentes), pas sur un sujet global.</p>'
+      + '</div>';
+  }
+
+  // ── v3.6.9 — Masquer Mon diagnostic en Free (visible Pro uniquement) ──
+  if (!isPro && s7Html) {
+    const _s7Title = s7Html.match(/<h3[^>]*>([^<]+)<\/h3>/);
+    s7Html = '<div class="yoy-section" id="yoy-sec-s7">'
+      + '<h3 class="yoy-section-title">Mon diagnostic</h3>'
+      + yoyBandeauPro('Analyse causale complète + Cause la plus probable (narrative IA)')
       + '</div>';
   }
 
@@ -17275,17 +17678,42 @@ function renderYoYResult() {
       + '</div>';
   }
 
-  // ── Conclusion générale (T5) ──────────────────────────────────────
-  const concluHtml = '<div class="yoy-section" id="yoy-sec-conclusion">'
-    + '<h3 class="yoy-section-title">Conclusion générale</h3>'
-    + tplConclusion(d, sign, clientName)
-    + '</div>';
+  // ── v3.6.9 — Vue Free : plan d'action limité (P1 top 3, P2+P3 masqués) ──
+  if (!isPro && s8Html) {
+    var _p1TitleMatch = /Priorité [123] —[^<]*/.exec(s8Html);
+    var _p1Title = _p1TitleMatch ? _p1TitleMatch[0] : 'Priorité 1 — Plan d\'action';
+    // En Free : montrer uniquement P1 avec top 3 ASINs + bandeau Pro sur le reste
+    var _top3List = _mkAsinList(
+      sign === 'positive' ? (_gagnants11 || []).slice(0, 3) :
+      sign === 'negative' ? (_top8Disp7  || []).slice(0, 3) : []
+    );
+    s8Html = '<div class="yoy-section" id="yoy-sec-s8">'
+      + '<h3 class="yoy-section-title">Ce que je ferais maintenant — plan d\'action priorisé</h3>'
+      + '<div style="margin-bottom:16px">'
+      + '<div style="font-size:14px;font-weight:700;color:var(--tx);margin-bottom:8px">' + _p1Title + '</div>'
+      + '<p class="yoy-section-para" style="font-size:12px;color:var(--tx3)">Top 3 ASINs prioritaires — Vue Free</p>'
+      + _top3List
+      + '</div>'
+      + yoyBandeauPro('Plan d\'action complet (P1 intégral + Priorités 2 et 3)')
+      + '</div>';
+  }
+
+  // ── Conclusion générale (T5) — visible uniquement en Pro ─────────
+  const concluHtml = isPro
+    ? '<div class="yoy-section" id="yoy-sec-conclusion">'
+      + '<h3 class="yoy-section-title">Conclusion générale</h3>'
+      + tplConclusion(d, sign, clientName)
+      + '</div>'
+    : '<div class="yoy-section" id="yoy-sec-conclusion">'
+      + '<h3 class="yoy-section-title">Conclusion générale</h3>'
+      + yoyBandeauPro('Synthèse exécutive complète — rapport directorial')
+      + '</div>';
 
   // ── v3.6.7 — Warnings YoY ────────────────────────────────────────
   const _warnings = calcYoYWarnings(d, t);
   const _warningCardsHtml = _warnings.length ? renderYoYWarningCards(_warnings, a) : '';
 
-  return `<div style="max-width:960px;margin:0 auto;padding:24px 20px" class="yoy-result-root">
+  const _yoyResultHtml = `<div style="max-width:960px;margin:0 auto;padding:24px 20px" class="yoy-result-root">
 
     <!-- En-tête -->
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
@@ -17293,8 +17721,10 @@ function renderYoYResult() {
         <h2 style="font-size:19px;font-weight:700;margin-bottom:4px">Analyse comparée — ${esc(clientName)}</h2>
         <div style="font-size:12px;color:var(--tx2)">${esc(pALabel)} <span style="color:var(--tx3)">vs</span> ${esc(pRefLabel)}</div>
       </div>
-      <div style="display:flex;gap:8px;flex-shrink:0">
+      <div style="display:flex;gap:8px;flex-shrink:0;align-items:center;flex-wrap:wrap">
         <button class="btn btn-sm" onclick="yoyBack()">← Modifier les imports</button>
+        ${renderYoYToggle(viewMode)}
+        ${isPro ? '<button class="btn btn-sm" id="yoy-word-btn" onclick="downloadYoYWord()" style="border-color:var(--b);color:var(--b)">📄 Rapport Word</button>' : ''}
         <button class="btn btn-sm" onclick="window.print()">🖨 Imprimer</button>
       </div>
     </div>
@@ -17375,8 +17805,10 @@ function renderYoYResult() {
     <!-- v3.6.8 — Section Enquête ASINs disparus (après s6, avant diagnostic) -->
     ${typeof renderEnqueteSection === 'function' ? renderEnqueteSection(c, d, dRef) : ''}
 
-    ${s7Html}
     ${s8Html}
+    <!-- v3.6.9 — Section Analyse par famille (Pro) — après Plan d'action -->
+    ${renderAnalyseFamille(d, isPro)}
+    ${s7Html}
     ${concluHtml}
 
     <!-- Footer print -->
@@ -17385,6 +17817,21 @@ function renderYoYResult() {
     </div>
 
   </div>`;
+
+  // v3.6.9 — Déclencher la narrative IA après injection DOM (sign='negative' + isPro)
+  // setTimeout 0 garantit que le DOM est peint avant le patch async
+  if (sign === 'negative' && isPro && c) {
+    const _cIdAtLaunch = c.id;
+    const _dims = d;
+    const _dRef = dRef;
+    setTimeout(function() {
+      if (typeof initAIDiagnostic === 'function') {
+        initAIDiagnostic(cl(), _dims, _dRef, 'negative', 'yoy-diag-cause-probable', _cIdAtLaunch);
+      }
+    }, 0);
+  }
+
+  return _yoyResultHtml;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -17476,6 +17923,127 @@ function yoyDeleteAlias(idx) {
   if (typeof _enqueteCache !== 'undefined') _enqueteCache.posHash = null;
   save(); render();
   showToast('🗑 Alias supprimé : "' + (removed.canonical || '') + '"', 'alr-a');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// v3.6.9 — TOGGLE FREE/PRO + BANDEAU PRO
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * toggleYoYViewMode()
+ * Bascule c.viewMode entre 'free' et 'pro', persiste en IDB, re-render.
+ */
+function toggleYoYViewMode() {
+  var c = cl(); if (!c) return;
+  c.viewMode = (c.viewMode === 'pro') ? 'free' : 'pro';
+  save(); render();
+}
+
+/**
+ * renderYoYToggle(viewMode)
+ * CTA 14 — Toggle switch Free/Pro (UI-only, pas de backend paiement en v3.6.9).
+ */
+function renderYoYToggle(viewMode) {
+  var isPro = viewMode === 'pro';
+  var bg    = isPro ? 'var(--b,#2563eb)' : 'var(--bd2,#d1d5db)';
+  var knob  = isPro ? 'right:2px' : 'left:2px';
+  return '<div style="display:flex;align-items:center;gap:7px">'
+    + '<span style="font-size:11px;font-weight:600;color:' + (isPro ? 'var(--tx3)' : 'var(--b,#2563eb)') + '">Free</span>'
+    + '<button onclick="toggleYoYViewMode()" style="width:42px;height:22px;border-radius:11px;border:none;'
+    +   'background:' + bg + ';cursor:pointer;position:relative;transition:background .2s;flex-shrink:0" '
+    +   'title="' + (isPro ? 'Basculer en Vue Free' : 'Basculer en Vue Pro') + '">'
+    +   '<span style="position:absolute;top:2px;' + knob + ';width:18px;height:18px;border-radius:50%;'
+    +     'background:#fff;transition:left .2s,right .2s"></span>'
+    + '</button>'
+    + '<span style="font-size:11px;font-weight:600;color:' + (isPro ? 'var(--b,#2563eb)' : 'var(--tx3)') + '">Pro</span>'
+    + '</div>';
+}
+
+/**
+ * yoyBandeauPro(label)
+ * CTA 15 — Bandeau unique "Accès Pro" réutilisé sur toutes les sections masquées en Free.
+ */
+function yoyBandeauPro(label) {
+  return '<div style="display:flex;align-items:center;justify-content:space-between;'
+    + 'gap:12px;flex-wrap:wrap;padding:14px 18px;margin:10px 0;'
+    + 'background:linear-gradient(135deg,#f8faff 0%,#eef3ff 100%);'
+    + 'border:1.5px solid var(--b-bd,#bfdbfe);border-radius:var(--rdl)">'
+    + '<span style="font-size:13px;color:var(--tx2)">🔒 <strong>Accès Pro</strong> — ' + label + '</span>'
+    + '<button class="btn btn-sm" style="border-color:var(--b);color:var(--b);white-space:nowrap" '
+    +   'onclick="if(confirm(\'Pour passer en Pro, contactez :\\n\\nFred Rochette\\nfrochette@vitajardin.com\')){}">'
+    +   'Passer en Pro →</button>'
+    + '</div>';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// v3.6.9 — SECTION ANALYSE PAR FAMILLE — ACTIONS RECOMMANDÉES (Pro)
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * renderAnalyseFamille(dims, isPro)
+ * Tableau Pro Top 20 familles avec état coloré + action recommandée statique.
+ * Placement : après Plan d'action P3, avant Mon diagnostic.
+ */
+function renderAnalyseFamille(dims, isPro) {
+  var d10 = dims.dim10 || {};
+  var brands = (d10.topBrands || []).slice(0, 20); // top 20 (calcYoYDims retourne 20 depuis v3.6.9)
+
+  if (!isPro) {
+    return '<div class="yoy-section" id="yoy-sec-famille">'
+      + '<h3 class="yoy-section-title">Analyse par famille — actions recommandées</h3>'
+      + yoyBandeauPro('Tableau complet des ' + brands.length + ' familles avec diagnostic et recommandations')
+      + '</div>';
+  }
+
+  if (!brands.length) return '';
+
+  // Règles classification état (brief §3.3)
+  function brandState(delta, deltaPct) {
+    var pct = deltaPct != null ? deltaPct : (delta != null ? delta * 100 : null);
+    if (pct === null) return { label: 'Inconnu', color: 'var(--tx3)', bg: 'var(--s2)' };
+    if (pct > 20)   return { label: 'En croissance', color: 'var(--g,#15803d)',  bg: 'var(--g-bg,#f0fdf4)' };
+    if (pct >= -20) return { label: 'Stable',        color: 'var(--tx3)',        bg: 'var(--s2)'            };
+    if (pct >= -50) return { label: 'En recul',      color: 'var(--a,#d97706)',  bg: 'var(--a-bg,#fffbeb)'  };
+    return           { label: 'Hémorragie',  color: 'var(--r,#b91c1c)',  bg: 'var(--r-bg,#fef2f2)'  };
+  }
+
+  // Actions recommandées statiques
+  var ACTIONS = {
+    'En croissance': 'Sécuriser stock + surveiller Buy Box (best-seller émergent)',
+    'Stable':        'Maintenir la cadence d\'approvisionnement',
+    'En recul':      'Audit disponibilité + relance PO + révision fiches produit',
+    'Hémorragie':    'Audit prioritaire — possible suppression ou problème pricing',
+    'Inconnu':       '—'
+  };
+
+  var rows = brands
+    .sort(function(a, b) { return ((a.delta||0)) - ((b.delta||0)); }) // pires en premier
+    .map(function(b) {
+      var state = brandState(b.delta, b.deltaPct);
+      var caRefFmt = b.caRefPerDay != null ? yoyFmtEur(b.caRefPerDay) : '—';
+      var caAFmt   = b.caAPerDay   != null ? yoyFmtEur(b.caAPerDay)   : '—';
+      var dEurFmt  = b.delta       != null ? yoyFmtEurSigned(b.delta)  : '—';
+      var dPctFmt  = b.deltaPct    != null ? yoyFmtPct(b.deltaPct, true) : '—';
+      return '<tr>'
+        + '<td>' + esc(b.marque || '—') + '</td>'
+        + '<td><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;'
+        +   'color:' + state.color + ';background:' + state.bg + '">' + esc(state.label) + '</span></td>'
+        + '<td class="num">' + caRefFmt + '</td>'
+        + '<td class="num">' + caAFmt + '</td>'
+        + '<td class="num ' + (b.delta < 0 ? 'neg' : b.delta > 0 ? 'pos' : 'muted') + '">' + dEurFmt
+        +   '<span style="font-size:9px;color:var(--tx3);margin-left:3px">' + dPctFmt + '</span></td>'
+        + '<td style="font-size:11px;color:var(--tx2)">' + esc(ACTIONS[state.label] || '—') + '</td>'
+        + '</tr>';
+    }).join('');
+
+  return '<div class="yoy-section" id="yoy-sec-famille">'
+    + '<h3 class="yoy-section-title">Analyse par famille — actions recommandées</h3>'
+    + '<table class="yoy-table" style="font-size:12px">'
+    + '<thead><tr><th>Famille</th><th>État</th><th class="num">CA/j réf.</th>'
+    + '<th class="num">CA/j A</th><th class="num">Variation</th><th>Action recommandée</th></tr></thead>'
+    + '<tbody>' + rows + '</tbody>'
+    + '</table>'
+    + '</div>';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -18295,8 +18863,10 @@ function yoyComputeDimensions(rowsA, rowsRef, metaA, metaRef) {
       })();
   var bMapRef = _brandAggs.bMapRef;
   var bMapA   = _brandAggs.bMapA;
+  // v3.6.9 : slice(0,20) pour Section Analyse par famille (Top 20)
+  // Tous les consommateurs font .slice(0,10) explicitement → safe (audit C3 commit b)
   var topBrands = Object.keys(bMapRef)
-    .sort(function(a,b){ return bMapRef[b]-bMapRef[a]; }).slice(0,10)
+    .sort(function(a,b){ return bMapRef[b]-bMapRef[a]; }).slice(0,20)
     .map(function(m){
       var caRd = bMapRef[m]||0, caAd = bMapA[m]||0;
       return { marque:m, caRefPerDay:caRd, caAPerDay:caAd,
@@ -18893,6 +19463,424 @@ async function yoyCallDim16(dims1_15, causePrincipale, meta) {
     _stub: true
   };
 }
+
+// CTA 13 — Génération DOCX self-contained, zéro dépendance externe.
+// Un DOCX est un ZIP (store, pas de compression) contenant des fichiers OOXML.
+// Implémentation : CRC-32 + ZIP encoder + OOXML — aucun CDN requis.
+
+// ═══════════════════════════════════════════════════════════════
+// UTILITAIRES ZIP / CRC-32
+// ═══════════════════════════════════════════════════════════════
+
+(function() {
+  // CRC-32 lookup table
+  var _crcTable = (function() {
+    var t = [], c, n, k;
+    for (n = 0; n < 256; n++) {
+      c = n;
+      for (k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c;
+    }
+    return t;
+  })();
+
+  function _crc32(buf) {
+    var c = -1;
+    for (var i = 0; i < buf.length; i++) c = (c >>> 8) ^ _crcTable[(c ^ buf[i]) & 0xFF];
+    return (c ^ -1) >>> 0;
+  }
+
+  function _u16(n) { return [n & 0xFF, (n >> 8) & 0xFF]; }
+  function _u32(n) { return [n & 0xFF, (n >> 8) & 0xFF, (n >> 16) & 0xFF, (n >> 24) & 0xFF]; }
+
+  function _strToUtf8(s) {
+    var out = [];
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charCodeAt(i);
+      if (c < 0x80)       { out.push(c); }
+      else if (c < 0x800) { out.push(0xC0 | (c >> 6), 0x80 | (c & 63)); }
+      else                { out.push(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63)); }
+    }
+    return new Uint8Array(out);
+  }
+
+  function _buildZip(files) {
+    var parts = [], cds = [], offset = 0;
+    files.forEach(function(f) {
+      var name = _strToUtf8(f.name);
+      var data = _strToUtf8(f.data);
+      var crc  = _crc32(data);
+      // Local file header
+      var lh = new Uint8Array([
+        0x50,0x4B,0x03,0x04, 20,0, 0,0, 0,0, 0,0,0,0,
+      ].concat(_u32(crc), _u32(data.length), _u32(data.length),
+               _u16(name.length), _u16(0)));
+      // Central directory entry
+      cds.push({ offset: offset, name: name, data: data, crc: crc });
+      parts.push(lh, name, data);
+      offset += lh.length + name.length + data.length;
+    });
+    var cdStart = offset, cdSize = 0;
+    cds.forEach(function(e) {
+      var cd = new Uint8Array([
+        0x50,0x4B,0x01,0x02, 20,0, 20,0, 0,0, 0,0, 0,0,0,0,
+      ].concat(_u32(e.crc), _u32(e.data.length), _u32(e.data.length),
+               _u16(e.name.length), _u16(0), _u16(0), _u16(0), _u16(0),
+               _u32(0), _u32(e.offset)));
+      parts.push(cd, e.name);
+      cdSize += cd.length + e.name.length;
+    });
+    var eocd = new Uint8Array([
+      0x50,0x4B,0x05,0x06, 0,0, 0,0,
+    ].concat(_u16(cds.length), _u16(cds.length),
+             _u32(cdSize), _u32(cdStart), _u16(0)));
+    parts.push(eocd);
+    // Concat all Uint8Arrays
+    var total = parts.reduce(function(s, p) { return s + p.length; }, 0);
+    var out = new Uint8Array(total), pos = 0;
+    parts.forEach(function(p) { out.set(p, pos); pos += p.length; });
+    return out;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // OOXML HELPERS
+  // ═══════════════════════════════════════════════════════════════
+
+  function _xmlEsc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                          .replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+  }
+
+  function _ooRun(text, opts) {
+    opts = opts || {};
+    var rpr = '';
+    if (opts.bold)   rpr += '<w:b/>';
+    if (opts.color)  rpr += '<w:color w:val="' + opts.color + '"/>';
+    if (opts.size)   rpr += '<w:sz w:val="' + opts.size + '"/><w:szCs w:val="' + opts.size + '"/>';
+    return '<w:r>' + (rpr ? '<w:rPr>' + rpr + '</w:rPr>' : '') + '<w:t xml:space="preserve">' + _xmlEsc(text) + '</w:t></w:r>';
+  }
+
+  // v3.6.9.1 : zéro référence à des styles nommés (Heading1/TableGrid) → inline uniquement
+  // Les styles nommés causaient un crash Word "mode protégé" sans ouverture effective
+  function _ooPar(text, opts) {
+    opts = opts || {};
+    var ppr = '';
+    if (opts.before || opts.after) {
+      ppr += '<w:spacing'
+        + (opts.before ? ' w:before="' + opts.before + '"' : '')
+        + (opts.after  ? ' w:after="'  + opts.after  + '"' : '')
+        + '/>';
+    }
+    if (opts.indent) ppr += '<w:ind w:left="' + opts.indent + '"/>';
+    return '<w:p>' + (ppr ? '<w:pPr>' + ppr + '</w:pPr>' : '') + _ooRun(text, opts) + '</w:p>';
+  }
+
+  function _ooTable(headers, rows) {
+    var W = Math.floor(9200 / Math.max(headers.length, 1));
+    function cell(txt, isHdr) {
+      return '<w:tc>'
+        + '<w:tcPr>'
+        + '<w:tcW w:w="' + W + '" w:type="dxa"/>'
+        + '<w:tcBorders>'
+        + '<w:top w:val="single" w:sz="4" w:color="BBBBBB"/>'
+        + '<w:bottom w:val="single" w:sz="4" w:color="BBBBBB"/>'
+        + '<w:left w:val="single" w:sz="4" w:color="BBBBBB"/>'
+        + '<w:right w:val="single" w:sz="4" w:color="BBBBBB"/>'
+        + '</w:tcBorders>'
+        + (isHdr ? '<w:shd w:val="clear" w:fill="E8ECF0"/>' : '')
+        + '</w:tcPr>'
+        + '<w:p><w:pPr><w:spacing w:after="40"/></w:pPr>'
+        + _ooRun(String(txt != null ? txt : ''), isHdr ? { bold: true, size: 18 } : { size: 18 })
+        + '</w:p></w:tc>';
+    }
+    function row(cells, isHdr) {
+      return '<w:tr><w:trPr>' + (isHdr ? '<w:tblHeader/>' : '') + '</w:trPr>'
+        + cells.map(function(c) { return cell(c, isHdr); }).join('') + '</w:tr>';
+    }
+    return '<w:tbl>'
+      + '<w:tblPr><w:tblW w:w="0" w:type="auto"/>'
+      + '<w:tblBorders>'
+      + '<w:top w:val="single" w:sz="4" w:color="BBBBBB"/>'
+      + '<w:bottom w:val="single" w:sz="4" w:color="BBBBBB"/>'
+      + '<w:left w:val="single" w:sz="4" w:color="BBBBBB"/>'
+      + '<w:right w:val="single" w:sz="4" w:color="BBBBBB"/>'
+      + '<w:insideH w:val="single" w:sz="4" w:color="DDDDDD"/>'
+      + '<w:insideV w:val="single" w:sz="4" w:color="DDDDDD"/>'
+      + '</w:tblBorders></w:tblPr>'
+      + row(headers, true)
+      + rows.map(function(r) { return row(r, false); }).join('')
+      + '</w:tbl><w:p/>';
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // GÉNÉRATION DU CONTENU DOCX
+  // ═══════════════════════════════════════════════════════════════
+
+  function _buildDocumentXml(c, analysis) {
+    var d    = analysis.dimensions || {};
+    var sign = yoyGetSign((d.dim1 || {}).deltaCAPct);
+    var d1   = d.dim1  || {};
+    var d7   = d.dim7  || {};
+    var d9   = d.dim9  || {};
+    var d10  = d.dim10 || {};
+    var d11  = d.dim11 || {};
+    var d12  = d.dim12 || {};
+    var pAL  = analysis.periodA   && analysis.periodA.label   ? analysis.periodA.label   : '?';
+    var pRL  = analysis.periodRef && analysis.periodRef.label ? analysis.periodRef.label : '?';
+    var dis  = (d7.disparus || []).length;
+    var app  = (d7.apparus  || []).length;
+
+    var body = '';
+
+    // ── 1. Page de garde ──
+    body += _ooPar('Analyse comparée — ' + (c.name || ''), { bold:true, size:32, before:240, after:120 });
+    body += _ooPar(pAL + '  vs  ' + pRL, { size:22 });
+    body += _ooPar('Généré le ' + new Date().toLocaleDateString('fr-FR') + ' · Amazon Pilot v3.6.9', { size:18, color:'888888' });
+    body += '<w:p/>';
+
+    // ── 2. KPI hero ──
+    body += _ooPar('1 — Évolution du chiffre d\'affaires', { bold:true, size:26, before:200, after:80 });
+    body += _ooTable(['Indicateur','Valeur'], [
+      ['Δ CA annualisé',  d1.deltaCAAnnu != null ? yoyFmtEurSigned(d1.deltaCAAnnu)+'/an' : '—'],
+      ['Δ CA %',          d1.deltaCAPct  != null ? yoyFmtPct(d1.deltaCAPct,true)         : '—'],
+      ['CA Référence',    d1.caRef       != null ? yoyFmtEur(d1.caRef)                   : '—'],
+      ['CA Période A',    d1.caA         != null ? yoyFmtEur(d1.caA)                     : '—']
+    ]);
+
+    // ── 3. Catalogue ──
+    body += _ooPar('2 — Dynamique catalogue', { bold:true, size:26, before:200, after:80 });
+    body += _ooTable(['Catégorie','ASINs','Impact annuel'], [
+      ['Disparus',  String(dis), d7.sumDisparusRef ? yoyFmtEur(d7.sumDisparusRef*365)+'/an' : '—'],
+      ['Apparus',   String(app), d7.sumApparusA   ? yoyFmtEur(d7.sumApparusA*365)+'/an'   : '—'],
+      ['Stables',   String((d7.stables  ||[]).length), '—'],
+      ['En hausse', String((d7.enHausse ||[]).length), '—'],
+      ['En baisse', String((d7.enBaisse ||[]).length), '—']
+    ]);
+
+    // ── 4. Concentration ──
+    if (d9.concRef && d9.concA) {
+      body += _ooPar('3 — Concentration du portefeuille', { bold:true, size:26, before:200, after:80 });
+      body += _ooTable(['Indicateur','Référence','Période A'], [
+        ['Top 10',  d9.concRef.top10  != null ? yoyFmtPct(d9.concRef.top10)  : '—', d9.concA.top10  != null ? yoyFmtPct(d9.concA.top10)  : '—'],
+        ['Top 20',  d9.concRef.top20  != null ? yoyFmtPct(d9.concRef.top20)  : '—', d9.concA.top20  != null ? yoyFmtPct(d9.concA.top20)  : '—'],
+        ['Top 50',  d9.concRef.top50  != null ? yoyFmtPct(d9.concRef.top50)  : '—', d9.concA.top50  != null ? yoyFmtPct(d9.concA.top50)  : '—'],
+        ['Top 100', d9.concRef.top100 != null ? yoyFmtPct(d9.concRef.top100) : '—', d9.concA.top100 != null ? yoyFmtPct(d9.concA.top100) : '—']
+      ]);
+    }
+
+    // ── 5. Marques ──
+    body += _ooPar('4 — Dynamique marques (Top 10)', { bold:true, size:26, before:200, after:80 });
+    body += _ooTable(['Marque','CA/j réf.','Part réf.','CA/j A','Part A','Var. €/j'],
+      (d10.topBrands||[]).slice(0,10).map(function(b) {
+        return [b.marque||'—',
+          b.caRefPerDay!=null?yoyFmtEur(b.caRefPerDay):'—',
+          b.shareRef!=null?yoyFmtPct(b.shareRef):'—',
+          b.caAPerDay!=null?yoyFmtEur(b.caAPerDay):'—',
+          b.shareA!=null?yoyFmtPct(b.shareA):'—',
+          b.delta!=null?yoyFmtEurSigned(b.delta):'—'];
+      }));
+
+    // ── 6. Anomalies ──
+    var anomPairs = (d12.anomPairs||[]).slice(0,10);
+    if (anomPairs.length > 0) {
+      body += _ooPar('5 — Doublons orthographiques', { bold:true, size:26, before:200, after:80 });
+      body += _ooTable(['Marque 1','Marque 2','Similarité','CA combiné'],
+        anomPairs.map(function(p) {
+          return [p.marque1||'—', p.marque2||'—',
+            p.similarity!=null?yoyFmtPct(p.similarity*100):'—',
+            p.caTot!=null?yoyFmtEur(p.caTot):'—'];
+        }));
+    }
+
+    // ── 7. Top mouvements ──
+    body += _ooPar('6 — Top mouvements ASIN', { bold:true, size:26, before:200, after:80 });
+    if ((d11.perdants||[]).length > 0) {
+      body += _ooPar('Top 10 perdants', { bold:true, size:22 });
+      body += _ooTable(['ASIN','Titre','Marque','Δ €/j'],
+        (d11.perdants||[]).slice(0,10).map(function(r) {
+          return [r.asin||'—',(r.titre||'').substring(0,50),r.marque||'—',
+            r.deltaPerDay!=null?yoyFmtEurSigned(r.deltaPerDay):'—'];
+        }));
+    }
+    if ((d11.gagnants||[]).length > 0) {
+      body += _ooPar('Top 10 gagnants', { bold:true, size:22 });
+      body += _ooTable(['ASIN','Titre','Marque','Δ €/j'],
+        (d11.gagnants||[]).slice(0,10).map(function(r) {
+          return [r.asin||'—',(r.titre||'').substring(0,50),r.marque||'—',
+            r.deltaPerDay!=null?yoyFmtEurSigned(r.deltaPerDay):'—'];
+        }));
+    }
+
+    // ── 8. Enquête ──
+    body += _ooPar('7 — Enquête ASINs disparus', { bold:true, size:26, before:200, after:80 });
+    var eq = (typeof _enqueteCache !== 'undefined' && _enqueteCache && _enqueteCache.result) ? _enqueteCache.result : null;
+    if (eq) {
+      body += _ooTable(['Catégorie','ASINs'], [
+        ['Mortalité naturelle (A1)', String((eq.cat1_mortality||[]).length)],
+        ['À CREUSER (A2+D1+D2+R)',  String((eq.cat2_investigate||[]).length)],
+        ['Autres (B+C)',             String((eq.cat3_others||[]).length)]
+      ]);
+      if ((eq.cat2_investigate||[]).length > 0) {
+        body += _ooPar('À CREUSER — Top 10', { bold:true, size:22 });
+        body += _ooTable(['Cat.','ASIN','Titre','CA réf./j'],
+          (eq.cat2_investigate||[]).slice(0,10).map(function(item) {
+            return [item.subcat||'—',item.asin||'—',(item.titre||'').substring(0,50),
+              item.caRefPerDay!=null?yoyFmtEur(item.caRefPerDay):'—'];
+          }));
+      }
+    }
+
+    // ── 9. Plan d'action ──
+    body += _ooPar('8 — Plan d\'action priorisé', { bold:true, size:26, before:200, after:80 });
+    if (sign === 'negative') {
+      body += _ooPar('Priorité 1 — Auditer les ASINs disparus de poids significatif', { bold:true, size:22 });
+      var top5dis = (d7.disparus||[]).slice().sort(function(a,b){return (b.caRefPerDay||0)-(a.caRefPerDay||0);}).slice(0,5);
+      if (top5dis.length > 0) {
+        body += _ooTable(['ASIN','Titre','Marque','CA réf./j'],
+          top5dis.map(function(a) {
+            return [a.asin||'—',(a.titre||'').substring(0,45),a.marque||'—',
+              a.caRefPerDay!=null?yoyFmtEur(a.caRefPerDay):'—'];
+          }));
+      }
+      body += _ooPar('Priorité 2 — Sécuriser les best-sellers actuels', { bold:true, size:22 });
+      body += _ooPar('Surveiller Buy Box et disponibilité sur les ASINs du Top 10 actuel.', { size:20 });
+      body += _ooPar('Priorité 3 — Reconstituer les familles en recul', { bold:true, size:22 });
+      body += _ooPar('Auditer disponibilité, POs et fiches pour les marques qui décrochent.', { size:20 });
+    } else if (sign === 'positive') {
+      body += _ooPar('Priorité 1 — Sécuriser les accélérateurs', { bold:true, size:22 });
+      body += _ooPar('Protéger stock et Buy Box sur les ASINs moteurs de la croissance.', { size:20 });
+    } else {
+      body += _ooPar('Performance stable. 3 axes : surveiller les baisses, capitaliser sur les hausses, auditer les disparus résiduels.', { size:20 });
+    }
+
+    // ── 10. Analyse par famille ──
+    body += _ooPar('9 — Analyse par famille — actions recommandées', { bold:true, size:26, before:200, after:80 });
+    var famBrands = (d10.topBrands||[]).slice(0,20).sort(function(a,b){return (a.delta||0)-(b.delta||0);});
+    if (famBrands.length > 0) {
+      function famState(pct) {
+        if (pct==null) return 'Inconnu';
+        if (pct > 20)  return 'En croissance';
+        if (pct >= -20) return 'Stable';
+        if (pct >= -50) return 'En recul';
+        return 'Hémorragie';
+      }
+      var FAM_ACT = {'En croissance':'Sécuriser stock + Buy Box','Stable':'Maintenir cadence appro',
+        'En recul':'Audit dispo + relance PO','Hémorragie':'Audit prioritaire','Inconnu':'—'};
+      body += _ooTable(['Famille','État','CA/j réf.','CA/j A','Var. €/j','Action'],
+        famBrands.map(function(b) {
+          var st = famState(b.deltaPct);
+          return [b.marque||'—',st,
+            b.caRefPerDay!=null?yoyFmtEur(b.caRefPerDay):'—',
+            b.caAPerDay!=null?yoyFmtEur(b.caAPerDay):'—',
+            b.delta!=null?yoyFmtEurSigned(b.delta):'—',
+            FAM_ACT[st]||'—'];
+        }));
+    }
+
+    // ── 11. Mon diagnostic ──
+    body += _ooPar('10 — Mon diagnostic', { bold:true, size:26, before:200, after:80 });
+    if (c.aiCache && c.aiCache.diagnosticV1 && c.aiCache.diagnosticV1.content) {
+      body += _ooPar('Cause la plus probable', { bold:true, size:22 });
+      body += _ooPar(c.aiCache.diagnosticV1.content, { size:20 });
+    }
+
+    // ── 12. Conclusion ──
+    body += _ooPar('11 — Conclusion générale', { bold:true, size:26, before:200, after:80 });
+    if (typeof tplConclusion === 'function') {
+      var txt = tplConclusion(d, sign, c.name||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+      body += _ooPar(txt, { size:20 });
+    }
+
+    // ── Pied de page dans le corps (simple) ──
+    body += '<w:p/>';
+    body += _ooPar('Amazon Pilot v3.6.9  —  ' + (c.name||'') + '  —  ' + pAL + ' vs ' + pRL, { size:16, color:'888888' });
+
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"'
+      + ' xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+      + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+      + '<w:body>' + body
+      + '<w:sectPr>'
+      + '<w:pgMar w:top="1440" w:right="1800" w:bottom="1440" w:left="1800" w:header="709" w:footer="709" w:gutter="0"/>'
+      + '</w:sectPr>'
+      + '</w:body></w:document>';
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // POINT D'ENTRÉE PUBLIC (CTA 13)
+  // ═══════════════════════════════════════════════════════════════
+
+  window.downloadYoYWord = function() {
+    var c = cl();
+    var a = yoyState && yoyState.currentAnalysis;
+    if (!c || !a) { showToast('Aucune analyse en cours', 'alr-a'); return; }
+
+    var btn = document.getElementById('yoy-word-btn');
+    if (btn) { btn.textContent = '⏳ Génération...'; btn.disabled = true; }
+
+    try {
+      var documentXml = _buildDocumentXml(c, a);
+
+      var CONTENT_TYPES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        + '<Default Extension="xml"  ContentType="application/xml"/>'
+        + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+        + '<Override PartName="/word/styles.xml"   ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'
+        + '</Types>';
+
+      var RELS = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+        + '</Relationships>';
+
+      var DOC_RELS = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+        + '</Relationships>';
+
+      // v3.6.9.1 : styles minimalistes — uniquement Normal avec Calibri 11
+      // Aucune référence à des styles nommés dans le document → formatage 100% inline
+      var STYLES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        + '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+        + ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        + '<w:docDefaults><w:rPrDefault><w:rPr>'
+        + '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri"/>'
+        + '<w:sz w:val="22"/><w:szCs w:val="22"/>'
+        + '</w:rPr></w:rPrDefault></w:docDefaults>'
+        + '<w:style w:type="paragraph" w:default="1" w:styleId="Normal">'
+        + '<w:name w:val="Normal"/>'
+        + '<w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr>'
+        + '</w:style>'
+        + '</w:styles>';
+
+      var zip = _buildZip([
+        { name: '[Content_Types].xml',           data: CONTENT_TYPES },
+        { name: '_rels/.rels',                   data: RELS          },
+        { name: 'word/document.xml',             data: documentXml   },
+        { name: 'word/_rels/document.xml.rels',  data: DOC_RELS      },
+        { name: 'word/styles.xml',               data: STYLES        }
+      ]);
+
+      var blob = new Blob([zip], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      var slug  = (c.name || 'client').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+      var today = new Date().toISOString().slice(0, 10);
+      var fname = 'Analyse_comparee_' + slug + '_' + today + '.docx';
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement('a');
+      link.href = url; link.download = fname;
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
+      setTimeout(function() { URL.revokeObjectURL(url); }, 2000);
+      showToast('✅ ' + fname + ' téléchargé', 'alr-g', 4000);
+    } catch(e) {
+      console.error('[word_export] Erreur DOCX :', e);
+      showToast('⚠ Erreur génération DOCX — voir console', 'alr-a', 4000);
+    } finally {
+      if (btn) { btn.textContent = '📄 Rapport Word'; btn.disabled = false; }
+    }
+  };
+
+})(); // IIFE — évite de polluer le namespace global
 
 
 document.addEventListener('DOMContentLoaded', init);
