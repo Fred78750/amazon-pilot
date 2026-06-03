@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Maquette Audit Buy Box Vendor 1P – B00PVPXVBE</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f6f7f9;color:#17202a;line-height:1.45}
+header{background:linear-gradient(135deg,#232f3e,#455a76);color:white;padding:28px 34px}
+h1{margin:0 0 8px;font-size:28px} h2{margin-top:0;font-size:20px} h3{font-size:16px}
+.wrap{max-width:1180px;margin:auto;padding:24px}
+.grid{display:grid;gap:16px}.g2{grid-template-columns:1fr 1fr}.g4{grid-template-columns:repeat(4,1fr)}
+.card,.kpi{background:white;border:1px solid #d9dee7;border-radius:14px;padding:18px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.kpi .label{font-size:12px;color:#5f6b7a;text-transform:uppercase;letter-spacing:.04em}.kpi .value{font-size:25px;font-weight:700;margin-top:6px}.kpi .note{font-size:12px;color:#5f6b7a;margin-top:6px}
+.danger{border-left:6px solid #b00020}.warning{border-left:6px solid #b35c00}.success{border-left:6px solid #087443}.info{border-left:6px solid #1f5eff}
+.chip{display:inline-block;padding:5px 9px;border-radius:999px;background:#eef0f3;font-size:12px;margin:2px 4px 2px 0;white-space:nowrap}
+.bad{background:#fff0f2;color:#b00020;font-weight:700}.warn{background:#fff4e5;color:#b35c00;font-weight:700}.ok{background:#eaf7f0;color:#087443;font-weight:700}.blue{background:#eef3ff;color:#1f5eff;font-weight:700}
+table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px} th,td{border-bottom:1px solid #d9dee7;padding:9px 8px;text-align:left;vertical-align:top} th{background:#f2f4f7;color:#394150;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+pre{font-family:Consolas,Monaco,monospace;background:#f1f3f6;border:1px solid #d9dee7;border-radius:8px;padding:14px;white-space:pre-wrap;overflow:auto;font-size:13px}
+.callout{padding:14px 16px;border-radius:12px;margin:12px 0;border:1px solid #d9dee7;background:#fafbfc}.callout.bad{background:#fff0f2}.callout.blue{background:#eef3ff}.callout.ok{background:#eaf7f0}
+.section-title{margin:28px 0 14px;display:flex;align-items:center;gap:10px}.section-title h2{margin:0;font-size:23px}.line{height:1px;background:#d9dee7;flex:1}
+.timeline{position:relative;margin:12px 0 0 0;padding-left:24px}.timeline:before{content:"";position:absolute;left:7px;top:4px;bottom:4px;width:2px;background:#d9dee7}.event{position:relative;margin:0 0 14px 0;padding:10px 12px;background:#fafbfc;border:1px solid #d9dee7;border-radius:10px}.event:before{content:"";position:absolute;left:-22px;top:14px;width:12px;height:12px;border-radius:50%;background:#232f3e}.date{font-weight:700;color:#232f3e}.txt{color:#5f6b7a;font-size:13px;margin-top:3px}
+.step{background:#fafbfc;border:1px solid #d9dee7;border-radius:12px;padding:12px}.decision{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.footer{color:#5f6b7a;font-size:12px;text-align:center;padding:24px}
+@media(max-width:900px){.g2,.g4,.decision{grid-template-columns:1fr}.wrap{padding:16px}}
+</style>
+</head>
+<body>
+<header>
+<h1>Maquette d’audit Buy Box Vendor 1P</h1>
+<p>Cas pilote : B00PVPXVBE — COGEX 80017 cadenas 30 mm | Diagnostic, case Amazon et plan de rétablissement</p>
+</header>
+<main class="wrap">
+<section class="grid g4">
+<div class="kpi danger"><div class="label">Featured Offer views — mai 2026</div><div class="value">0</div><div class="note">Coupure totale observée.</div></div>
+<div class="kpi warning"><div class="label">Stock dormant observé</div><div class="value">645</div><div class="note">Stock Amazon présent mais non converti en ventes.</div></div>
+<div class="kpi danger"><div class="label">Stock vendable après correction</div><div class="value">5</div><div class="note">Chute brutale après mise à jour / reclassification.</div></div>
+<div class="kpi warning"><div class="label">Buy Box actuelle</div><div class="value">3P</div><div class="note">Vendeur : INTERNATIONAL TRADING MANAGEMENT.</div></div>
+</section>
+
+<div class="section-title"><h2>1. Diagnostic exécutif</h2><div class="line"></div></div>
+<section class="grid g2">
+<div class="card danger">
+<h2>Lecture principale</h2>
+<p><strong>B00PVPXVBE n’est pas seulement un cas de rupture Amazon.</strong> La séquence observée suggère un stock Amazon présent, mais devenu non exposé / non trusted, puis corrigé ou reclassé.</p>
+<span class="chip bad">BB-10 Stock non trusted</span>
+<span class="chip warn">BB-4 Inbound / BOL / réception</span>
+<span class="chip warn">BB-3 Stock dormant</span>
+<span class="chip bad">BB-5 Buy Box 3P</span>
+<div class="callout bad"><strong>Hypothèse de travail :</strong><br>Amazon avait du stock, mais ses systèmes ne lui faisaient plus suffisamment confiance pour exposer l’offre Retail / Featured Offer.</div>
+</div>
+<div class="card">
+<h2>Chaîne probable</h2>
+<div class="timeline">
+<div class="event"><div class="date">Avant avril 2026</div><div class="txt">ASIN vendeur, stock Amazon encore significatif, mais historique PO / livraison fragile.</div></div>
+<div class="event"><div class="date">Avril 2026</div><div class="txt">Arrêt ou quasi-arrêt des ventes Retail côté fournisseur alors qu’Amazon dispose encore de stock dormant.</div></div>
+<div class="event"><div class="date">Mai 2026</div><div class="txt">Vues de l’offre vedette = 0 : Amazon n’expose plus l’offre Retail en Featured Offer.</div></div>
+<div class="event"><div class="date">Après mise à jour stock</div><div class="txt">Stock Amazon passe d’environ 645 unités dormantes à 5 unités vendables ; Buy Box captée par un 3P.</div></div>
+</div>
+</div>
+</section>
+
+<div class="section-title"><h2>2. Grille de preuves à joindre au dossier</h2><div class="line"></div></div>
+<section class="card">
+<table><thead><tr><th>Preuve</th><th>Statut</th><th>Pourquoi c’est décisif</th><th>Pièce attendue</th></tr></thead>
+<tbody>
+<tr><td>Buy Box tenue par 3P</td><td><span class="chip ok">Disponible</span></td><td>Prouve que la page est buyable mais que Amazon Retail ne détient pas l’offre vedette.</td><td>Capture bloc d’achat : vendeur / expéditeur.</td></tr>
+<tr><td>Stock dormant Amazon ≈ 645</td><td><span class="chip warn">À documenter fort</span></td><td>Prouve que l’arrêt ne vient pas initialement d’une rupture physique.</td><td>Export stock / capture Inventory Health datée.</td></tr>
+<tr><td>Stock actuel = 5 vendables</td><td><span class="chip ok">Disponible</span></td><td>Prouve une correction / reclassification ou un passage en stock non exploitable.</td><td>Export stock actuel.</td></tr>
+<tr><td>Featured Offer views = 0 en mai</td><td><span class="chip ok">Disponible</span></td><td>Prouve la coupure d’exposition Featured Offer.</td><td>Export Traffic mensuel mai 2026.</td></tr>
+<tr><td>Historique PO et IR</td><td><span class="chip ok">Disponible</span></td><td>Montre l’instabilité d’approvisionnement et le risque de défiance Amazon.</td><td>POItemExport filtré sur ASIN.</td></tr>
+<tr><td>BOL / delivery defects</td><td><span class="chip ok">Disponible</span></td><td>Supporte l’hypothèse inbound reliability / receiving reconciliation.</td><td>Delivery defects export + lignes BOL mismatch.</td></tr>
+</tbody></table>
+</section>
+
+<div class="section-title"><h2>3. Chemins de case Vendor Central</h2><div class="line"></div></div>
+<section class="grid g2">
+<div class="card"><h2>Chemin principal — FR</h2><div class="callout blue"><strong>Objectif :</strong> faire examiner la disponibilité Retail, la fiabilité du stock et la perte de Buy Box Amazon.</div>
+<pre>Aide
+→ Obtenir de l’aide
+→ Nous contacter
+→ Catalogue / Produits
+→ Disponibilité du produit / Offre Retail / Problème d’achat</pre>
+<p><strong>Alternative :</strong></p>
+<pre>Aide
+→ Obtenir de l’aide
+→ Nous contacter
+→ Gestion du stock
+→ Disponibilité du produit</pre></div>
+<div class="card"><h2>Main path — EN</h2><div class="callout blue"><strong>Goal:</strong> request a Retail Availability / Inventory Reliability review.</div>
+<pre>Help
+→ Get support
+→ Contact us
+→ Catalog / Products
+→ Product availability / Retail offer / Buying issue</pre>
+<p><strong>Alternative:</strong></p>
+<pre>Help
+→ Get support
+→ Contact us
+→ Inventory management
+→ Product availability</pre></div>
+</section>
+
+<section class="grid g2" style="margin-top:16px">
+<div class="card"><h2>Case secondaire — cause inbound — FR</h2>
+<pre>Aide
+→ Obtenir de l’aide
+→ Nous contacter
+→ Livraisons
+→ Notification d’expédition avancée / ASN</pre>
+<p>ou :</p>
+<pre>Aide
+→ Obtenir de l’aide
+→ Nous contacter
+→ Livraisons
+→ Rendez-vous de livraison en entrepôt et Carrier Central / CARP</pre></div>
+<div class="card"><h2>Secondary case — inbound cause — EN</h2>
+<pre>Help
+→ Get support
+→ Contact us
+→ Shipments
+→ Advance Shipment Notification / ASN</pre>
+<p>or:</p>
+<pre>Help
+→ Get support
+→ Contact us
+→ Shipments
+→ Fulfillment Center delivery appointment and Carrier Central / CARP</pre></div>
+</section>
+
+<div class="section-title"><h2>4. Message Amazon — version EN copiable</h2><div class="line"></div></div>
+<section class="card">
+<h2>Title</h2>
+<pre>Retail Availability / Inventory Reliability issue – ASIN B00PVPXVBE had dormant inventory but Featured Offer views dropped to zero</pre>
+<h2>Message</h2>
+<pre>Hello,
+
+We need Amazon’s support to investigate ASIN B00PVPXVBE.
+
+This ASIN is a high-performing item, but Amazon Retail appears to have stopped exposing the offer despite having dormant inventory.
+
+Observed facts:
+- ASIN: B00PVPXVBE
+- Product: COGEX 80017 padlock 30 mm
+- Amazon previously showed approximately 645 units of dormant inventory.
+- Retail sales stopped while Amazon still appeared to have inventory.
+- Featured Offer page views dropped to 0 in May 2026.
+- Current Amazon sellable inventory now appears to be only 5 units.
+- The current Featured Offer / Buy Box is held by a 3P seller, not Amazon Retail.
+- The ASIN has a history of PO / delivery issues, including PO non-acceptance, delivery defects and BOL / ASN mismatch events.
+
+This suggests the issue was not initially caused by a lack of physical inventory, but may be linked to inventory reliability, receiving reconciliation, Retail Availability suppression, or stock reclassification.
+
+Could you please confirm:
+1. Why Amazon Retail stopped exposing the offer while dormant inventory was still available?
+2. Whether the previous 645 units were sellable, reserved, in transfer, unsellable, under investigation, or otherwise unavailable to the Retail offer?
+3. Why the stock was recently adjusted from approximately 645 units to only 5 sellable units?
+4. Whether any receiving / inventory reconciliation or stock correction occurred?
+5. Whether the ASIN is impacted by Retail Availability suppression, inventory management suppression, purchase hold, do-not-reorder, or instock restriction?
+6. Whether prior ASN / BOL / receiving reconciliation issues contributed to the inventory being treated as unreliable or non-buyable?
+7. What corrective action is required to restore Amazon Retail availability and Featured Offer eligibility?
+
+We are implementing corrective actions on the inbound process to prevent ASN / BOL / appointment mismatches and would like Amazon to review whether this ASIN can be re-enabled for Amazon Retail Featured Offer once the inventory reliability issue is resolved.</pre>
+</section>
+
+<div class="section-title"><h2>5. Plan d’expérimentation correctif</h2><div class="line"></div></div>
+<section class="card"><table><thead><tr><th>Action</th><th>Objectif</th><th>Signal de succès</th><th>Responsable</th><th>Priorité</th></tr></thead><tbody>
+<tr><td>Ouvrir case Retail Availability / Inventory Reliability</td><td>Obtenir la cause officielle du stock dormant non exposé.</td><td>Amazon confirme stock status / restriction / correction.</td><td>Vendor / AM</td><td><span class="chip bad">P1</span></td></tr>
+<tr><td>Demander escalade Account Manager</td><td>Éviter une réponse support générique “Buy Box non garantie”.</td><td>Routage vers Instock / Inventory Health / Retail Availability.</td><td>Account Manager</td><td><span class="chip bad">P1</span></td></tr>
+<tr><td>Reconstituer le statut des 645 unités</td><td>Savoir si elles étaient sellable, reserved, transfer, investigation, unsellable.</td><td>Amazon ou VC identifie la reclassification.</td><td>Vendor + Amazon</td><td><span class="chip bad">P1</span></td></tr>
+<tr><td>Vérifier purchase hold / do-not-reorder</td><td>Savoir si Amazon refuse de recommander l’ASIN.</td><td>Statut clair sur procurability / replenishment.</td><td>Vendor / AM</td><td><span class="chip warn">P2</span></td></tr>
+<tr><td>Préparer un réappro propre</td><td>Tester la réactivation après réception sans défaut.</td><td>PO accepté, ASN OK, CARP OK, réception OK, Buy Box Amazon revient.</td><td>ADV / EDI / Logistique</td><td><span class="chip warn">P2</span></td></tr>
+</tbody></table></section>
+
+<div class="section-title"><h2>6. Arbre de décision</h2><div class="line"></div></div>
+<section class="decision">
+<div class="step"><strong>Amazon confirme stock reclassé / corrigé</strong>Demander le détail de la reclassification, relier aux défauts réception, puis tester un réappro propre.</div>
+<div class="step"><strong>Amazon confirme purchase hold / do-not-reorder</strong>Escalader Account Manager / Vendor Manager avec preuves de demande et plan correctif inbound.</div>
+<div class="step"><strong>Amazon confirme Retail Availability suppression</strong>Demander refresh / re-evaluation Featured Offer après correction inbound et preuve de stock sellable.</div>
+<div class="step"><strong>Amazon répond “Buy Box non garantie”</strong>Relancer : demander non pas la Buy Box, mais la cause du non-affichage Retail malgré stock dormant et FO views = 0.</div>
+<div class="step"><strong>Amazon évoque pricing / 3P</strong>Comparer prix Amazon / 3P / marché ; évaluer funding ou baisse temporaire si nécessaire.</div>
+<div class="step"><strong>Amazon ne détecte aucun problème</strong>Fournir tableau de preuves : 645 dormant, FO views = 0, 5 vendables, Buy Box 3P, delivery defects.</div>
+</section>
+
+<div class="section-title"><h2>7. SOP inbound anti-récidive</h2><div class="line"></div></div>
+<section class="card success">
+<h2>Règle de contrôle obligatoire</h2>
+<table><thead><tr><th>Contrôle</th><th>Règle</th></tr></thead><tbody>
+<tr><td>DESADV / ASN</td><td>Envoyé et visible avant confirmation du rendez-vous Carrier Central.</td></tr>
+<tr><td>BOL</td><td>Identique entre DESADV / ASN et Carrier Central.</td></tr>
+<tr><td>ASN / ARN</td><td>Ne jamais confondre avec le BOL ; champ séparé si demandé.</td></tr>
+<tr><td>PO / FC / quantités</td><td>Contrôle strict PO, FC, cartons, palettes.</td></tr>
+<tr><td>CARP</td><td>Pas de rendez-vous validé si l’écran affiche “No ASN matches”.</td></tr>
+<tr><td>Archivage</td><td>Exports CARP + captures horodatées conservés immédiatement, car fenêtre courte.</td></tr>
+</tbody></table>
+</section>
+
+<div class="footer">Maquette de travail — Audit Buy Box Vendor 1P — B00PVPXVBE — à adapter après réponse Amazon.</div>
+</main>
+</body>
+</html>
