@@ -132,6 +132,7 @@ Tout patch doit être minimal et ciblé :
 | v3.6.7.1 | ✅ **PROD** — mergé 27 mai 2026 | 584dfcb (staging) / 327d999 (preprod) |
 | v3.6.8.8 | ✅ **PROD** — mergé 29 mai 2026 / tag v3.6.8.8 | 5314253 (merge main) |
 | v3.6.8.9 | ✅ **PROD** — mergé 29 mai 2026 / tag v3.6.8.9 | 3067cd8 (merge main) |
+| v3.6.9.4 | ✅ **PROD** — mergé 9 juin 2026 / tag v3.6.9.4 | dbb2bea (main) |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -160,8 +161,8 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | **v3.6.8.8** (merge 29 mai 2026 — tag v3.6.8.8) | https://amazon.foliow.app |
-| Recette (staging) | **v3.6.8.8** (commit 1358f5c — 29 mai 2026) | https://d9xny9istvl53.cloudfront.net |
+| Production (main) | **v3.6.9.4** (merge 9 juin 2026 — tag v3.6.9.4 — commit dbb2bea) | https://amazon.foliow.app |
+| Recette (staging) | **v3.6.9.4** (deploy S3 9 juin 2026 — git branch à v3.6.9.3) | https://d9xny9istvl53.cloudfront.net |
 | Preprod | **v3.6.8.8** (deploy 29 mai 2026) | https://preprod.amazon.foliow.app |
 
 ✅ **MERGÉ EN PROD le 19 mai 2026** — merge 01656bc, tag v3.6.2, APP_VERSION 3.6.2 vérifié, CloudFront invalidé.
@@ -191,9 +192,19 @@ Scope : Patch ERP parser Gers — nouveau format fichier `202605_Dispo_Amazon_Ma
 - Tests V5g/V5h/V5i/V5j : format Gers + régression ancien format. 30/30 ✅.
 - BTI-1 (deploy-preprod.yml) : backlog maintenu.
 
+✅ **v3.6.8.8 + v3.6.8.9 MERGÉS EN PROD le 29 mai 2026** — tags v3.6.8.8 / v3.6.8.9, CloudFront invalidé.
+
+✅ **v3.6.9.4 MERGÉ EN PROD le 9 juin 2026** — commit dbb2bea (main), tag v3.6.9.4, APP_VERSION 3.6.9.4, CloudFront invalidé.
+Scope : Correctifs titres ASIN multi-marketplace (Gers Équipement — 3 bugs visuels page Analyse ASINs).
+- `src/core.js` — `migrateXMLTitles()` : suppression garde `if (a.titleOriginal) continue` → re-enrichissement XML toujours actif ; `ficheHandleXML()` : re-enrichissement immédiat des titres après chargement XML fiche client.
+- `src/parser_vc.js` — boucle agrégation multi-pays : priorité FR pour le titre (si ligne courante = FR, écraser le titre stocké en first-row-wins, évite titres ES/DE/IT).
+- Bugs corrigés : B0F22KG6LZ suffix FRESIT (migrateXMLTitles guard), B008DTC2QA titre espagnol (first-row-wins sans priorité FR).
+- B0088010BE (FRBEITESDENL) : non corrigé automatiquement — typo ASIN dans XML Amazon (0 vs O), à signaler à Amazon via Vendor Central.
+- Piège découvert : S3 prod/recette exige upload BOTH `index.html` ET `amazon-pilot-latest.html` (DefaultRootObject = index.html).
+
 ### PIÈGES RENCONTRÉS v3.6.6.2 (à mémoriser)
 - **Caractères spéciaux dans smoke.spec.js** : apostrophes courbes `'` dans des strings JS single-quoted cassent la syntaxe. Contournement : utiliser double quotes pour les strings contenant des apostrophes, ou `\uXXXX` explicites. Si l'Edit tool refuse (mismatch bytes), passer par un script Python intermédiaire.
-- **Deploy recette = index.html, pas amazon-pilot-latest.html** : CloudFront recette a `index.html` comme default root object. Toujours deployer sur `s3://amazon-pilot-recette/index.html` ET `amazon-pilot-latest.html` simultanement.
+- **Deploy recette = index.html, pas amazon-pilot-latest.html** : CloudFront recette a `index.html` comme default root object. Toujours deployer sur `s3://amazon-pilot-recette/index.html` ET `amazon-pilot-latest.html` simultanement. Idem prod (`amazon-pilot-foliow`). Si seulement `amazon-pilot-latest.html` est uploadé, la version affichée en accès direct reste l'ancienne (v3.6.9.3 observé en staging lors du déploiement v3.6.9.4).
 - **IDB Playwright** : Les tests Playwright partagent le contexte IDB entre tests (1 worker). `cl()` retourne null si le client n'est pas chargé via IDB (localStorage seul ne suffit pas). Pour tester `saveSmokeHistory`, appeler la fonction directement plutôt que passer par `smokeTest()` avec un client injecté.
 
 ✅ **MERGÉ EN PROD le 18 mai 2026** — merge fae7d79, APP_VERSION 3.6.1.5 vérifié, CloudFront invalidé.
