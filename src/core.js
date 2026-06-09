@@ -10,7 +10,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.6.6.1';
+const APP_VERSION = '3.6.9.4';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -792,11 +792,10 @@ function migrateXMLTitles(clients) {
     }
     for (var ai = 0; ai < c.asins.length; ai++) {
       var a = c.asins[ai];
-      if (a.titleOriginal) continue; // déjà enrichi
       var xmlMatch = xmlByAsin[a.asin];
       if (xmlMatch && xmlMatch.description) {
-        if (a.title) a.titleOriginal = a.title;
-        a.title = xmlMatch.description;
+        if (a.title && !a.titleOriginal) a.titleOriginal = a.title; // conserver VC original une seule fois
+        a.title = xmlMatch.description; // toujours mettre à jour depuis XML (source authoritative FR)
         if (!a.ean && xmlMatch.ean) a.ean = xmlMatch.ean;
         if (!a.model && xmlMatch.model) a.model = xmlMatch.model;
       }
@@ -10217,6 +10216,19 @@ function ficheHandleXML(input) {
     c.catalogueXML = result.items;
     c.xmlSummary = result.summary;
     c.xmlImportDate = new Date().toISOString();
+    // Re-enrichissement immédiat des titres depuis le XML mis à jour
+    var xmlByAsinNew = {};
+    result.items.forEach(function(xi) { if (xi.asin) xmlByAsinNew[xi.asin] = xi; });
+    var reEnriched = 0;
+    (c.asins || []).forEach(function(a) {
+      var xmlM = xmlByAsinNew[a.asin];
+      if (xmlM && xmlM.description) {
+        if (a.title && !a.titleOriginal) a.titleOriginal = a.title;
+        a.title = xmlM.description;
+        reEnriched++;
+      }
+    });
+    if (reEnriched > 0) log('🇫🇷 Titres re-enrichis depuis XML : ' + reEnriched + ' ASINs mis à jour', 'ok');
     save(); render();
   };
   reader.readAsText(file);
