@@ -133,6 +133,7 @@ Tout patch doit être minimal et ciblé :
 | v3.6.8.8 | ✅ **PROD** — mergé 29 mai 2026 / tag v3.6.8.8 | 5314253 (merge main) |
 | v3.6.8.9 | ✅ **PROD** — mergé 29 mai 2026 / tag v3.6.8.9 | 3067cd8 (merge main) |
 | v3.6.9.4 | ✅ **PROD** — mergé 9 juin 2026 / tag v3.6.9.4 | dbb2bea (main) |
+| v3.7.1   | ✅ **PROD** — mergé 11 juin 2026 / tag v3.7.1 | 238f302 (main) |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -161,9 +162,9 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | **v3.6.9.4** (merge 9 juin 2026 — tag v3.6.9.4 — commit dbb2bea) | https://amazon.foliow.app |
+| Production (main) | **v3.7.1** (merge 11 juin 2026 — tag v3.7.1 — commit 238f302) | https://amazon.foliow.app |
 | Recette (staging) | **v3.6.9.4** (deploy S3 9 juin 2026 — git branch à v3.6.9.3) | https://d9xny9istvl53.cloudfront.net |
-| Preprod | **v3.6.8.8** (deploy 29 mai 2026) | https://preprod.amazon.foliow.app |
+| Preprod | **v3.7.1** (deploy 11 juin 2026) | https://preprod.amazon.foliow.app |
 
 ✅ **MERGÉ EN PROD le 19 mai 2026** — merge 01656bc, tag v3.6.2, APP_VERSION 3.6.2 vérifié, CloudFront invalidé.
 Scope : moteur de recherche ASIN transversal topbar + rebranchement Buy Box / Appros / Prévisionnel.
@@ -193,6 +194,9 @@ Scope : Patch ERP parser Gers — nouveau format fichier `202605_Dispo_Amazon_Ma
 - BTI-1 (deploy-preprod.yml) : backlog maintenu.
 
 ✅ **v3.6.8.8 + v3.6.8.9 MERGÉS EN PROD le 29 mai 2026** — tags v3.6.8.8 / v3.6.8.9, CloudFront invalidé.
+
+✅ **v3.7.1 MERGÉ EN PROD le 11 juin 2026** — commits 0c16ce6 + 238f302 (main), tag v3.7.1, CloudFront invalidé.
+Scope : Refacto archi — extraction `src/utils.js` (33 items) + `src/idb.js` (10 items) depuis core.js. core.js : 10 962 L → 10 019 L (-943 L). Zéro changement fonctionnel. node --check ✅, smoke 27/30 (3 échecs pré-existants).
 
 ✅ **v3.6.9.4 MERGÉ EN PROD le 9 juin 2026** — commit dbb2bea (main), tag v3.6.9.4, APP_VERSION 3.6.9.4, CloudFront invalidé.
 Scope : Correctifs titres ASIN multi-marketplace (Gers Équipement — 3 bugs visuels page Analyse ASINs).
