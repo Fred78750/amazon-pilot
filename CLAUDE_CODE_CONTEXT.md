@@ -134,6 +134,7 @@ Tout patch doit être minimal et ciblé :
 | v3.6.8.9 | ✅ **PROD** — mergé 29 mai 2026 / tag v3.6.8.9 | 3067cd8 (merge main) |
 | v3.6.9.4 | ✅ **PROD** — mergé 9 juin 2026 / tag v3.6.9.4 | dbb2bea (main) |
 | v3.7.1   | ✅ **PROD** — mergé 11 juin 2026 / tag v3.7.1 | 238f302 (main) |
+| v3.7.2   | ✅ **PROD** — mergé 11 juin 2026 / tag v3.7.2 | fd45377 (main) |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -162,9 +163,9 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | **v3.7.1** (merge 11 juin 2026 — tag v3.7.1 — commit 238f302) | https://amazon.foliow.app |
+| Production (main) | **v3.7.2** (merge 11 juin 2026 — tag v3.7.2 — commit fd45377) | https://amazon.foliow.app |
 | Recette (staging) | **v3.6.9.4** (deploy S3 9 juin 2026 — git branch à v3.6.9.3) | https://d9xny9istvl53.cloudfront.net |
-| Preprod | **v3.7.1** (deploy 11 juin 2026) | https://preprod.amazon.foliow.app |
+| Preprod | **v3.7.2** (deploy 11 juin 2026) | https://preprod.amazon.foliow.app |
 
 ✅ **MERGÉ EN PROD le 19 mai 2026** — merge 01656bc, tag v3.6.2, APP_VERSION 3.6.2 vérifié, CloudFront invalidé.
 Scope : moteur de recherche ASIN transversal topbar + rebranchement Buy Box / Appros / Prévisionnel.
@@ -197,6 +198,9 @@ Scope : Patch ERP parser Gers — nouveau format fichier `202605_Dispo_Amazon_Ma
 
 ✅ **v3.7.1 MERGÉ EN PROD le 11 juin 2026** — commits 0c16ce6 + 238f302 (main), tag v3.7.1, CloudFront invalidé.
 Scope : Refacto archi — extraction `src/utils.js` (33 items) + `src/idb.js` (10 items) depuis core.js. core.js : 10 962 L → 10 019 L (-943 L). Zéro changement fonctionnel. node --check ✅, smoke 27/30 (3 échecs pré-existants).
+
+✅ **v3.7.2 MERGÉ EN PROD le 11 juin 2026** — commit fd45377 (main), tag v3.7.2, CloudFront invalidé.
+Scope : Refacto archi — extraction `src/parsers_internal.js` (8 fonctions : detectFileType, detectPeriodType, parseCSVFile, parseCSVBuyBox, parseDeliveryDefectsCSV, parseAppointmentsCSV, parseMatriceTarifXML, parseMatriceTarif) + suppression `_parseCSVFile_LEGACY_UNUSED` (code mort). core.js : 10 019 L → 9 438 L (-581 L). Cumul refacto v3.7.x : -1 524 L depuis v3.6.9.4. Zéro changement fonctionnel. node --check ✅, smoke 27/30, flux XML ficheHandleXML→parseMatriceTarifXML validé (🇫🇷 44 ASINs).
 
 ✅ **v3.6.9.4 MERGÉ EN PROD le 9 juin 2026** — commit dbb2bea (main), tag v3.6.9.4, APP_VERSION 3.6.9.4, CloudFront invalidé.
 Scope : Correctifs titres ASIN multi-marketplace (Gers Équipement — 3 bugs visuels page Analyse ASINs).
