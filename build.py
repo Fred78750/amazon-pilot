@@ -46,9 +46,10 @@ def build(ver=None, check=False):
     log("Lecture sources", 'STEP')
     shell  = r('shell.html')
     css    = r('styles.css')
-    utils  = strip_header(r('utils.js'))          # v3.7.1 — utils métier extraits de core.js
-    idb    = strip_header(r('idb.js'))            # v3.7.1 — IDB/persistance extrait de core.js
-    core   = strip_header(r('core.js'))
+    utils            = strip_header(r('utils.js'))            # v3.7.1 — utils métier extraits de core.js
+    idb              = strip_header(r('idb.js'))              # v3.7.1 — IDB/persistance extrait de core.js
+    parsers_internal = strip_header(r('parsers_internal.js')) # v3.7.2 — parsers CSV/XML internes extraits de core.js
+    core             = strip_header(r('core.js'))
     buybox = strip_header(r('buybox.js'))
     seo    = strip_header(r('seo.js'))
     smoke  = strip_header(r('smoke.js'))
@@ -73,7 +74,7 @@ def build(ver=None, check=False):
     smoke_manual = rsm_line if rsm_line in smoke else ''
     smoke_main   = smoke.replace('\n' + rsm_line, '') if smoke_manual else smoke
 
-    for name, content in [('utils.js',utils),('idb.js',idb),('core.js',core),('buybox.js',buybox),('seo.js',seo),
+    for name, content in [('utils.js',utils),('idb.js',idb),('parsers_internal.js',parsers_internal),('core.js',core),('buybox.js',buybox),('seo.js',seo),
                            ('smoke.js',smoke),('guide_asn.js',guide),
                            ('parser_erp.js',parser_erp),('parser_vc.js',parser_vc),
                            ('ai_diagnostic.js',ai_diagnostic),('word_export.js',word_export),
@@ -88,8 +89,9 @@ def build(ver=None, check=False):
     log("Assemblage JS", 'STEP')
     js = core
     # Injection avec \n pour éviter collision @smoke vs @smoke_manual
-    js = js.replace('// @idb\n',          idb + '\n')
-    js = js.replace('// @utils\n',        utils + '\n')
+    js = js.replace('// @idb\n',              idb + '\n')
+    js = js.replace('// @parsers_internal\n', parsers_internal + '\n')
+    js = js.replace('// @utils\n',            utils + '\n')
     js = js.replace('// @guide\n',        guide + '\n')
     js = js.replace('// @parser_erp\n',  parser_erp + '\n')
     js = js.replace('// @parser_vc\n',   parser_vc + '\n')
