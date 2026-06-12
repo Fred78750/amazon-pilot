@@ -14,7 +14,6 @@ function renderNav() {
   const alertCount = c ? c.asins?.filter(a => (getRevenue(a,c)||0) > 0 && parseNum(a.revenueDelta) < -15).length : 0;
   // Badge Buy Box : ASINs avec Retail% en baisse ou critique
   const _bbAlerts = c ? calcBuyBoxAlerts(c) : { critical: [], warning: [], suppressed: [] };
-  const bbBadgeCount = _bbAlerts.critical.length + _bbAlerts.suppressed.length;
   // Badge backup sur Config si pas de backup depuis >7 jours
   const lastExportISO = localStorage.getItem('ap-last-export');
   const backupDays = lastExportISO ? Math.floor((Date.now() - new Date(lastExportISO)) / 86400000) : 999;
@@ -24,7 +23,7 @@ function renderNav() {
   document.getElementById('nav-list').innerHTML = NAV.map(n => {
     const badge = n.badge && alertCount > 0 ? `<span class="badge">${alertCount}</span>` : '';
     const backupBadge = n.id === 'config' && needsBackup ? `<span class="badge" style="background:var(--or)" title="Backup requis">!</span>` : '';
-    const fnBadgeCount = n.badgeFn ? n.badgeFn(_navClient) : 0;
+    const fnBadgeCount = n.badgeFn ? (n.id === 'buybox' ? _bbAlerts.critical.length : n.badgeFn(_navClient)) : 0;
     const fnBadge = fnBadgeCount > 0 ? `<span class="badge" style="background:var(--or)" title="Vérifications en attente">${fnBadgeCount}</span>` : '';
     return `<button class="sb-it${screen === n.id ? ' on' : ''}" onclick="go('${n.id}')">
       <span class="sb-it-ic">${n.icon}</span><span>${n.label}</span>${badge}${backupBadge}${fnBadge}
