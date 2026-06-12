@@ -319,6 +319,12 @@ function parseVCFile(text, filename) {
       NUM_SUM.forEach(function(fk) {
         if (fieldMap[fk]) existing[fk] = (existing[fk] || 0) + parseNum(row[fieldMap[fk]]);
       });
+      // Priorité FR pour le titre : remplacer si ligne courante = FR (evite titres ES/DE/IT en first-row-wins)
+      var boutiqueVal = fieldMap['marche'] ? (row[fieldMap['marche']] || '').trim() : '';
+      if (boutiqueVal === 'FR' && fieldMap['titre']) {
+        var frTitle = (row[fieldMap['titre']] || '').trim();
+        if (frTitle) existing.titre = frTitle;
+      }
     }
   });
 

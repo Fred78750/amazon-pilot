@@ -214,7 +214,8 @@ function initAIDiagnostic(c, dims, dRef, sign, placeholderId, clientIdAtLaunch) 
       messages: [{ role: 'user', content: prompt }],
       feature: 'revue',
       model: _model,
-      max_tokens: 350
+      max_tokens: 350,
+      inputHash: hash
     })
   })
   .then(function(resp) {
