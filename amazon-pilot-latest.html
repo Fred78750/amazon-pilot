@@ -704,7 +704,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.7.2';
+const APP_VERSION = '3.7.3';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -4489,7 +4489,10 @@ function generateMonthlyActions(client) {
 
   return actions;
 }
-async function callAPI(sys, usr, feature, tools, maxTokens) {
+// Bloc IA/API extrait de core.js (v3.7.3)
+// Injecté via // @ai_core dans core.js (build.py)
+
+async function callAPI(sys, usr, feature, tools, maxTokens, inputHash = null) {
   const modelKey = aiUsage.getModel(feature || 'revue');
   const modelId  = AI_MODELS[modelKey].id;
   const feat     = feature || 'revue';
@@ -4504,6 +4507,7 @@ async function callAPI(sys, usr, feature, tools, maxTokens) {
         messages: [{ role: 'user', content: usr }], feature: feat,
       };
       if (tools) lambdaBody.tools = tools;
+      if (inputHash) lambdaBody.inputHash = inputHash;
       const res = await fetch(API_BASE_URL + '/ai/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
@@ -4790,6 +4794,46 @@ RÈGLES ABSOLUES:
 - Quand des données historiques sont disponibles, base tes recommandations dessus
 - Réponds en français, structure avec des émojis, sois concis et actionnable`;
 }
+
+async function runAsinAI(asin) {
+  const c = cl();
+  if (!c) return;
+  const a = c.asins.find(x => x.asin === asin);
+  if (!a) return;
+  aiLoading = true; aiResult = ''; selectedAsin = asin; render();
+  const totalCA = c.asins.reduce((s,x) => s+(getRevenue(x,c)||0), 0);
+  const seg = calcSegment(a, totalCA, c);
+  const health = calcHealth(a);
+  const deep = calcTrendDeep(a, c);
+  const histCtx = buildAsinContext(a, c);
+
+  const prompt = `ANALYSE ASIN DÉTAILLÉE
+
+📦 ${a.title||'N/A'}
+ASIN: ${a.asin} | Marque: ${a.brand||'N/A'} | Marché: ${a.market||'.fr'}
+Segment: ${seg} | Health Score: ${health}/100
+
+📊 MÉTRIQUES PÉRIODE EN COURS:
+- CA: ${fmtEur(getRevenue(a,c)||0)} (Δ période: ${a.revenueDelta||'N/A'})
+- Unités: ${fmt(getUnits(a,c)||0)} (Δ ${a.unitsDelta||'N/A'})
+- Glance Views: ${fmt(a.glanceViews||0)} (Δ GV: ${a.gvDelta||'N/A'})
+- Stock vendable: ${a.sellableUnits!=null?a.sellableUnits+'u':'N/A'} | Malsain: ${a.unhealthyUnits||0}u
+- Retail %: ${a.retailPct||'N/A'} | Confirm %: ${a.confirmPct||'N/A'}
+- Retours: ${a.returns||0}
+
+${histCtx}
+
+🎯 ANALYSE DEMANDÉE:
+1) Diagnostic santé en tenant compte de la trajectoire longue (pas seulement la période)
+2) Signal principal : le mouvement actuel est-il structurel ou ponctuel ?
+3) Recommandations (max 3) adaptées à la tendance de fond
+4) Points de vigilance spécifiques à ce profil d'ASIN`;
+
+  aiResult = await askClaude(getSysPrompt(c), prompt);
+  aiLoading = false; render();
+}
+
+
 const cl = () => clients.find(c => c.id === activeId) || null;
 
 function saveClientSafe(c) {
@@ -14084,43 +14128,7 @@ function renderSEOSection(a, c) {
 }
 
 
-async function runAsinAI(asin) {
-  const c = cl();
-  if (!c) return;
-  const a = c.asins.find(x => x.asin === asin);
-  if (!a) return;
-  aiLoading = true; aiResult = ''; selectedAsin = asin; render();
-  const totalCA = c.asins.reduce((s,x) => s+(getRevenue(x,c)||0), 0);
-  const seg = calcSegment(a, totalCA, c);
-  const health = calcHealth(a);
-  const deep = calcTrendDeep(a, c);
-  const histCtx = buildAsinContext(a, c);
 
-  const prompt = `ANALYSE ASIN DÉTAILLÉE
-
-📦 ${a.title||'N/A'}
-ASIN: ${a.asin} | Marque: ${a.brand||'N/A'} | Marché: ${a.market||'.fr'}
-Segment: ${seg} | Health Score: ${health}/100
-
-📊 MÉTRIQUES PÉRIODE EN COURS:
-- CA: ${fmtEur(getRevenue(a,c)||0)} (Δ période: ${a.revenueDelta||'N/A'})
-- Unités: ${fmt(getUnits(a,c)||0)} (Δ ${a.unitsDelta||'N/A'})
-- Glance Views: ${fmt(a.glanceViews||0)} (Δ GV: ${a.gvDelta||'N/A'})
-- Stock vendable: ${a.sellableUnits!=null?a.sellableUnits+'u':'N/A'} | Malsain: ${a.unhealthyUnits||0}u
-- Retail %: ${a.retailPct||'N/A'} | Confirm %: ${a.confirmPct||'N/A'}
-- Retours: ${a.returns||0}
-
-${histCtx}
-
-🎯 ANALYSE DEMANDÉE:
-1) Diagnostic santé en tenant compte de la trajectoire longue (pas seulement la période)
-2) Signal principal : le mouvement actuel est-il structurel ou ponctuel ?
-3) Recommandations (max 3) adaptées à la tendance de fond
-4) Points de vigilance spécifiques à ce profil d'ASIN`;
-
-  aiResult = await askClaude(getSysPrompt(c), prompt);
-  aiLoading = false; render();
-}
 
 function renderMarkdown(text) {
   // Renderer minimal : bold, headers, listes — sans lib externe
@@ -16370,7 +16378,8 @@ function initAIDiagnostic(c, dims, dRef, sign, placeholderId, clientIdAtLaunch) 
       messages: [{ role: 'user', content: prompt }],
       feature: 'revue',
       model: _model,
-      max_tokens: 350
+      max_tokens: 350,
+      inputHash: hash
     })
   })
   .then(function(resp) {
