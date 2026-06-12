@@ -135,6 +135,7 @@ Tout patch doit être minimal et ciblé :
 | v3.6.9.4 | ✅ **PROD** — mergé 9 juin 2026 / tag v3.6.9.4 | dbb2bea (main) |
 | v3.7.1   | ✅ **PROD** — mergé 11 juin 2026 / tag v3.7.1 | 238f302 (main) |
 | v3.7.2   | ✅ **PROD** — mergé 11 juin 2026 / tag v3.7.2 | fd45377 (main) |
+| v3.7.3   | ✅ **PROD** — mergé 12 juin 2026 / tag v3.7.3 | 325096a (main) |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -163,9 +164,9 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | **v3.7.2** (merge 11 juin 2026 — tag v3.7.2 — commit fd45377) | https://amazon.foliow.app |
-| Recette (staging) | **v3.6.9.4** (deploy S3 9 juin 2026 — git branch à v3.6.9.3) | https://d9xny9istvl53.cloudfront.net |
-| Preprod | **v3.7.2** (deploy 11 juin 2026) | https://preprod.amazon.foliow.app |
+| Production (main) | **v3.7.3** (merge 12 juin 2026 — tag v3.7.3 — commit 325096a) | https://amazon.foliow.app |
+| Recette (staging) | **v3.7.3** (deploy S3 12 juin 2026) | https://d9xny9istvl53.cloudfront.net |
+| Preprod | **v3.7.3** (deploy 12 juin 2026) | https://preprod.amazon.foliow.app |
 
 ✅ **MERGÉ EN PROD le 19 mai 2026** — merge 01656bc, tag v3.6.2, APP_VERSION 3.6.2 vérifié, CloudFront invalidé.
 Scope : moteur de recherche ASIN transversal topbar + rebranchement Buy Box / Appros / Prévisionnel.
