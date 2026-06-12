@@ -664,3 +664,22 @@ Points valides :
 **Anomalie A1 signalee** : parsePOCSV/mergePOData dans import_export.js coexistent avec parser_po.js -- pas de doublon fonctionnel avere, fusion = decision separee.
 
 Prochaine etape : GO Fred -> merge main -> prod -> tag v3.7.4
+---
+## Session 2026-06-12 — v3.7.4 PROD DEPLOYED
+
+**v3.7.4 mergee sur main et deployee en production.**
+
+- git merge staging -> main (fast-forward, 11 fichiers)
+- git push origin main -> GitHub Actions deploy.yml declenche automatiquement
+- S3 amazon-pilot-foliow/index.html mis a jour : ContentLength=1092890, APP_VERSION='3.7.4', LastModified=2026-06-12T13:33:24+00:00
+- CloudFront E3ERL241475BJI invalide : Status=Completed (2026-06-12T13:33:25Z)
+- Tag v3.7.4 pousse sur GitHub
+- Amazon Pilot prod (amazon.foliow.app) : v3.7.4 LIVE
+
+**Modules livres en prod :**
+- src/import_export.js (16 fonctions, 47343 chars) -- extraction stricte de core.js
+- src/s3_poll.js (8 fonctions + 2 vars etat, 5889 chars) -- extraction stricte de core.js
+- core.js reduit de 9103 -> 7975 L (-1128 L)
+- AUDIT_v3.7.4.md : 8 points valides, anomalie A1 documentee
+
+Version courante en prod : v3.7.4 (depuis 2026-06-12)
