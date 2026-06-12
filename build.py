@@ -52,6 +52,9 @@ def build(ver=None, check=False):
     ai_core          = strip_header(r('ai_core.js'))          # v3.7.3 — fonctions IA/API extraites de core.js
     import_export    = strip_header(r('import_export.js'))    # v3.7.4 — import/export extrait de core.js
     s3_poll          = strip_header(r('s3_poll.js'))          # v3.7.4 — S3/polling extrait de core.js
+    render_shell     = strip_header(r('render_shell.js'))     # v3.7.5 — dispatcher + navigation extraits de core.js
+    render_screens   = strip_header(r('render_screens.js'))   # v3.7.5 — ecrans extraits de core.js
+    charts           = strip_header(r('charts.js'))            # v3.7.5 — graphiques extraits de core.js
     core             = strip_header(r('core.js'))
     buybox = strip_header(r('buybox.js'))
     seo    = strip_header(r('seo.js'))
@@ -79,6 +82,7 @@ def build(ver=None, check=False):
 
     for name, content in [('utils.js',utils),('idb.js',idb),('parsers_internal.js',parsers_internal),
                            ('ai_core.js',ai_core),('import_export.js',import_export),('s3_poll.js',s3_poll),
+                           ('render_shell.js',render_shell),('render_screens.js',render_screens),('charts.js',charts),
                            ('core.js',core),('buybox.js',buybox),('seo.js',seo),
                            ('smoke.js',smoke),('guide_asn.js',guide),
                            ('parser_erp.js',parser_erp),('parser_vc.js',parser_vc),
@@ -100,6 +104,9 @@ def build(ver=None, check=False):
     js = js.replace('// @ai_core\n',          ai_core + '\n')
     js = js.replace('// @import_export\n',    import_export + '\n')
     js = js.replace('// @s3_poll\n',          s3_poll + '\n')
+    js = js.replace('// @render_shell\n',   render_shell + '\n')
+    js = js.replace('// @render_screens\n', render_screens + '\n')
+    js = js.replace('// @charts\n',         charts + '\n')
     js = js.replace('// @guide\n',        guide + '\n')
     js = js.replace('// @parser_erp\n',  parser_erp + '\n')
     js = js.replace('// @parser_vc\n',   parser_vc + '\n')
