@@ -683,3 +683,26 @@ Prochaine etape : GO Fred -> merge main -> prod -> tag v3.7.4
 - AUDIT_v3.7.4.md : 8 points valides, anomalie A1 documentee
 
 Version courante en prod : v3.7.4 (depuis 2026-06-12)
+---
+## Session 2026-06-12 — v3.7.5 PROD DEPLOYED
+
+**v3.7.5 mergee sur main et deployee en production.**
+
+- git merge staging -> main + git push origin main
+- GitHub Actions deploy.yml -> S3 amazon-pilot-foliow/index.html
+- ContentLength=1093340, APP_VERSION='3.7.5', LastModified=2026-06-12T14:08:26+00:00
+- CloudFront E3ERL241475BJI invalide : Completed
+- Tag v3.7.5 pousse sur GitHub
+- Amazon Pilot prod (amazon.foliow.app) : v3.7.5 LIVE
+
+**Modules livres en prod :**
+- src/render_shell.js (10 fonctions + popstate, 261 L) -- render/nav extraits de core.js
+- src/render_screens.js (10 ecrans, 2161 L) -- ecrans extraits de core.js
+- src/charts.js (7 fonctions, 219 L) -- graphiques extraits de core.js
+- core.js : 7975 L -> 5368 L (-2607 L)
+- AUDIT_v3.7.5.md : 8 points valides, bilan de cycle joint
+
+**Bilan cycle refacto bloc 1 :** core.js 9832 L (v3.7.0) -> 5368 L (v3.7.5) = -45%
+Prochaine etape : v3.7.6 = audit performance sous charge (profiling Gers 12k ASINs)
+
+Version courante en prod : v3.7.5 (depuis 2026-06-12)
