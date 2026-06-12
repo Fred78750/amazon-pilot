@@ -515,7 +515,7 @@ px playwright test tests/smoke.spec.js --reporter=line (6 tests)
 
 ---
 
-✅ **v3.7.6.1 VALIDÉ PREPROD le 12 juin 2026** — staging commit 3fce3a9, preprod déployé S3+CloudFront E3CODYJ437XKU5. Attente GO Fred pour merge main.
+✅ **v3.7.6.1 MERGÉ EN PROD le 12 juin 2026** — merge main 3729581, tag v3.7.6.1, CloudFront E3ERL241475BJI invalidé. ContentLength=1113307 ✓.
 Scope : Fix perf C1 — R1 (dédoublonnage `calcBuyBoxAlerts` : `render_shell.js` utilise `_bbAlerts` déjà calculé pour badge buybox, supprime double appel via `badgeFn`) + R2 (O(n²)→O(n) : `totalRevenue` pre-calculé avant la boucle dans `buybox.js`).
 Mesures Gers 4729 ASINs : `calcBuyBoxAlerts` 1124ms→71ms (×15.8), `render()` 1955ms→98ms (×20). Résultats strictement identiques avant/après (critical=110, warning=28, suppressed=2729). Badge buybox Gers=110 ✓, Cogex=179 ✓. Smoke 27/30 (V7/V8e/V8f dettes pré-existantes). Console 0 erreur.
 
