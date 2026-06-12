@@ -642,3 +642,25 @@ Dans les templates HTML générés par JS : utiliser   (NBSP) devant les unité
 ---
 
 **FIN CLAUDE_CODE_CONTEXT.md — màj : 22 mai 2026 (v3.6.5.12 PROD ✅ — merge 93a9157, tag v3.6.5.12, CloudFront invalide)**
+
+
+---
+
+## STATUS v3.7.4 -- 12 juin 2026
+
+**Validation preprod terminee (8/8 points) -- ATTENTE GO FRED pour merge main**
+
+Points valides :
+- 2.0 api-key mode preprod confirme post-T1 Lambda
+- 2.1 build.py --check + node --check OK
+- 2.2 artefact identique (984 Ko, +52 Ko modules extraits)
+- 2.3 Smoke Playwright 27/30 (V7/V8e/V8f dettes pre-existantes)
+- 2.4 Import multi-CSV Gers : mergeImportData OK (ventes+trafic+stock, period 17-23/05/2026)
+- 2.5 Export/reimport : match=true, 4729 ASINs, 43 imports Gers preserves
+- 2.6 S3 : getS3Config/saveS3Config/getS3Key OK ; pollS3Imports non teste (pas endpoint preprod)
+- 2.7 Console : zero erreur, zero warning (5 ecrans)
+- 2.8 AUDIT_v3.7.4.md commite sur staging
+
+**Anomalie A1 signalee** : parsePOCSV/mergePOData dans import_export.js coexistent avec parser_po.js -- pas de doublon fonctionnel avere, fusion = decision separee.
+
+Prochaine etape : GO Fred -> merge main -> prod -> tag v3.7.4
