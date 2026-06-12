@@ -14,6 +14,8 @@ function calcBuyBoxAlerts(c) {
   const warning    = []; // Retail% < 100% ou en baisse vs S-1
   const suppressed = []; // Retail% = 0% sur ≥2 semaines consécutives
 
+  const totalRevenue = c.asins.reduce((s, x) => s + (getRevenue(x, c) || 0), 0);
+
   for (const a of c.asins) {
     if (!(getRevenue(a,c) > 0) && !(a.retailPct)) continue;
     const rPct = parseNum(String(a.retailPct||'').replace(',','.').replace(/[^0-9.]/g,''));
@@ -65,7 +67,7 @@ function calcBuyBoxAlerts(c) {
     const caEstAtRisk  = caMonthEst * (1 - rPct / 100);
     const deltaBoost   = 1 + Math.max(0, -deltaForCrit) / 10;
     const criticite    = caEstAtRisk * deltaBoost;
-    const entry = { asin: a.asin, title: a.title, brand: a.brand, market: a.market, rPct, prevRetail, delta, cause, zeroWeeks, revenue: getRevenue(a,c), caMonthEst, criticite, segment: calcSegment(a, c.asins.reduce((s,x)=>s+(getRevenue(x,c)||0),0), c), sellableUnits: a.sellableUnits, couvertureSem, joursAvantLimite, stockUrgent };
+    const entry = { asin: a.asin, title: a.title, brand: a.brand, market: a.market, rPct, prevRetail, delta, cause, zeroWeeks, revenue: getRevenue(a,c), caMonthEst, criticite, segment: calcSegment(a, totalRevenue, c), sellableUnits: a.sellableUnits, couvertureSem, joursAvantLimite, stockUrgent };
 
     if (isSuppressed)                          suppressed.push(entry);
     else if (isCritical)                       critical.push(entry);
