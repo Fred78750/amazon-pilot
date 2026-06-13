@@ -234,10 +234,11 @@ async function load() {
         ppmData:        c.ppmData        || {},
         forecastData:   c.forecastData   || {},
         // v3.6.0 — migration défensive : champs Buy Box défauts & rendez-vous
-        deliveryDefects:          c.deliveryDefects          || [],
-        deliveryDefectsDate:      c.deliveryDefectsDate      || '',
-        deliveryAppointments:     c.deliveryAppointments     || [],
-        deliveryAppointmentsDate: c.deliveryAppointmentsDate || '',
+        deliveryDefects:            c.deliveryDefects            || [],
+        deliveryDefectsDate:        c.deliveryDefectsDate        || '',
+        deliveryDefectsUnresolved:  c.deliveryDefectsUnresolved  || [], // v3.7.8 — POs sans ASIN résolu
+        deliveryAppointments:       c.deliveryAppointments       || [],
+        deliveryAppointmentsDate:   c.deliveryAppointmentsDate   || '',
         bolSource:                c.bolSource                || '',
         bolSourceDetail:          c.bolSourceDetail          || '',
         // v3.1.71 — migration silencieuse : default KPI primaire = ordered
