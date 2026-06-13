@@ -1,6 +1,6 @@
 ﻿# CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 29 mai 2026 (v3.6.8.8 PREPROD — YoY Étape 3a Enquête ASINs + parser_po + pattern retour + 9 fixes onclick JSON.stringify)
+**Dernière mise à jour :** 13 juin 2026 (v3.7.8 PROD — Parser Delivery natif + timeline deliveryDefects par ASIN)
 
 ---
 
@@ -136,6 +136,8 @@ Tout patch doit être minimal et ciblé :
 | v3.7.1   | ✅ **PROD** — mergé 11 juin 2026 / tag v3.7.1 | 238f302 (main) |
 | v3.7.2   | ✅ **PROD** — mergé 11 juin 2026 / tag v3.7.2 | fd45377 (main) |
 | v3.7.3   | ✅ **PROD** — mergé 12 juin 2026 / tag v3.7.3 | 325096a (main) |
+| v3.7.7   | ✅ **PROD** — mergé 13 juin 2026 / tag v3.7.7 | 2704c45 (main) |
+| v3.7.8   | ✅ **PROD** — mergé 13 juin 2026 / tag v3.7.8 | 78d24c8 (main) |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
@@ -164,9 +166,9 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | **v3.7.7** (merge 13 juin 2026 — tag v3.7.7 — commit 2704c45) | https://amazon.foliow.app |
+| Production (main) | **v3.7.8** (merge 13 juin 2026 — tag v3.7.8 — commit 78d24c8) | https://amazon.foliow.app |
 | Recette (staging) | **v3.7.7** (deploy 13 juin 2026) | https://d9xny9istvl53.cloudfront.net |
-| Preprod | **v3.7.7** (deploy 13 juin 2026) | https://preprod.amazon.foliow.app |
+| Preprod | **v3.7.8** (deploy 13 juin 2026) | https://preprod.amazon.foliow.app |
 
 ✅ **MERGÉ EN PROD le 19 mai 2026** — merge 01656bc, tag v3.6.2, APP_VERSION 3.6.2 vérifié, CloudFront invalidé.
 Scope : moteur de recherche ASIN transversal topbar + rebranchement Buy Box / Appros / Prévisionnel.
@@ -196,6 +198,18 @@ Scope : Patch ERP parser Gers — nouveau format fichier `202605_Dispo_Amazon_Ma
 - BTI-1 (deploy-preprod.yml) : backlog maintenu.
 
 ✅ **v3.6.8.8 + v3.6.8.9 MERGÉS EN PROD le 29 mai 2026** — tags v3.6.8.8 / v3.6.8.9, CloudFront invalidé.
+
+✅ **v3.7.8 MERGÉ EN PROD le 13 juin 2026** — commit 78d24c8 (main), tag v3.7.8, ContentLength=1109807, CloudFront I4LIJB9XK97R84IDZY0IAWBR0W invalidé.
+Scope : Parser Delivery natif intégré au flux standard (drag-drop CSV) + timeline `deliveryDefects` par ASIN.
+- `src/parsers_internal.js` : branche 'delivery' dans `detectFileType` ; pré-check Delivery dans `parseCSVFile` (avant `parseVCFile`) ; `window.getDeliveryDefects()` helper debug.
+- `src/import_export.js` : bloc accumulation `deliveryDefects` dans `mergeImportData` — construction `poAsinMap` depuis `c.pos`, idempotence par clé `PO+weekKey+subDefect` via `asin._ddPoLog`, coexistence flat array `c.deliveryDefects` (buybox.js:335 inchangé), `c.deliveryDefectsUnresolved` pour POs sans ASIN résolu.
+- `src/idb.js` : `deliveryDefectsUnresolved: []` ajouté au schéma de migration.
+- Modèle additif (comme foViews) — reset total écarté (fichiers 12 mois glissants se chevauchent).
+- Granularité : `deliveryDefects` weekKey = **samedi** (Week_end Amazon) ; `foViews` weekKey = **lundi** (début semaine). Réconciliation v3.8 : `foViews.weekKey + 5j = Week_end`. Confirmé sur données réelles.
+- Smoke 27/30 (3 dettes pré-existantes V7/V8e/V8f — aucune régression). AUDIT_v3.7.8.md incl. test chevauchement.
+
+✅ **v3.7.7 MERGÉ EN PROD le 13 juin 2026** — commit 2704c45 (main), tag v3.7.7, ContentLength=1124517, CloudFront invalidé.
+Scope : timeline foViews par ASIN×marché (parsers_internal.js + import_export.js + idb.js). weekKey = lundi ISO (début de période). AUDIT_v3.7.7.md incl. P3 strict (views:0 vs absent) + P2 robustesse (6 cas négatifs).
 
 ✅ **v3.7.1 MERGÉ EN PROD le 11 juin 2026** — commits 0c16ce6 + 238f302 (main), tag v3.7.1, CloudFront invalidé.
 Scope : Refacto archi — extraction `src/utils.js` (33 items) + `src/idb.js` (10 items) depuis core.js. core.js : 10 962 L → 10 019 L (-943 L). Zéro changement fonctionnel. node --check ✅, smoke 27/30 (3 échecs pré-existants).
