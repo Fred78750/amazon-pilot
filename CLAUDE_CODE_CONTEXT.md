@@ -164,9 +164,9 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | **v3.7.3** (merge 12 juin 2026 — tag v3.7.3 — commit 325096a) | https://amazon.foliow.app |
-| Recette (staging) | **v3.7.3** (deploy S3 12 juin 2026) | https://d9xny9istvl53.cloudfront.net |
-| Preprod | **v3.7.3** (deploy 12 juin 2026) | https://preprod.amazon.foliow.app |
+| Production (main) | **v3.7.7** (merge 13 juin 2026 — tag v3.7.7 — commit 2704c45) | https://amazon.foliow.app |
+| Recette (staging) | **v3.7.7** (deploy 13 juin 2026) | https://d9xny9istvl53.cloudfront.net |
+| Preprod | **v3.7.7** (deploy 13 juin 2026) | https://preprod.amazon.foliow.app |
 
 ✅ **MERGÉ EN PROD le 19 mai 2026** — merge 01656bc, tag v3.6.2, APP_VERSION 3.6.2 vérifié, CloudFront invalidé.
 Scope : moteur de recherche ASIN transversal topbar + rebranchement Buy Box / Appros / Prévisionnel.
@@ -712,3 +712,30 @@ Version courante en prod : v3.7.4 (depuis 2026-06-12)
 Prochaine etape : v3.7.6 = audit performance sous charge (profiling Gers 12k ASINs)
 
 Version courante en prod : v3.7.5 (depuis 2026-06-12)
+---
+## Session 2026-06-13 — v3.7.7 PROD DEPLOYED
+
+**v3.7.7 mergee sur main et deployee en production.**
+
+- Merge preprod -> main (commits v3.7.6.2 + v3.7.7 inclus) + git push origin main
+- aws s3api put-object -> S3 amazon-pilot-foliow/index.html
+- ContentLength=1124517, APP_VERSION='3.7.7' verifie
+- CloudFront E3ERL241475BJI invalide : InProgress -> I38VFKW118G1G5AP27V0U5CRLN
+- Tag v3.7.7 pousse sur GitHub
+- Amazon Pilot prod (amazon.foliow.app) : v3.7.7 LIVE
+
+**Modules livres en prod :**
+- src/parser_traffic.js (NOUVEAU) -- parser Retail Analytics Traffic CSV (variantes A/B)
+- src/parsers_internal.js enrichi -- bloc Traffic timeline dans parseCSVFile()
+- src/import_export.js enrichi -- accumulation foViews dans mergeImportData()
+- build.py enrichi -- injection @parser_traffic
+- AUDIT_v3.7.7.md : 7 points valides + P3 strict (views:0 vs absent) + P2 robustesse (6 cas negatifs)
+
+**Fonctionnalite livrée :**
+- foViews timeline par marche/semaine : c.asins[i].foViews[market][weekKey] = {views, deltaPrevPct, deltaYoyPct}
+- P1 : MARKET_CODES normalisation, codes inconnus stockes tels quels
+- P2 : weekKey strict (echec explicite si ligne 0 absente/malformee)
+- P3 : views:0 stocke comme integer 0 (distinct ASIN absent)
+- save() perf : +174ms pour 85k entrees (cas extreme Gers 4729 ASINs x 3sem x 6mkt)
+
+Version courante en prod : v3.7.7 (depuis 2026-06-13)
