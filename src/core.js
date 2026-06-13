@@ -84,6 +84,8 @@ const aiUsage = {
 
 // @parser_vc
 
+// @parser_traffic
+
 let clients = [];
 let forecastTab = 'calendar';  // 'calendar' | 'plan2027'
 let activeId = null;

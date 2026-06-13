@@ -60,8 +60,9 @@ def build(ver=None, check=False):
     seo    = strip_header(r('seo.js'))
     smoke  = strip_header(r('smoke.js'))
     guide      = strip_header(r('guide_asn.js'))
-    parser_erp = strip_header(r('parser_erp.js'))
-    parser_vc  = strip_header(r('parser_vc.js'))
+    parser_erp     = strip_header(r('parser_erp.js'))
+    parser_vc      = strip_header(r('parser_vc.js'))
+    parser_traffic = strip_header(r('parser_traffic.js'))  # v3.7.7 — timeline foViews
     yoy         = strip_header(r('yoy.js'))
     yoy_ai      = strip_header(r('yoy_ai.js'))
     yoy_enquete    = strip_header(r('yoy_enquete.js'))   # v3.6.8 — VC_AVAILABILITY_CODES + algo classification
@@ -85,7 +86,7 @@ def build(ver=None, check=False):
                            ('render_shell.js',render_shell),('render_screens.js',render_screens),('charts.js',charts),
                            ('core.js',core),('buybox.js',buybox),('seo.js',seo),
                            ('smoke.js',smoke),('guide_asn.js',guide),
-                           ('parser_erp.js',parser_erp),('parser_vc.js',parser_vc),
+                           ('parser_erp.js',parser_erp),('parser_vc.js',parser_vc),('parser_traffic.js',parser_traffic),
                            ('ai_diagnostic.js',ai_diagnostic),('word_export.js',word_export),
                            ('yoy_enquete.js',yoy_enquete),('parser_po.js',parser_po),
                            ('yoy.js',yoy),('yoy_ai.js',yoy_ai),('templates/*',yoy_templates)]:
@@ -108,8 +109,9 @@ def build(ver=None, check=False):
     js = js.replace('// @render_screens\n', render_screens + '\n')
     js = js.replace('// @charts\n',         charts + '\n')
     js = js.replace('// @guide\n',        guide + '\n')
-    js = js.replace('// @parser_erp\n',  parser_erp + '\n')
-    js = js.replace('// @parser_vc\n',   parser_vc + '\n')
+    js = js.replace('// @parser_erp\n',      parser_erp + '\n')
+    js = js.replace('// @parser_vc\n',       parser_vc + '\n')
+    js = js.replace('// @parser_traffic\n',  parser_traffic + '\n')
     js = js.replace('// @smoke\n',        smoke_main + '\n')
     js = js.replace('// @buybox\n',       buybox + '\n')
     js = js.replace('// @seo\n',          seo + '\n')
