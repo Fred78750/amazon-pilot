@@ -188,10 +188,7 @@ async function save() {
       tx.oncomplete = res;
       tx.onerror = () => rej(tx.error);
     });
-    // Calcul taille estimée pour info
-    const json = JSON.stringify(clients);
-    const kb = Math.round(json.length / 1024);
-    if (kb > 500) log(`💾 Sauvegardé — ${kb} KB (IndexedDB)`, 'ok');
+    log('💾 Sauvegardé — IndexedDB', 'ok');
   } catch(e) {
     log('Save error: ' + e.message, 'err');
     // Fallback localStorage (limité mais mieux que rien)

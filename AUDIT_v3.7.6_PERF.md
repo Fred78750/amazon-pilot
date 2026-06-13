@@ -144,7 +144,15 @@ const json = JSON.stringify(clients);  // JSON.stringify inutile (juste pour le 
 
 Chaque modification (import CSV, sauvegarde note, correction prix) déclenche un rewrite de 23 MB en IDB + un `JSON.stringify(clients)` redondant.
 
-**Mesures :** 377ms / 415ms / 405ms → **médiane 405ms** (2 clients, 23 042 Ko).
+**Mesures pré-C1 :** 377ms / 415ms / 405ms → médiane 405ms (2 clients, 23 042 Ko).  
+**Mesures post-C1 (v3.7.6.1) :** 611ms / 688ms / 590ms → **médiane 611ms** — écart expliqué ci-dessous.
+
+**Décomposition post-C1 :**
+- IDB write (clear + put × 2) : **~401ms** (put(1 client seul, R3 simulé) = 230ms médiane)
+- `JSON.stringify(clients)` redondant (log KB) : **~210ms**
+- Total : 401 + 210 = **611ms**
+
+Note : la mesure pré-C1 de 405ms sous-estimait le JSON.stringify (mesuré séparément à ~94ms pour Gers seul, ~157ms extrapolé pour tous les clients). La mesure 611ms post-C1 est la référence correcte en conditions réelles.
 
 ---
 
@@ -167,19 +175,27 @@ Classement : **Impact mesuré / Effort estimé / Risque**
 |---|---|---|---|---|
 | R1 | **Partager le résultat `calcBuyBoxAlerts` dans `render()`** — calculer 1× et passer le résultat à `renderNav()` + `badgeFn` | −1 124ms par render (−50% immédiat) | Trivial (2 lignes) | Nul |
 | R2 | **Pre-compute `totalRevenue` avant la boucle** dans `calcBuyBoxAlerts` | ×2.6→×9 speedup (O(n²)→O(n)) — Gers 1 124ms → ~120ms estimé | Trivial (1 ligne hors boucle) | Nul |
-| R3 | **`save()` dirty-flag** — ne sauvegarder que le client modifié, pas `clear`+rewrite tous | −300ms par action utilisateur | Moyen (refacto idb.js) | Faible |
-| R4 | **Supprimer `JSON.stringify(clients)` ligne 192 `save()`** — redondant, juste pour le log | −~100ms par save() | Trivial | Nul |
-| R5 | **Invalider `calcBuyBoxAlerts` sur changement de données** — cache client-level, invalider seulement à import/modif | −1 955ms sur navigations sans modif | Moyen | Faible |
+| R1 | ✅ **Livré v3.7.6.1** — partager `_bbAlerts` dans `renderNav()` | −1 124ms par render | Trivial | Nul |
+| R2 | ✅ **Livré v3.7.6.1** — pre-compute `totalRevenue` avant la boucle | ×15.8 sur `calcBuyBoxAlerts` | Trivial | Nul |
+| R4 | **Supprimer `JSON.stringify(clients)` ligne 192 `save()`** | **−210ms par save** (mesuré) | Trivial (3 lignes) | Nul |
+| R3 | **`save()` dirty-flag** — put(1 client modifié) sans clear | **−381ms par save** (mesuré, R3 seul sans stringify) | Moyen | Non nul — client supprimé resterait en IDB sans store.delete(id) explicite |
+| R5 | **Cache `calcBuyBoxAlerts` inter-navigations** | −71ms par render (post-C1, render=123ms) | Moyen | Faible — données stale si invalidation incomplète |
 
-**Gains cumulatifs R1+R2 :**
+**Gains cumulatifs R1+R2 (mesurés v3.7.6.1) :**
 
-| Dataset | Avant (mesuré/extrapolé) | Après R1+R2 estimé | Gain |
+| Dataset | Avant v3.7.5 | Après v3.7.6.1 | Gain réel |
 |---|---|---|---|
-| Cogex 1 814 | ~270 ms | ~30 ms | ×9 |
-| Gers IDB 4 729 | ~1 955 ms | ~50 ms | ×39 |
-| Gers réel 12 046 | **~16 000 ms** | **~130 ms** | **×123** |
+| Cogex 1 814 | ~270 ms | ~30 ms estimé | ×9 |
+| Gers IDB 4 729 | ~1 955 ms | **123 ms** | **×16** |
+| Gers réel 12 046 | ~16 000 ms extrapolé | ~400 ms estimé | ~×40 |
 
-R1 élimine l'appel double. R2 corrige l'O(n²) → O(n) — `calcBuyBoxAlerts` revient à un coût linéaire (~proportionnel à Cogex).
+**Verdicts R3/R4/R5 post-C1 :**
+
+**R4 — GO direct.** Gain mesuré −210ms, effort trivial (supprimer 3 lignes dans `save()`), risque nul. La log perd juste l'affichage de la taille KB.
+
+**R3 — Cadrer.** Gain mesuré −381ms (IDB put 1 client = 230ms vs clear+put all = 401ms), mais nécessite : tracker le client dirty, ajouter `store.delete(id)` pour les suppressions afin de ne pas laisser de clients orphelins en IDB. Sur 2 clients actuels, gain modeste ; intérêt croît linéairement avec N. À faire avec test régression IDB.
+
+**R5 — Classer.** Post-C1, `render()` = 123ms. Le gain de 71ms est imperceptible pour l'utilisateur. Cache + invalidation = complexité injustifiée au niveau actuel.
 
 ---
 
@@ -193,7 +209,8 @@ Pour rejouer les mesures à l'identique :
 3. Exécuter les snippets JS via javascript_tool (voir session transcript)
 4. Répéter 3× chaque mesure, retenir la médiane
 5. Conditions : Chrome version 136+, onglet seul, pas de throttling DevTools
-6. Baseline : APP_VERSION dans la page = v3.7.5
+6. Baseline v3.7.5 : APP_VERSION = v3.7.5 — valeurs de référence §1
+   Baseline post-C1 : APP_VERSION = v3.7.6.1 — render()=123ms, save()=611ms (§8)
 ```
 
 ---
@@ -226,4 +243,37 @@ Pour rejouer les mesures à l'identique :
 **Gers réel (prod) :** 12 046 ASINs  
 **Gers IDB preprod :** `cl().asins.length === 4 729` (sous-ensemble chargé dans la DB de test)
 
-Les mesures §1-§2 ont été réalisées sur 4 729 ASINs (le seul dataset disponible en preprod). Toutes les valeurs "12k" du rapport sont des extrapolations via la courbe n^2.34 calibrée sur les 2 points mesurés (1 814 et 4 729 ASINs). L'urgence des fixes R1+R2 est dimensionnée par ces extrapolations : **~16s de gel par navigation sur le client réel**.
+Les mesures §1-§2 ont été réalisées sur 4 729 ASINs (le seul dataset disponible en preprod). Toutes les valeurs "12k" du rapport sont des extrapolations via la courbe n^2.34 calibrée sur les 2 points mesurés (1 814 et 4 729 ASINs).
+
+---
+
+## 8. Mesures post-C1 (v3.7.6.1) — clôture audit
+
+**Date :** 12 juin 2026 — après livraison R1+R2 en prod.
+
+| Métrique | Avant (v3.7.5) | Après (v3.7.6.1) | Gain |
+|---|---|---|---|
+| `calcBuyBoxAlerts` médiane Gers | 1 124 ms | **71 ms** | ×15.8 |
+| `render()` médiane Gers | 1 955 ms | **123 ms** | ×16 |
+| `save()` médiane (ref corrigée) | 405 ms* | **611 ms** (réf corrigée) | — |
+
+*La mesure pré-C1 de 405ms sous-estimait le coût réel de `JSON.stringify(clients)` (~210ms). La référence 611ms est correcte.
+
+**save() décomposé post-C1 :**
+- IDB write (clear + put × 2 clients) : **~401ms**
+- `JSON.stringify(clients)` redondant : **~210ms** ← R4
+- put(1 client seul, simulé) : **230ms** ← gain R3
+
+---
+
+## 9. Leçon méthodologique — extrapolations hors domaine mesuré
+
+**Sanity check terrain (Fred, 12 juin 2026) :** aucun gel vécu sur Gers prod réel (12 046 ASINs) malgré ~16s extrapolés.
+
+**Explication probable :** le dataset Gers prod contient 12 046 entrées ASIN totales, mais la boucle `calcBuyBoxAlerts` applique dès l'entrée :
+```js
+if (!(getRevenue(a,c) > 0) && !(a.retailPct)) continue;
+```
+Une fraction significative des 12 046 ASINs sans revenu ni retailPct est éliminée en O(1). Le N effectif traité est << 12 046. L'IDB preprod (4 729 ASINs) a peut-être un taux d'activité différent du dataset prod.
+
+**Leçon :** une extrapolation calibrée sur 2 points et un exposant n^2.34 construit sur ces seuls points absorbe tous les effets non mesurés (early-exit, GC, JIT warmup, distribution réelle des données). Elle fournit une **borne haute d'alerte** — pas une prédiction de terrain. Avant de dimensionner l'urgence d'un fix d'après une extrapolation, mesurer sur le vrai dataset prod. Les ~16s extrapolées ont correctement motivé les fixes R1+R2 (gain ×16 prouvé) ; leur valeur absolue ne correspondait pas au vécu réel.

@@ -52,6 +52,21 @@ function parseCSVFile(text, filename) {
   else if (vcType === 'trafic')        { type = 'trafic'; distributorView = 'fab';   }
   else { return { error: 'Type non reconnu : ' + vcType }; }
 
+  // v3.7.7 — Enrichissement Traffic : timeline foViews par marché/semaine
+  // P2 : échec weekKey = erreur explicite, skip fichier complet
+  var weekKey = null, marketRows = null, unknownMarketCodes = [];
+  if (type === 'trafic') {
+    var tf = parseTrafficFile(text, filename);
+    if (tf.error) {
+      log('✗ ' + (filename || '') + ' [Traffic timeline] : ' + tf.error, 'err');
+      return { error: tf.error };
+    }
+    weekKey         = tf.weekKey;
+    marketRows      = tf.marketRows;
+    unknownMarketCodes = tf.unknownMarketCodes || [];
+    log('📡 Traffic timeline : weekKey=' + weekKey + ', variante=' + tf.variant + ', ' + tf.marketRows.length + ' lignes, marchés : ' + tf.marketsSeen.join('/'), 'ok');
+  }
+
   // Log type + langue detectes
   var typeLabels = {
     trafic: 'Trafic ASIN', ventes_approv: 'Ventes ASIN Approvisionnement',
@@ -137,7 +152,11 @@ function parseCSVFile(text, filename) {
     language:          result.language,
     isMultiCountry:    result.isMultiCountry,
     countriesDetected: result.countriesDetected,
-    vcType:            vcType
+    vcType:            vcType,
+    // v3.7.7 — foViews timeline (trafic uniquement)
+    weekKey:            weekKey,
+    marketRows:         marketRows,
+    unknownMarketCodes: unknownMarketCodes
   };
 }
 
