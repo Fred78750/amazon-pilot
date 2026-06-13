@@ -414,6 +414,85 @@ function mergeImportData(client, parsedFiles) {
     log('📡 foViews : ' + totalFoUpdated + ' entrées (marché×semaine) accumulées sur ' + foAsinIndex.size + ' ASINs', 'ok');
   }
 
+  // ── v3.7.8 — Accumulation timeline deliveryDefects (Delivery Defects par ASIN/semaine) ─────────
+  // weekKey = Week_end (YYYY-MM-DD, fin de semaine Amazon) — ≠ foViews qui utilise le début de semaine.
+  // Réconciliation v3.8 : foViews.weekKey (lundi) + 6j = Week_end (dimanche) de la même semaine ISO.
+  // Comptage : occurrences par ASIN (pas units — unités au niveau PO, non distribuables entre ASINs d'un même PO).
+  // Idempotence par PO+weekKey+subDefect : asin._ddPoLog trace les triplets déjà comptés — ré-import sans doublon.
+  var deliveryFiles = parsedFiles.filter(function(f) { return f && f.type === 'delivery' && f.items && f.items.length > 0; });
+  if (deliveryFiles.length > 0) {
+    var ddAsinIndex = new Map();
+    for (var dai = 0; dai < client.asins.length; dai++) {
+      var da = client.asins[dai];
+      if (da.asin && !ddAsinIndex.has(da.asin)) ddAsinIndex.set(da.asin, da);
+    }
+
+    // Index PO → [asin1, asin2, ...] depuis c.pos (POItemExport requis pour la jointure)
+    var poAsinMap = {};
+    var _pos = client.pos || [];
+    for (var pi = 0; pi < _pos.length; pi++) {
+      var _p = _pos[pi];
+      if (!_p.poId || !_p.asin) continue;
+      if (!poAsinMap[_p.poId]) poAsinMap[_p.poId] = [];
+      if (poAsinMap[_p.poId].indexOf(_p.asin) === -1) poAsinMap[_p.poId].push(_p.asin);
+    }
+
+    var totalDdUpdated = 0;
+    var unresolvedPos = {};
+    var allDeliveryItems = [];
+
+    for (var dfi = 0; dfi < deliveryFiles.length; dfi++) {
+      var df = deliveryFiles[dfi];
+      allDeliveryItems = allDeliveryItems.concat(df.items);
+
+      for (var dii = 0; dii < df.items.length; dii++) {
+        var dit = df.items[dii];
+        var dPo = dit.po;
+        var dWeek = dit.weekEnd; // YYYY-MM-DD (Week_end = fin de semaine)
+        var dSub = dit.subDefect;
+        if (!dPo || !dWeek || !dSub) continue;
+
+        var dAsins = poAsinMap[dPo];
+        if (!dAsins || dAsins.length === 0) {
+          if (!unresolvedPos[dPo]) unresolvedPos[dPo] = 0;
+          unresolvedPos[dPo]++;
+          continue;
+        }
+
+        for (var dai2 = 0; dai2 < dAsins.length; dai2++) {
+          var dAsinObj = ddAsinIndex.get(dAsins[dai2]);
+          if (!dAsinObj) continue;
+
+          // Idempotence : PO+weekKey+subDefect déjà compté pour cet ASIN ?
+          if (!dAsinObj._ddPoLog) dAsinObj._ddPoLog = {};
+          var _logKey = dPo + '|' + dWeek + '|' + dSub;
+          if (dAsinObj._ddPoLog[_logKey]) continue;
+          dAsinObj._ddPoLog[_logKey] = true;
+
+          if (!dAsinObj.deliveryDefects) dAsinObj.deliveryDefects = {};
+          if (!dAsinObj.deliveryDefects[dWeek]) dAsinObj.deliveryDefects[dWeek] = {};
+          dAsinObj.deliveryDefects[dWeek][dSub] = (dAsinObj.deliveryDefects[dWeek][dSub] || 0) + 1;
+          totalDdUpdated++;
+        }
+      }
+    }
+
+    // Coexistence : mise à jour flat array c.deliveryDefects (buybox.js:335)
+    if (allDeliveryItems.length > 0) {
+      client.deliveryDefects = allDeliveryItems;
+      client.deliveryDefectsDate = new Date().toISOString().slice(0, 10);
+    }
+
+    // POs non résolus → c.deliveryDefectsUnresolved
+    var _unresolvedList = Object.keys(unresolvedPos);
+    client.deliveryDefectsUnresolved = _unresolvedList;
+    if (_unresolvedList.length > 0) {
+      log('⚠ Delivery : ' + _unresolvedList.length + ' POs non résolus (POItemExport absent ?) : ' + _unresolvedList.slice(0, 5).join(', ') + (_unresolvedList.length > 5 ? '…' : ''), 'warn');
+    }
+
+    log('📦 deliveryDefects : ' + totalDdUpdated + ' entrées (ASIN×semaine×type) accumulées', 'ok');
+  }
+
   // ── Enrichissement titres depuis catalogueXML (désignations françaises) ──
   if (client.catalogueXML && client.catalogueXML.length > 0) {
     var xmlByAsin = {};

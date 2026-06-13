@@ -6,6 +6,8 @@ function detectFileType(headers) {
   const h = headers.map(x => norm(x)).join(' ');
   if ((h.includes('chiffre') && h.includes('affaires')) || h.includes('ordered revenue') || h.includes('revenus')) return 'ventes';
   if (h.includes('vues') || h.includes('glance') || h.includes('offre vedette')) return 'trafic';
+  // v3.7.8 — Delivery Defects : Week_end + Sub-Defect (header ligne 0, sans métadonnées)
+  if (h.includes('sub-defect') && h.includes('week_end')) return 'delivery';
   if (h.includes('stock') || h.includes('rupture') || h.includes('vendable') || h.includes('invendable')
     || h.includes('sellable') || h.includes('unsellable') || h.includes('inventory') || h.includes('fill rate') || h.includes('purchase order')) return 'stock';
   if (h.includes('bdc') || h.includes('quantite demandee') || h.includes('quantite acceptee') || h.includes('purchase order number') || h.includes('code fournisseur')) return 'po';
@@ -33,6 +35,22 @@ function detectPeriodType(startDate, endDate, intervalMeta) {
 }
 
 function parseCSVFile(text, filename) {
+  // v3.7.8 — Pré-check Delivery Defects (header en ligne 0, pas de ligne de métadonnées)
+  // Détection avant parseVCFile : "Week_end" + "Sub-Defect" dans les 512 premiers chars
+  var _precheck = (text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text).slice(0, 512).toLowerCase();
+  if (_precheck.includes('week_end') && _precheck.includes('sub-defect')) {
+    var _dd = parseDeliveryDefectsCSV(text);
+    if (_dd.error) {
+      log('✗ ' + (filename || '') + ' [Delivery defects] : ' + _dd.error, 'err');
+      return { error: _dd.error };
+    }
+    var _wkSeen = {}, _weekKeys = [];
+    _dd.items.forEach(function(it) { if (it.weekEnd && !_wkSeen[it.weekEnd]) { _wkSeen[it.weekEnd] = true; _weekKeys.push(it.weekEnd); } });
+    _weekKeys.sort();
+    log('📦 ' + (filename || '') + ' [Delivery defects] : ' + _dd.items.length + ' défauts, ' + _weekKeys.length + ' semaines (' + _weekKeys.slice(0, 3).join(', ') + (_weekKeys.length > 3 ? '…' : '') + ')', 'ok');
+    return { type: 'delivery', items: _dd.items, weekKeys: _weekKeys };
+  }
+
   // v3.6.6.1 — Délégation au parser universel multilingue parseVCFile()
   // Maintient la structure de retour legacy pour tous les appelants existants
   var result = parseVCFile(text, filename);
@@ -492,3 +510,12 @@ function parseMatriceTarif(xmlText) {
     return { error: 'Erreur de parsing : ' + e.message };
   }
 }
+
+// ── Helper debug — v3.7.8 ─────────────────────────────────────────────────────
+// Accès console : getDeliveryDefects('B00PVPXVBE')
+window.getDeliveryDefects = function(asin) {
+  var c = (typeof cl === 'function') ? cl() : (window.clients && window.clients[0]);
+  if (!c) return null;
+  var a = (c.asins || []).find(function(x) { return x.asin === asin; });
+  return a ? (a.deliveryDefects || null) : null;
+};
