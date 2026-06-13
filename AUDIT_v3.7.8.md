@@ -62,24 +62,38 @@ c.asins[i]._ddPoLog = {                  // log interne idempotence (sérialisé
 
 ## 4. Clé semaine — Alignement foViews vs deliveryDefects
 
-| Champ | Source | Format | Valeur exemple |
-|-------|--------|--------|----------------|
-| `foViews` weekKey | `Champ de vision.=[JJ/MM/AAAA - ...]` ligne 0 | YYYY-MM-DD **(début de semaine)** | `2026-05-31` (lundi) |
-| `deliveryDefects` weekKey | colonne `Week_end` | YYYY-MM-DD **(fin de semaine)** | `2026-01-24` (samedi) |
+| Champ | Source | Format | Convention | Valeur exemple |
+|-------|--------|--------|------------|----------------|
+| `foViews` weekKey | `Champ de vision.=[JJ/MM/AAAA - ...]` ligne 0 | YYYY-MM-DD | **Lundi (début de semaine)** | `2026-01-19` (lun) |
+| `deliveryDefects` weekKey | colonne `Week_end` | YYYY-MM-DD | **Samedi (fin de semaine Amazon)** | `2026-01-24` (sam) |
 
-**Réconciliation pour v3.8** : `foViews.weekKey + 6 jours = deliveryDefects.weekKey` pour la même semaine ISO.  
-Exemple : foViews `2026-01-19` (lundi) → Week_end `2026-01-24` (samedi, +5j) ou `2026-01-25` (dimanche, +6j selon convention Amazon).  
-⚠️ La convention Amazon utilise le **samedi** comme fin de semaine (pas dimanche ISO). Pour le croisement v3.8, vérifier sur un cas réel que `Week_end` correspond bien au samedi de la semaine foViews.
+**Règle de réconciliation pour v3.8 (confirmée sur fichier réel) :**
+
+```
+foViews.weekKey  +  5 jours  =  deliveryDefects.weekKey
+(lundi)                          (samedi de la même semaine)
+```
+
+Exemples vérifiés sur `Delivery#2025-06-01_2026-05-31#FR.csv` :
+
+| deliveryDefects weekKey | Jour | foViews weekKey correspondant | Vérification |
+|------------------------|------|-------------------------------|-------------|
+| `2026-01-24` | sam | `2026-01-19` | lundi ✅ |
+| `2026-01-31` | sam | `2026-01-26` | lundi ✅ |
+| `2025-07-05` | sam | `2025-06-30` | lundi ✅ |
+
+**Tous les `Week_end` du fichier réel sont des samedis.** Amazon utilise la semaine lundi→samedi (6 jours), pas la semaine ISO standard (lundi→dimanche). Le croisement v3.8 utilisera `weekEnd = foViewsWeekKey + 5 * 86400000 ms`.
 
 ---
 
-## 5. Idempotence — modèle addatif PO+weekKey+subDefect
+## 5. Idempotence — modèle additif PO+weekKey+subDefect
 
-Les fichiers Delivery sont des fenêtres **12 mois glissants** — deux imports successifs se chevauchent partiellement. Un reset total perdrait l'historique sorti de fenêtre ou rendrait le résultat dépendant de l'ordre d'import.
+Les fichiers Delivery sont des fenêtres **12 mois glissants** — deux imports successifs se chevauchent partiellement.
 
-Modèle retenu : `asin._ddPoLog[po|weekKey|subDefect] = true` — trace les triplets déjà comptés.
-- Ré-import même fichier : `added=0`, counts inchangés ✅
-- Import fenêtre chevauchante : périodes non chevauchantes préservées, périodes communes non doublées ✅
+**Reset total écarté** : un reset de `asin.deliveryDefects` à chaque import perdrait l'historique sorti de la nouvelle fenêtre et rendrait le résultat dépendant de l'ordre d'import. Ce cas est précisément le scénario A puis B ci-dessous.
+
+**Modèle retenu** : `asin._ddPoLog[po|weekKey|subDefect] = true` — chaque triplet (PO, semaine, type de défaut) n'est compté qu'une fois, indépendamment du nombre d'imports et de leur ordre. Modèle additif identique à `foViews`.
+
 - `_ddPoLog` sérialisé dans IDB → idempotence persistante entre sessions ✅
 
 ---
@@ -106,9 +120,40 @@ Raison : les units sont au niveau PO (`185` unités pour le PO entier). Si ce PO
 - PO `8GOJWJRJ` → B00PVPXVBE + B009G3EMDI : les deux ASINs reçoivent chacun 1 occurrence ✅
 - PO sans entrée dans c.pos → stocké dans `c.deliveryDefectsUnresolved` ✅ (simulé : unresolved=0 car POs injectés)
 
-### Point 4 — Idempotence
-- Ré-import même fichier : `added_second_import=0`, `unchanged=true` ✅
-- Structure `deliveryDefects` inchangée après ré-import ✅
+### Point 4 — Idempotence : ré-import + test de chevauchement
+
+**4a — Ré-import à l'identique :**
+- `added_second_import=0`, structure `deliveryDefects` inchangée ✅
+
+**4b — Test de chevauchement (cas justifiant l'écart du reset total) :**
+
+Scénario : PO_A → ASIN B_TEST
+
+| Fichier | Semaines couvertes | Lignes |
+|---------|-------------------|--------|
+| Fichier A (fenêtre ancienne) | 2025-06-07, 2025-06-14, **2025-07-05** | 3 |
+| Fichier B (fenêtre décalée) | **2025-07-05**, 2025-07-12, 2025-08-02 | 3 |
+
+`2025-07-05` est la semaine commune (overlap). Import A puis B :
+
+```
+addedA = 3  (toutes nouvelles)
+addedB = 2  (2025-07-05/Not On Time déjà dans _ddPoLog → sauté)
+```
+
+État final `B_TEST.deliveryDefects` :
+
+```json
+{
+  "2025-06-07": { "BOL Mismatch": 1 },   ← A préservé (hors fenêtre B) ✅
+  "2025-06-14": { "BOL Mismatch": 1 },   ← A préservé (hors fenêtre B) ✅
+  "2025-07-05": { "Not On Time": 1 },    ← commun A∩B — 1 seul, pas 2 ✅
+  "2025-07-12": { "BOL Mismatch": 1 },   ← B nouveau ✅
+  "2025-08-02": { "Rejected": 1 }        ← B nouveau ✅
+}
+```
+
+`overall_pass=true` — reset total bien écarté ✅
 
 ### Point 5 — detectFileType (pas de faux positifs)
 | Headers | Type retourné |
