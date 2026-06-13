@@ -382,6 +382,38 @@ function mergeImportData(client, parsedFiles) {
 
   client.asins = Array.from(asinMap.values());
 
+  // ── v3.7.7 — Accumulation timeline foViews (Featured Offer Page Views) ──────
+  // Traitement après client.asins fixé. foViews est accumulé (jamais resetté).
+  // P3 : views=0 stocké comme 0 (distingue 0-mesuré vs ASIN absent de cette semaine).
+  var trafficFiles = parsedFiles.filter(function(f) { return f && f.type === 'trafic' && f.weekKey && f.marketRows; });
+  if (trafficFiles.length > 0) {
+    // Index ASIN → objet (premier match — chaque ASIN est unique dans client.asins)
+    var foAsinIndex = new Map();
+    for (var fai = 0; fai < client.asins.length; fai++) {
+      var fa = client.asins[fai];
+      if (fa.asin && !foAsinIndex.has(fa.asin)) foAsinIndex.set(fa.asin, fa);
+    }
+    var totalFoUpdated = 0;
+    for (var tfi = 0; tfi < trafficFiles.length; tfi++) {
+      var tf = trafficFiles[tfi];
+      var rows = tf.marketRows;
+      for (var ri = 0; ri < rows.length; ri++) {
+        var mr = rows[ri];
+        var ex = foAsinIndex.get(mr.asin);
+        if (!ex) continue; // ASIN absent du catalogue → skip
+        if (!ex.foViews) ex.foViews = {};
+        if (!ex.foViews[mr.market]) ex.foViews[mr.market] = {};
+        ex.foViews[mr.market][tf.weekKey] = {
+          views: mr.views,
+          deltaPrevPct: mr.deltaPrevPct,
+          deltaYoyPct: mr.deltaYoyPct
+        };
+        totalFoUpdated++;
+      }
+    }
+    log('📡 foViews : ' + totalFoUpdated + ' entrées (marché×semaine) accumulées sur ' + foAsinIndex.size + ' ASINs', 'ok');
+  }
+
   // ── Enrichissement titres depuis catalogueXML (désignations françaises) ──
   if (client.catalogueXML && client.catalogueXML.length > 0) {
     var xmlByAsin = {};
