@@ -515,6 +515,11 @@ px playwright test tests/smoke.spec.js --reporter=line (6 tests)
 
 ---
 
+✅ **v3.7.7 MERGÉ EN PROD le 13 juin 2026** — merge preprod→main 2704c45, tag v3.7.7, CloudFront E3ERL241475BJI invalidé. ContentLength=1124517 ✓.
+Scope : Parser Traffic foViews timeline — src/parser_traffic.js (nouveau), parsers_internal.js + import_export.js enrichis. Variantes A (mono-pays) et B (multi-pays). P1 MARKET_CODES, P2 weekKey strict, P3 views:0 vs absent. AUDIT_v3.7.7.md validé (7 points + P3 strict + P2 robustesse 6 cas négatifs).
+
+✅ **v3.7.6.2 MERGÉ EN PROD le 13 juin 2026** (inclus dans le merge v3.7.7) — Fix R4 : suppression JSON.stringify redondant dans save() → 318ms (−293ms vs 611ms pré-fix).
+
 ✅ **v3.7.6.1 MERGÉ EN PROD le 12 juin 2026** — merge main 3729581, tag v3.7.6.1, CloudFront E3ERL241475BJI invalidé. ContentLength=1113307 ✓.
 Scope : Fix perf C1 — R1 (dédoublonnage `calcBuyBoxAlerts` : `render_shell.js` utilise `_bbAlerts` déjà calculé pour badge buybox, supprime double appel via `badgeFn`) + R2 (O(n²)→O(n) : `totalRevenue` pre-calculé avant la boucle dans `buybox.js`).
 Mesures Gers 4729 ASINs : `calcBuyBoxAlerts` 1124ms→71ms (×15.8), `render()` 1955ms→98ms (×20). Résultats strictement identiques avant/après (critical=110, warning=28, suppressed=2729). Badge buybox Gers=110 ✓, Cogex=179 ✓. Smoke 27/30 (V7/V8e/V8f dettes pré-existantes). Console 0 erreur.
