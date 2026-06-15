@@ -12,7 +12,9 @@ function buildWeeklyConsolidated(asins, c, nbWeeks, market) {
       const key = h.periodStart || h.period;
       if (!key) return;
       if (!byWeek[key]) byWeek[key] = { key: key, ca: 0, units: 0, gv: 0, stock: 0, n: 0 };
-      byWeek[key].ca    += a.sourcingOnly ? 0 : (h.revenue || 0);
+      byWeek[key].ca    += a.sourcingOnly ? 0
+        : (pref === 'ordered' ? (h.orderedRevenue || h.revenue || 0)
+                              : (h.shippedRevenue || h.revenue || 0));
       byWeek[key].units += a.sourcingOnly ? 0 : (h.units || 0);
       byWeek[key].gv    += h.glanceViews || 0;
       byWeek[key].stock += h.sellableUnits || 0;
@@ -105,7 +107,17 @@ function buildDashWeeklyChartConfig(periods, c, isMonthly) {
   return {
     type: 'bar',
     data: {
-      labels: periods.map(function(w) { return (w.key||'').slice(0,5); }),
+      labels: periods.map(function(w) {
+        if (isMonthly) return (w.key||'').slice(0,5);
+        // Hebdo : plage "JJ/MM au JJ/MM" (dimanche → samedi) si peu de semaines,
+        // sinon date de FIN seule (sinon labels illisibles au-delà de ~8 semaines).
+        var pk = (w.key||'').split('/');
+        if (pk.length < 3) return (w.key||'').slice(0,5);
+        var ds = new Date(pk[2], pk[1]-1, pk[0]);
+        var de = new Date(ds.getTime() + 6*86400000);
+        var f = function(d){ return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2); };
+        return periods.length <= 8 ? (f(ds) + ' au ' + f(de)) : f(de);
+      }),
       datasets: datasets
     },
     options: {
