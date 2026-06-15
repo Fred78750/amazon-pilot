@@ -19,3 +19,4 @@ Les 6 portes de triage séquentiel permettent d'orienter rapidement vers la fami
 
 - **V3** (juin 2026) — ce dossier — référence active pour la conception de l'Agent BB (v3.8+)
 - **V2** (archivée) — `../archive/livrable_audit_buybox_vendor1p_v2.md` — grille BB-1→12 seule
+- **Modèle Excel V2** (archivé, obsolète) — `../archive/modele_audit_buybox_vendor1p_v2.xlsx` — outil opérationnel V2, ne couvre ni les familles A→P ni les 6 portes de triage. Remplacé par la méthodo V3.
