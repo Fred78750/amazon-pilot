@@ -704,7 +704,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.7.10';
+const APP_VERSION = '3.7.11';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -20047,10 +20047,12 @@ function buildWeeklyConsolidated(asins, c, nbWeeks, market) {
     (a.history || []).forEach(function(h) {
       const key = h.periodStart || h.period;
       if (!key) return;
-      if (!byWeek[key]) byWeek[key] = { key: key, ca: 0, units: 0, gv: 0, stock: 0, n: 0 };
+      if (!byWeek[key]) byWeek[key] = { key: key, ca: 0, units: 0, gv: 0, stock: 0, ordered: 0, shipped: 0, n: 0 };
       byWeek[key].ca    += a.sourcingOnly ? 0
         : (pref === 'ordered' ? (h.orderedRevenue || h.revenue || 0)
                               : (h.shippedRevenue || h.revenue || 0));
+      byWeek[key].ordered += a.sourcingOnly ? 0 : (h.orderedRevenue || 0);
+      byWeek[key].shipped += a.sourcingOnly ? 0 : (h.shippedRevenue || h.revenue || 0);
       byWeek[key].units += a.sourcingOnly ? 0 : (h.units || 0);
       byWeek[key].gv    += h.glanceViews || 0;
       byWeek[key].stock += h.sellableUnits || 0;
@@ -20058,6 +20060,33 @@ function buildWeeklyConsolidated(asins, c, nbWeeks, market) {
     });
   });
   return Object.values(byWeek).sort(function(a,b){ return _dwParseDate(a.key)-_dwParseDate(b.key); }).slice(-nbWeeks);
+}
+
+// Format "JJ/MM → JJ/MM" (dimanche → samedi) à partir de la clé periodStart
+function _dwWeekRange(key) {
+  var p = (key || '').split('/');
+  if (p.length < 3) return key || '';
+  var ds = new Date(p[2], p[1]-1, p[0]);
+  var de = new Date(ds.getTime() + 6*86400000);
+  var g = function(d){ return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2); };
+  return g(ds) + ' → ' + g(de);
+}
+
+// Détecte les semaines incomplètes au niveau agrégé (somme tous ASINs du marché).
+// Robuste : un total à 0 sur ~2000 ASINs avec vues>0 = donnée non importée, pas "0 vente".
+function detectIncompleteWeeks(periods) {
+  var out = [];
+  (periods || []).forEach(function(w) {
+    var ord = w.ordered || 0, shp = w.shipped || 0, gv = w.gv || 0, st = w.stock || 0;
+    var hasVentes = ord > 0 || shp > 0;
+    var miss = null;
+    if (gv > 0 && ord === 0 && shp === 0)      miss = 'Ventes manquantes';
+    else if (gv > 0 && ord === 0 && shp > 0)   miss = 'Commandé manquant';
+    else if (hasVentes && gv === 0)            miss = 'Trafic manquant';
+    else if (hasVentes && gv > 0 && st === 0)  miss = 'Stock manquant';
+    if (miss) out.push({ key: w.key, miss: miss });
+  });
+  return out;
 }
 
 function buildMonthlyConsolidated(asins, c, nbMonths, market) {
@@ -20216,6 +20245,23 @@ function initDashWeeklyChart() {
     +'<span style="background:var(--s2);border-radius:6px;padding:4px 10px"><b>Périodes</b> '+periods.length+'</span>'
     +'<span style="background:var(--s2);border-radius:6px;padding:4px 10px;color:'+n1color+'">'+n1str+'</span>'
     +'</div>';
+
+  // ── Bandeau « semaines incomplètes » (mode semaines uniquement) ──
+  if (!isMonthly) {
+    var inc = detectIncompleteWeeks(periods);
+    if (inc.length) {
+      var rows = inc.map(function(w) {
+        return '<div style="font-size:11px;color:var(--tx2);margin-top:2px">• <b>' + _dwWeekRange(w.key) + '</b> — ' + w.miss + '</div>';
+      }).join('');
+      kpiEl.innerHTML += '<div style="margin-top:10px;padding:8px 11px;border-radius:6px;'
+        + 'background:rgba(234,88,12,0.08);border:1px solid rgba(234,88,12,0.28)">'
+        + '<div style="font-size:11px;font-weight:600;color:#EA580C">⚠ ' + inc.length
+        + ' semaine' + (inc.length > 1 ? 's' : '') + ' incomplète' + (inc.length > 1 ? 's' : '')
+        + '</div>' + rows
+        + '<div style="font-size:10px;color:var(--tx3);margin-top:5px">Importez le rapport manquant de la semaine concernée dans <b>Import données</b>.</div>'
+        + '</div>';
+    }
+  }
 }
 
 // ── Onglets marchés ─────────────────────────────────────────────────────────
