@@ -372,8 +372,13 @@ function mergeImportData(client, parsedFiles) {
         revenueDelta: ex.revenueDelta || null
       };
       log('📸 Snapshot ' + ex.asin + ' revenue=' + snapshot.revenue + ' ordered=' + snapshot.orderedRevenue, 'ok');
-      const alreadyArchived = ex.history.some(h => h.period === snapshot.period);
-      if (!alreadyArchived) {
+      // v3.7.9 — upsert au lieu de skip : import fichier-par-fichier (autoImportFiles/s3_poll)
+      // crée le snapshot dès le 1er fichier ; les suivants doivent l'enrichir, pas être bloqués.
+      // Le spread laisse le snapshot reconstruit (depuis ex accumulé) gagner — y compris un 0 mesuré.
+      const existingIdx = ex.history.findIndex(h => h.period === snapshot.period);
+      if (existingIdx >= 0) {
+        ex.history[existingIdx] = { ...ex.history[existingIdx], ...snapshot };
+      } else {
         ex.history.push(snapshot);
         if (ex.history.length > 52) ex.history.shift();
       }

@@ -704,7 +704,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.7.8';
+const APP_VERSION = '3.7.10';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -4141,8 +4141,13 @@ function mergeImportData(client, parsedFiles) {
         revenueDelta: ex.revenueDelta || null
       };
       log('📸 Snapshot ' + ex.asin + ' revenue=' + snapshot.revenue + ' ordered=' + snapshot.orderedRevenue, 'ok');
-      const alreadyArchived = ex.history.some(h => h.period === snapshot.period);
-      if (!alreadyArchived) {
+      // v3.7.9 — upsert au lieu de skip : import fichier-par-fichier (autoImportFiles/s3_poll)
+      // crée le snapshot dès le 1er fichier ; les suivants doivent l'enrichir, pas être bloqués.
+      // Le spread laisse le snapshot reconstruit (depuis ex accumulé) gagner — y compris un 0 mesuré.
+      const existingIdx = ex.history.findIndex(h => h.period === snapshot.period);
+      if (existingIdx >= 0) {
+        ex.history[existingIdx] = { ...ex.history[existingIdx], ...snapshot };
+      } else {
         ex.history.push(snapshot);
         if (ex.history.length > 52) ex.history.shift();
       }
@@ -20043,7 +20048,9 @@ function buildWeeklyConsolidated(asins, c, nbWeeks, market) {
       const key = h.periodStart || h.period;
       if (!key) return;
       if (!byWeek[key]) byWeek[key] = { key: key, ca: 0, units: 0, gv: 0, stock: 0, n: 0 };
-      byWeek[key].ca    += a.sourcingOnly ? 0 : (h.revenue || 0);
+      byWeek[key].ca    += a.sourcingOnly ? 0
+        : (pref === 'ordered' ? (h.orderedRevenue || h.revenue || 0)
+                              : (h.shippedRevenue || h.revenue || 0));
       byWeek[key].units += a.sourcingOnly ? 0 : (h.units || 0);
       byWeek[key].gv    += h.glanceViews || 0;
       byWeek[key].stock += h.sellableUnits || 0;
@@ -20136,7 +20143,17 @@ function buildDashWeeklyChartConfig(periods, c, isMonthly) {
   return {
     type: 'bar',
     data: {
-      labels: periods.map(function(w) { return (w.key||'').slice(0,5); }),
+      labels: periods.map(function(w) {
+        if (isMonthly) return (w.key||'').slice(0,5);
+        // Hebdo : plage "JJ/MM au JJ/MM" (dimanche → samedi) si peu de semaines,
+        // sinon date de FIN seule (sinon labels illisibles au-delà de ~8 semaines).
+        var pk = (w.key||'').split('/');
+        if (pk.length < 3) return (w.key||'').slice(0,5);
+        var ds = new Date(pk[2], pk[1]-1, pk[0]);
+        var de = new Date(ds.getTime() + 6*86400000);
+        var f = function(d){ return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2); };
+        return periods.length <= 8 ? (f(ds) + ' au ' + f(de)) : f(de);
+      }),
       datasets: datasets
     },
     options: {
