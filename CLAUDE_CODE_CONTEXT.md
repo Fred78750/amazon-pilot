@@ -1,6 +1,6 @@
 ﻿# CLAUDE_CODE_CONTEXT.md
 **Fichier vivant — mis à jour à chaque fin de session**
-**Dernière mise à jour :** 29 mai 2026 (v3.6.8.8 PREPROD — YoY Étape 3a Enquête ASINs + parser_po + pattern retour + 9 fixes onclick JSON.stringify)
+**Dernière mise à jour :** 13 juin 2026 (v3.7.8 PROD — Parser Delivery natif + timeline deliveryDefects par ASIN)
 
 ---
 
@@ -136,9 +136,39 @@ Tout patch doit être minimal et ciblé :
 | v3.7.1   | ✅ **PROD** — mergé 11 juin 2026 / tag v3.7.1 | 238f302 (main) |
 | v3.7.2   | ✅ **PROD** — mergé 11 juin 2026 / tag v3.7.2 | fd45377 (main) |
 | v3.7.3   | ✅ **PROD** — mergé 12 juin 2026 / tag v3.7.3 | 325096a (main) |
+| v3.7.7   | ✅ **PROD** — mergé 13 juin 2026 / tag v3.7.7 | 2704c45 (main) |
+| v3.7.8   | ✅ **PROD** — mergé 13 juin 2026 / tag v3.7.8 | 78d24c8 (main) |
 
 En cas de doute, revenir à la dernière version marquée ✅ Stable.
 Mettre à jour ce tableau après chaque merge main validé par Fred.
+
+---
+
+## PROCHAIN CHANTIER — v3.8 (phase CONCEPTION — AVANT tout code)
+
+**Cycle de CODE v3.7 CLOS.** v3.7.9 fondu dans v3.8.
+
+### Prérequis CONCEPTION (à valider avant tout brief Claude Code)
+1. Maquettes HTML validées Fred (règle 36) — 4 obligatoires :
+   - (a) Landing page Buy Box refondue
+   - (b) Fiche ASIN Recovery Agent (inspirée preview GPT 03/06/2026)
+   - (c) Workflow conversationnel Agent BB Diagnostic
+   - (d) Workflow Agent Communication Amazon (pour v3.9)
+2. CDC précis (tokens CSS + specs + limites négatives) → Claude Design exécute
+3. Méthodologie V3 GPT déposée ✅ (`references/buybox/v3/`) — BB-1→12 + familles A→P + 6 portes
+4. Tag suspect défini ✅ : **ratio FO Page Views / Glance Views** (pas la valeur absolue FO)
+5. [À VALIDER] CDC tranchés
+6. Retour terrain B00PVPXVBE (diagnostic mixte BB-8+BB-10+BB-3+BB-5+BB-4)
+
+### Contenu v3.8
+- **UX Buy Box refondue** (3 niveaux) : ASINs suspects sur Dashboard+Revue Hebdo / flag suspect + lien Agent BB sur Analyse ASINs / refonte écran Buy Box (header conservé + liste suspects + CTA "Lancer Agent BB")
+- **Agent BB Diagnostic** : pattern UX type Agent SEO, applique BB-1→12, score qualitatif "faisceau fort/modéré/à confirmer", variantes défensive/offensive. Capture page = collage manuel (pas de scraping)
+- **Ex-v3.7.9 fondus** : tag suspect calculé, cache cross-ASIN, capture page Amazon
+
+### Règles techniques à ne pas oublier pour v3.8
+- **FO views weekKey (lundi) + 5j = deliveryDefects weekKey (samedi)** — réconciliation timelines pour croisement
+- **Signal FO views = double usage** : chute = défensif (BB-10/11 perte exposition) / hausse = offensif (signal d'investir)
+- **Tag suspect = FO views / Glance views** — les 2 métriques déjà en IDB depuis v3.7.7+v3.7.8
 
 ---
 
@@ -164,9 +194,9 @@ Fred valide. Claude Code exécute. Jamais l'inverse.
 
 | Environnement | Version | URL |
 |---|---|---|
-| Production (main) | **v3.7.3** (merge 12 juin 2026 — tag v3.7.3 — commit 325096a) | https://amazon.foliow.app |
-| Recette (staging) | **v3.7.3** (deploy S3 12 juin 2026) | https://d9xny9istvl53.cloudfront.net |
-| Preprod | **v3.7.3** (deploy 12 juin 2026) | https://preprod.amazon.foliow.app |
+| Production (main) | **v3.7.8** (merge 13 juin 2026 — tag v3.7.8 — commit 78d24c8) | https://amazon.foliow.app |
+| Recette (staging) | **v3.7.7** (deploy 13 juin 2026) | https://d9xny9istvl53.cloudfront.net |
+| Preprod | **v3.7.8** (deploy 13 juin 2026) | https://preprod.amazon.foliow.app |
 
 ✅ **MERGÉ EN PROD le 19 mai 2026** — merge 01656bc, tag v3.6.2, APP_VERSION 3.6.2 vérifié, CloudFront invalidé.
 Scope : moteur de recherche ASIN transversal topbar + rebranchement Buy Box / Appros / Prévisionnel.
@@ -196,6 +226,18 @@ Scope : Patch ERP parser Gers — nouveau format fichier `202605_Dispo_Amazon_Ma
 - BTI-1 (deploy-preprod.yml) : backlog maintenu.
 
 ✅ **v3.6.8.8 + v3.6.8.9 MERGÉS EN PROD le 29 mai 2026** — tags v3.6.8.8 / v3.6.8.9, CloudFront invalidé.
+
+✅ **v3.7.8 MERGÉ EN PROD le 13 juin 2026** — commit 78d24c8 (main), tag v3.7.8, ContentLength=1109807, CloudFront I4LIJB9XK97R84IDZY0IAWBR0W invalidé.
+Scope : Parser Delivery natif intégré au flux standard (drag-drop CSV) + timeline `deliveryDefects` par ASIN.
+- `src/parsers_internal.js` : branche 'delivery' dans `detectFileType` ; pré-check Delivery dans `parseCSVFile` (avant `parseVCFile`) ; `window.getDeliveryDefects()` helper debug.
+- `src/import_export.js` : bloc accumulation `deliveryDefects` dans `mergeImportData` — construction `poAsinMap` depuis `c.pos`, idempotence par clé `PO+weekKey+subDefect` via `asin._ddPoLog`, coexistence flat array `c.deliveryDefects` (buybox.js:335 inchangé), `c.deliveryDefectsUnresolved` pour POs sans ASIN résolu.
+- `src/idb.js` : `deliveryDefectsUnresolved: []` ajouté au schéma de migration.
+- Modèle additif (comme foViews) — reset total écarté (fichiers 12 mois glissants se chevauchent).
+- Granularité : `deliveryDefects` weekKey = **samedi** (Week_end Amazon) ; `foViews` weekKey = **lundi** (début semaine). Réconciliation v3.8 : `foViews.weekKey + 5j = Week_end`. Confirmé sur données réelles.
+- Smoke 27/30 (3 dettes pré-existantes V7/V8e/V8f — aucune régression). AUDIT_v3.7.8.md incl. test chevauchement.
+
+✅ **v3.7.7 MERGÉ EN PROD le 13 juin 2026** — commit 2704c45 (main), tag v3.7.7, ContentLength=1124517, CloudFront invalidé.
+Scope : timeline foViews par ASIN×marché (parsers_internal.js + import_export.js + idb.js). weekKey = lundi ISO (début de période). AUDIT_v3.7.7.md incl. P3 strict (views:0 vs absent) + P2 robustesse (6 cas négatifs).
 
 ✅ **v3.7.1 MERGÉ EN PROD le 11 juin 2026** — commits 0c16ce6 + 238f302 (main), tag v3.7.1, CloudFront invalidé.
 Scope : Refacto archi — extraction `src/utils.js` (33 items) + `src/idb.js` (10 items) depuis core.js. core.js : 10 962 L → 10 019 L (-943 L). Zéro changement fonctionnel. node --check ✅, smoke 27/30 (3 échecs pré-existants).
@@ -515,7 +557,12 @@ px playwright test tests/smoke.spec.js --reporter=line (6 tests)
 
 ---
 
-✅ **v3.7.6.1 VALIDÉ PREPROD le 12 juin 2026** — staging commit 3fce3a9, preprod déployé S3+CloudFront E3CODYJ437XKU5. Attente GO Fred pour merge main.
+✅ **v3.7.7 MERGÉ EN PROD le 13 juin 2026** — merge preprod→main 2704c45, tag v3.7.7, CloudFront E3ERL241475BJI invalidé. ContentLength=1124517 ✓.
+Scope : Parser Traffic foViews timeline — src/parser_traffic.js (nouveau), parsers_internal.js + import_export.js enrichis. Variantes A (mono-pays) et B (multi-pays). P1 MARKET_CODES, P2 weekKey strict, P3 views:0 vs absent. AUDIT_v3.7.7.md validé (7 points + P3 strict + P2 robustesse 6 cas négatifs).
+
+✅ **v3.7.6.2 MERGÉ EN PROD le 13 juin 2026** (inclus dans le merge v3.7.7) — Fix R4 : suppression JSON.stringify redondant dans save() → 318ms (−293ms vs 611ms pré-fix).
+
+✅ **v3.7.6.1 MERGÉ EN PROD le 12 juin 2026** — merge main 3729581, tag v3.7.6.1, CloudFront E3ERL241475BJI invalidé. ContentLength=1113307 ✓.
 Scope : Fix perf C1 — R1 (dédoublonnage `calcBuyBoxAlerts` : `render_shell.js` utilise `_bbAlerts` déjà calculé pour badge buybox, supprime double appel via `badgeFn`) + R2 (O(n²)→O(n) : `totalRevenue` pre-calculé avant la boucle dans `buybox.js`).
 Mesures Gers 4729 ASINs : `calcBuyBoxAlerts` 1124ms→71ms (×15.8), `render()` 1955ms→98ms (×20). Résultats strictement identiques avant/après (critical=110, warning=28, suppressed=2729). Badge buybox Gers=110 ✓, Cogex=179 ✓. Smoke 27/30 (V7/V8e/V8f dettes pré-existantes). Console 0 erreur.
 
@@ -670,3 +717,72 @@ Points valides :
 **Anomalie A1 signalee** : parsePOCSV/mergePOData dans import_export.js coexistent avec parser_po.js -- pas de doublon fonctionnel avere, fusion = decision separee.
 
 Prochaine etape : GO Fred -> merge main -> prod -> tag v3.7.4
+---
+## Session 2026-06-12 — v3.7.4 PROD DEPLOYED
+
+**v3.7.4 mergee sur main et deployee en production.**
+
+- git merge staging -> main (fast-forward, 11 fichiers)
+- git push origin main -> GitHub Actions deploy.yml declenche automatiquement
+- S3 amazon-pilot-foliow/index.html mis a jour : ContentLength=1092890, APP_VERSION='3.7.4', LastModified=2026-06-12T13:33:24+00:00
+- CloudFront E3ERL241475BJI invalide : Status=Completed (2026-06-12T13:33:25Z)
+- Tag v3.7.4 pousse sur GitHub
+- Amazon Pilot prod (amazon.foliow.app) : v3.7.4 LIVE
+
+**Modules livres en prod :**
+- src/import_export.js (16 fonctions, 47343 chars) -- extraction stricte de core.js
+- src/s3_poll.js (8 fonctions + 2 vars etat, 5889 chars) -- extraction stricte de core.js
+- core.js reduit de 9103 -> 7975 L (-1128 L)
+- AUDIT_v3.7.4.md : 8 points valides, anomalie A1 documentee
+
+Version courante en prod : v3.7.4 (depuis 2026-06-12)
+---
+## Session 2026-06-12 — v3.7.5 PROD DEPLOYED
+
+**v3.7.5 mergee sur main et deployee en production.**
+
+- git merge staging -> main + git push origin main
+- GitHub Actions deploy.yml -> S3 amazon-pilot-foliow/index.html
+- ContentLength=1093340, APP_VERSION='3.7.5', LastModified=2026-06-12T14:08:26+00:00
+- CloudFront E3ERL241475BJI invalide : Completed
+- Tag v3.7.5 pousse sur GitHub
+- Amazon Pilot prod (amazon.foliow.app) : v3.7.5 LIVE
+
+**Modules livres en prod :**
+- src/render_shell.js (10 fonctions + popstate, 261 L) -- render/nav extraits de core.js
+- src/render_screens.js (10 ecrans, 2161 L) -- ecrans extraits de core.js
+- src/charts.js (7 fonctions, 219 L) -- graphiques extraits de core.js
+- core.js : 7975 L -> 5368 L (-2607 L)
+- AUDIT_v3.7.5.md : 8 points valides, bilan de cycle joint
+
+**Bilan cycle refacto bloc 1 :** core.js 9832 L (v3.7.0) -> 5368 L (v3.7.5) = -45%
+Prochaine etape : v3.7.6 = audit performance sous charge (profiling Gers 12k ASINs)
+
+Version courante en prod : v3.7.5 (depuis 2026-06-12)
+---
+## Session 2026-06-13 — v3.7.7 PROD DEPLOYED
+
+**v3.7.7 mergee sur main et deployee en production.**
+
+- Merge preprod -> main (commits v3.7.6.2 + v3.7.7 inclus) + git push origin main
+- aws s3api put-object -> S3 amazon-pilot-foliow/index.html
+- ContentLength=1124517, APP_VERSION='3.7.7' verifie
+- CloudFront E3ERL241475BJI invalide : InProgress -> I38VFKW118G1G5AP27V0U5CRLN
+- Tag v3.7.7 pousse sur GitHub
+- Amazon Pilot prod (amazon.foliow.app) : v3.7.7 LIVE
+
+**Modules livres en prod :**
+- src/parser_traffic.js (NOUVEAU) -- parser Retail Analytics Traffic CSV (variantes A/B)
+- src/parsers_internal.js enrichi -- bloc Traffic timeline dans parseCSVFile()
+- src/import_export.js enrichi -- accumulation foViews dans mergeImportData()
+- build.py enrichi -- injection @parser_traffic
+- AUDIT_v3.7.7.md : 7 points valides + P3 strict (views:0 vs absent) + P2 robustesse (6 cas negatifs)
+
+**Fonctionnalite livrée :**
+- foViews timeline par marche/semaine : c.asins[i].foViews[market][weekKey] = {views, deltaPrevPct, deltaYoyPct}
+- P1 : MARKET_CODES normalisation, codes inconnus stockes tels quels
+- P2 : weekKey strict (echec explicite si ligne 0 absente/malformee)
+- P3 : views:0 stocke comme integer 0 (distinct ASIN absent)
+- save() perf : +174ms pour 85k entrees (cas extreme Gers 4729 ASINs x 3sem x 6mkt)
+
+Version courante en prod : v3.7.7 (depuis 2026-06-13)
