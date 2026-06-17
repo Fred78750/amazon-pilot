@@ -1625,7 +1625,7 @@ async function callAPI(sys, usr) {
       'anthropic-dangerous-direct-browser-access': 'true'
     },
     body: JSON.stringify({
-      model: localStorage.getItem('ap-model') || 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2500,
       system: sys,
       messages: [{ role: 'user', content: usr }]
@@ -4176,8 +4176,6 @@ function renderFiche() {
    ═══════════════════════════════════════════ */
 function renderConfig() {
   const maskedKey = apiKey ? '••••••••' + apiKey.slice(-8) : '';
-  const currentModel = localStorage.getItem('ap-model') || 'claude-sonnet-4-20250514';
-
   let h = `<div style="max-width:580px">`;
   h += `<h2 style="font-size:17px;font-weight:700;margin-bottom:16px">⚙️ Configuration</h2>`;
 
@@ -4193,11 +4191,7 @@ function renderConfig() {
   h += `</div>`;
 
   h += `<div class="cd"><div class="cd-t">🤖 Modèle IA</div>`;
-  h += `<div class="fg"><label class="fg-lb">Modèle Claude</label>
-    <select class="fg-in" onchange="localStorage.setItem('ap-model',this.value)">
-      <option value="claude-sonnet-4-20250514" ${currentModel==='claude-sonnet-4-20250514'?'selected':''}>Claude Sonnet 4 (recommandé)</option>
-      <option value="claude-haiku-4-5-20251001" ${currentModel==='claude-haiku-4-5-20251001'?'selected':''}>Claude Haiku 4.5 (rapide)</option>
-    </select></div>`;
+  h += `<div class="alr alr-g" style="font-size:12px">Modèle fixé : Claude Sonnet 4.6</div>`;
   h += `</div>`;
 
   h += `<div class="cd"><div class="cd-t">🌐 Claude in Chrome — Amazon</div>`;
