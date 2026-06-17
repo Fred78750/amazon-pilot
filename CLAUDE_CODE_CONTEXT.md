@@ -144,6 +144,34 @@ Mettre à jour ce tableau après chaque merge main validé par Fred.
 
 ---
 
+## PROCHAIN CHANTIER — v3.8 (phase CONCEPTION — AVANT tout code)
+
+**Cycle de CODE v3.7 CLOS.** v3.7.9 fondu dans v3.8.
+
+### Prérequis CONCEPTION (à valider avant tout brief Claude Code)
+1. Maquettes HTML validées Fred (règle 36) — 4 obligatoires :
+   - (a) Landing page Buy Box refondue
+   - (b) Fiche ASIN Recovery Agent (inspirée preview GPT 03/06/2026)
+   - (c) Workflow conversationnel Agent BB Diagnostic
+   - (d) Workflow Agent Communication Amazon (pour v3.9)
+2. CDC précis (tokens CSS + specs + limites négatives) → Claude Design exécute
+3. Méthodologie V3 GPT déposée ✅ (`references/buybox/v3/`) — BB-1→12 + familles A→P + 6 portes
+4. Tag suspect défini ✅ : **ratio FO Page Views / Glance Views** (pas la valeur absolue FO)
+5. [À VALIDER] CDC tranchés
+6. Retour terrain B00PVPXVBE (diagnostic mixte BB-8+BB-10+BB-3+BB-5+BB-4)
+
+### Contenu v3.8
+- **UX Buy Box refondue** (3 niveaux) : ASINs suspects sur Dashboard+Revue Hebdo / flag suspect + lien Agent BB sur Analyse ASINs / refonte écran Buy Box (header conservé + liste suspects + CTA "Lancer Agent BB")
+- **Agent BB Diagnostic** : pattern UX type Agent SEO, applique BB-1→12, score qualitatif "faisceau fort/modéré/à confirmer", variantes défensive/offensive. Capture page = collage manuel (pas de scraping)
+- **Ex-v3.7.9 fondus** : tag suspect calculé, cache cross-ASIN, capture page Amazon
+
+### Règles techniques à ne pas oublier pour v3.8
+- **FO views weekKey (lundi) + 5j = deliveryDefects weekKey (samedi)** — réconciliation timelines pour croisement
+- **Signal FO views = double usage** : chute = défensif (BB-10/11 perte exposition) / hausse = offensif (signal d'investir)
+- **Tag suspect = FO views / Glance views** — les 2 métriques déjà en IDB depuis v3.7.7+v3.7.8
+
+---
+
 ## RÈGLE 0 — INCIDENT (gravée définitivement)
 
 **Claude Code a mergé staging → main SANS GO explicite le 13 mai 2026.**

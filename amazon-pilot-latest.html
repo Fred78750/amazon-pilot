@@ -704,7 +704,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.7.11';
+const APP_VERSION = '3.7.12';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -712,18 +712,32 @@ const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-wes
 // ═══════════════════════════════════════════════════════════════
 
 const AI_MODELS = {
-  standard: {
-    id: 'claude-sonnet-4-20250514',
-    label: 'Sonnet 4.6 — Standard',
-    priceIn:  3.00,   // $ / 1M tokens input
+  sonnet_4_6: {
+    id: 'claude-sonnet-4-6',
+    label: 'Sonnet 4.6',
+    priceIn:  3.00,   // $ / 1M tokens input  — source : /claude-api skill 2026-06-04
     priceOut: 15.00,  // $ / 1M tokens output
     eurUsd:   0.92,
   },
-  premium: {
-    id: 'claude-opus-4-7-20250514', // ⚠ À vérifier : peut être claude-opus-4-7 sans date
-    label: 'Opus 4.7 — Premium',
-    priceIn:  15.00,
-    priceOut: 75.00,
+  opus_4_6: {
+    id: 'claude-opus-4-6',
+    label: 'Opus 4.6',
+    priceIn:  5.00,
+    priceOut: 25.00,
+    eurUsd:   0.92,
+  },
+  opus_4_8: {
+    id: 'claude-opus-4-8',
+    label: 'Opus 4.8',
+    priceIn:  5.00,
+    priceOut: 25.00,
+    eurUsd:   0.92,
+  },
+  haiku_4_5: {
+    id: 'claude-haiku-4-5',
+    label: 'Haiku 4.5',
+    priceIn:  1.00,
+    priceOut: 5.00,
     eurUsd:   0.92,
   }
 };
@@ -742,7 +756,7 @@ const aiUsage = {
     }
   },
   record(feature, modelKey, tokensIn, tokensOut) {
-    const model = AI_MODELS[modelKey] || AI_MODELS.standard;
+    const model = AI_MODELS[modelKey] || AI_MODELS.sonnet_4_6;
     const costEur = (tokensIn * model.priceIn + tokensOut * model.priceOut) / 1_000_000 * model.eurUsd;
     this.session.calls++; this.session.tokensIn += tokensIn;
     this.session.tokensOut += tokensOut; this.session.costEur += costEur;
@@ -758,8 +772,16 @@ const aiUsage = {
     console.log('[AI] ' + feature + ' ' + model.id + ' in:' + tokensIn + ' out:' + tokensOut + ' → ' + costEur.toFixed(4) + '€');
   },
   getModel(feature) {
-    const k = localStorage.getItem('ap-model-' + feature) || localStorage.getItem('ap-model') || 'standard';
-    return AI_MODELS[k] ? k : 'standard';
+    const TIER = {
+      diag_complet: 'opus_4_8', diagnostic_v1: 'opus_4_8',
+      diag_baisses: 'opus_4_6', opportunites: 'opus_4_6', risques: 'opus_4_6',
+      analyse_asin: 'sonnet_4_6',
+      seo: 'sonnet_4_6', seo_enrich: 'sonnet_4_6',
+      appros: 'sonnet_4_6',
+      revue: 'opus_4_6',
+      buybox: 'sonnet_4_6', import: 'sonnet_4_6', swot: 'sonnet_4_6',
+    };
+    return TIER[feature] || 'sonnet_4_6';
   },
   getModelId(feature) { return AI_MODELS[this.getModel(feature)].id; },
   fmtCost(eur) {
@@ -5561,7 +5583,7 @@ ${histCtx}
 3) Recommandations (max 3) adaptées à la tendance de fond
 4) Points de vigilance spécifiques à ce profil d'ASIN`;
 
-  aiResult = await askClaude(getSysPrompt(c), prompt);
+  aiResult = await askClaude(getSysPrompt(c), prompt, 'analyse_asin');
   aiLoading = false; render();
 }
 
@@ -9213,7 +9235,7 @@ async function runApprosIA(btn, dataAttr) {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 600,
+      body: JSON.stringify({ model: AI_MODELS[aiUsage.getModel('appros')].id, max_tokens: 600,
         messages: [{ role: 'user', content: prompt }] })
     });
     if (!resp.ok) throw new Error('API ' + resp.status);
@@ -9502,9 +9524,6 @@ function runSmokeTestManual() { smokeTest(false); }
 
 function renderConfig() {
   const maskedKey = apiKey ? '••••••••' + apiKey.slice(-8) : '';
-  const currentModelKey = localStorage.getItem('ap-model') || 'standard';
-  const currentModel = AI_MODELS[currentModelKey]?.id || AI_MODELS.standard.id;
-  
   // Données usage session
   const _usage = aiUsage.session;
   const _hist = (() => { try { return JSON.parse(localStorage.getItem('ap-ai-usage') || '[]'); } catch(e) { return []; } })();
@@ -9530,11 +9549,7 @@ function renderConfig() {
   h += `</div>`;
 
   h += `<div class="cd"><div class="cd-t">🤖 Modèle IA</div>`;
-  h += `<div class="fg"><label class="fg-lb">Modèle Claude</label>
-    <select class="fg-in" onchange="localStorage.setItem('ap-model',this.value)">
-      <option value="claude-sonnet-4-20250514" ${currentModel==='claude-sonnet-4-20250514'?'selected':''}>Claude Sonnet 4 (recommandé)</option>
-      <option value="claude-haiku-4-5-20251001" ${currentModel==='claude-haiku-4-5-20251001'?'selected':''}>Claude Haiku 4.5 (rapide)</option>
-    </select></div>`;
+  h += `<div class="alr alr-g" style="font-size:12px">Routage IA figé par feature — géré côté produit.</div>`;
   h += `</div>`;
 
   h += `<div class="cd"><div class="cd-t">🌐 Claude in Chrome — Amazon</div>`;
@@ -9594,20 +9609,14 @@ function renderConfig() {
   h += `<div style="margin-bottom:24px">
     <h3 style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--text)">🤖 Intelligence Artificielle</h3>
     
-    <!-- Sélecteur modèle global -->
+    <!-- Routage IA figé par feature (v3.7.12) -->
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
-      <div style="font-size:12px;font-weight:600;color:var(--text-light);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Modèle par défaut</div>
-      <div style="display:flex;gap:8px">
-        <button onclick="localStorage.setItem('ap-model','standard');render()" 
-          style="flex:1;padding:8px 12px;border-radius:8px;border:2px solid ${currentModelKey==='standard'?'var(--or)':'var(--border)'};background:${currentModelKey==='standard'?'rgba(255,153,0,.08)':'var(--bg)'};cursor:pointer;font-size:13px;font-weight:${currentModelKey==='standard'?'700':'400'}">
-          ⚡ Sonnet 4.6<br><span style="font-size:11px;color:var(--text-light)">Standard · ~0.01€/appel</span>
-        </button>
-        <button onclick="localStorage.setItem('ap-model','premium');render()" 
-          style="flex:1;padding:8px 12px;border-radius:8px;border:2px solid ${currentModelKey==='premium'?'var(--or)':'var(--border)'};background:${currentModelKey==='premium'?'rgba(255,153,0,.08)':'var(--bg)'};cursor:pointer;font-size:13px;font-weight:${currentModelKey==='premium'?'700':'400'}">
-          🚀 Opus 4.7<br><span style="font-size:11px;color:var(--text-light)">Premium · ~0.08€/appel</span>
-        </button>
+      <div style="font-size:12px;font-weight:600;color:var(--text-light);margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">Routage IA par feature</div>
+      <div style="font-size:12px;line-height:1.7;color:var(--text)">
+        <div>🔬 Diagnostic complet / legacy → <strong>Opus 4.8</strong></div>
+        <div>📊 Opportunités / Risques / Baisses → <strong>Opus 4.6</strong></div>
+        <div>📝 Analyse ASIN / SEO / Appros → <strong>Sonnet 4.6</strong></div>
       </div>
-      <div style="font-size:11px;color:var(--text-light);margin-top:8px">Actif : <strong>${AI_MODELS[currentModelKey]?.label || currentModelKey}</strong></div>
     </div>
 
     <!-- Compteur session -->
@@ -10273,7 +10282,8 @@ ${dec.slice(0,12).map(a => {
 3) Actions correctives par priorité d'impact CA`;
   }
 
-  aiResult = await askClaude(getSysPrompt(c), prompt);
+  const _featureMap = { weekly: 'diag_complet', opportunities: 'opportunites', risks: 'risques', decline: 'diag_baisses' };
+  aiResult = await askClaude(getSysPrompt(c), prompt, _featureMap[type] || 'revue');
   aiLoading = false; render();
 }
 
@@ -14064,11 +14074,13 @@ function buildDiagnosticPrompt(c, dims, dRef, sign) {
 
 var _AI_LAMBDA_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
-// ── Prix Anthropic USD/million tokens (règle 35 — v3.6.9.3) ───────
-// Source : Anthropic pricing officiel — à mettre à jour si changement tarif
+// ── Prix Anthropic USD/million tokens (règle 35 — v3.7.12) ───────
+// Source : /claude-api skill (cache 2026-06-04) — convention version-mineure non datée
 var AI_PRICING_USD_PER_MILLION_TOKENS = {
-  'claude-sonnet-4-20250514': { input: 3.00, output: 15.00 },
-  'claude-opus-4-20250514':   { input: 15.00, output: 75.00 }
+  'claude-sonnet-4-6': { input: 3.00, output: 15.00 },
+  'claude-opus-4-6':   { input: 5.00, output: 25.00 },
+  'claude-opus-4-8':   { input: 5.00, output: 25.00 },
+  'claude-haiku-4-5':  { input: 1.00, output: 5.00 }
 };
 
 /**
@@ -14113,7 +14125,7 @@ function initAIDiagnostic(c, dims, dRef, sign, placeholderId, clientIdAtLaunch) 
   // Cache miss → appel Lambda (format API Amazon Pilot : messages[], feature, Authorization)
   var prompt = buildDiagnosticPrompt(c, dims, dRef, sign);
   var idToken = localStorage.getItem('ap-id-token') || '';
-  var _model  = 'claude-sonnet-4-20250514';
+  var _model  = AI_MODELS[aiUsage.getModel('diagnostic_v1')].id;
 
   // ── Logging règle 35 — initialisation entrée log ──
   var _t0 = performance.now();
