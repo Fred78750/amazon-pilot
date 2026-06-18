@@ -704,7 +704,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.8.0';
+const APP_VERSION = '3.8.1';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -2277,6 +2277,8 @@ function parseCSVFile(text, filename) {
       item.oosPct          = row.sourceable_oos_pct           || '';
       item.confirmPct      = row.vendor_confirmation_pct      || '';
       item.retailPct       = row.sell_through_pct             || '';
+      item.aged90SellableUnits     = row.aged_90_sellable_units     || 0;
+      item.aged90SellableInventory = row.aged_90_sellable_inventory || 0;
     }
     return item;
   });
