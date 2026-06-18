@@ -716,7 +716,8 @@ var SUSPECT_CONFIG = {
   T_HAUSSE: 50,
   FENETRE: 8,
   ZERO_WEEKS_CRIT: 3,
-  ZERO_WEEKS_WARN_MAX: 2
+  ZERO_WEEKS_WARN_MAX: 2,
+  AGED90_RATIO_CRIT: 50
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -3865,7 +3866,10 @@ function computeSuspectTags(client) {
       }
       if (ddWeeks >= 2) reinforcers.push('BOL Mismatch x' + ddWeeks);
     }
-    // aged_90 stock dormant — renforçateur désactivé (colonne non mappée, cf. addendum §2)
+    if (a.aged90SellableUnits > 0 && a.sellableUnits > 0) {
+      var ratio = a.aged90SellableUnits / a.sellableUnits * 100;
+      if (ratio >= SUSPECT_CONFIG.AGED90_RATIO_CRIT) reinforcers.push('Stock dormant ' + Math.round(ratio) + '%');
+    }
     return reinforcers;
   }
 
