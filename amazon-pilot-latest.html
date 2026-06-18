@@ -704,7 +704,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.7.12';
+const APP_VERSION = '3.7.13';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -1112,11 +1112,12 @@ function erpNorm(str) {
 // ── Dictionnaire synonymes (valeurs déjà normalisées via erpNorm) ────────
 var ERP_COL_SYNONYMS = {
   SKU:                     ['sku','code sku','no','numero','code article','reference','ref','article'],
-  EAN:                     ['ean','ean13','code ean','code barres','barcode','gtin',
-                             'code barre / gencode / gtin13'],                    // v3.6.7.1 Gers
+  EAN:                     ['ean','ean13','code ean','code barres','barcode','gtin','gencod',
+                             'code barre / gencode / gtin13'],                    // v3.6.7.1 Gers + v3.7.13 Cogex
   Designation:             ['designation','libelle','libelle produit','nom produit','description','nom'],
   Code_Vie:                ['code vie','cycle de vie','statut','vie produit'],
-  Stock_libre:             ['stock libre','stock dispo','stock disponible','disponible','libre'],
+  Stock_libre:             ['stock libre','stock dispo','stock disponible','disponible','libre',
+                             'stock dispo sur 6 mois','stock disponible sur 6 mois'],  // v3.7.13 Cogex
   Stock_Amazon:            ['stock amazon','reserve amazon','amazon stock',
                              'resa amz'],                                          // v3.6.7.1 Gers
   Stock_disponible_Amazon: ['stock disponible amazon','stock physique non reserve','stock physique','dispo amazon','stock unique',
@@ -1238,7 +1239,13 @@ function parseFileERP(file) {
           if (config === 'cumulated') {
             var s = erpParseNumber(raw[colMap.Stock_disponible_Amazon]);
             row.stock_disponible_amazon = (s != null) ? Math.max(0, s) : 0;
-            row.stock_libre = null; row.stock_amazon = null;
+            row.stock_amazon = null;
+            if ('Stock_libre' in colMap) {
+              var slc = erpParseNumber(raw[colMap.Stock_libre]);
+              row.stock_libre = (slc != null) ? Math.max(0, slc) : 0;
+            } else {
+              row.stock_libre = null;
+            }
           } else {
             var sl = erpParseNumber(raw[colMap.Stock_libre]);
             var sa = erpParseNumber(raw[colMap.Stock_Amazon]);
