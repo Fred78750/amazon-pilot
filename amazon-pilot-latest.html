@@ -704,8 +704,20 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.7.13';
+const APP_VERSION = '3.8.0';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
+
+// ═══════════════════════════════════════════════════════════════
+// SUSPECT TAG — seuils calibrés Cogex FR (spec v2.2, paramétrables)
+// ═══════════════════════════════════════════════════════════════
+var SUSPECT_CONFIG = {
+  T_CHUTE: -50,
+  T_SURVEILLER: -30,
+  T_HAUSSE: 50,
+  FENETRE: 8,
+  ZERO_WEEKS_CRIT: 3,
+  ZERO_WEEKS_WARN_MAX: 2
+};
 
 // ═══════════════════════════════════════════════════════════════
 // MODULE AI USAGE — Compteur tokens + sélecteur modèles
@@ -3797,6 +3809,236 @@ function isAway(client) {
 
 
 
+// ═══════════════════════════════════════════════════════════════
+// MOTEUR TAG SUSPECT — v3.8.0 (spec v2.2, pré-calcul à l'import)
+// ═══════════════════════════════════════════════════════════════
+
+function computeSuspectTags(client) {
+  var cfg = SUSPECT_CONFIG;
+  var halfFen = Math.floor(cfg.FENETRE / 2);
+
+  // CA annuel réconcilié : 2025 prioritaire, fallback 2024
+  var annualAsins2025 = (client.annualData && client.annualData['2025'] && client.annualData['2025'].ventes)
+    ? client.annualData['2025'].ventes.asins || {} : {};
+  var annualAsins2024 = (client.annualData && client.annualData['2024'] && client.annualData['2024'].ventes)
+    ? client.annualData['2024'].ventes.asins || {} : {};
+
+  function getCaExposed(a) {
+    var ann = annualAsins2025[a.asin] || annualAsins2024[a.asin];
+    if (ann && ann.revenue > 0) return Math.round(ann.revenue * 100) / 100;
+    var sum = 0;
+    if (a.history) { for (var i = 0; i < a.history.length; i++) sum += a.history[i].revenue || 0; }
+    return Math.round(sum * 100) / 100;
+  }
+
+  function isActive(a) {
+    if (!a.history || !a.history.length) return false;
+    for (var i = 0; i < a.history.length; i++) {
+      var h = a.history[i];
+      if ((h.revenue || 0) > 0 || (h.orderedRevenue || 0) > 0 ||
+          (h.units || 0) > 0 || (h.orderedUnits || 0) > 0) return true;
+    }
+    return false;
+  }
+
+  function isAnnualKey(k) {
+    return /^\d{4}-01-01$/.test(k);
+  }
+
+  // Renforçateurs par ASIN
+  function getReinforcements(a, weekKeys) {
+    var reinforcers = [];
+    // deliveryDefects : BOL Mismatch dans la fenêtre
+    if (a.deliveryDefects) {
+      var ddWeeks = 0;
+      for (var wi = 0; wi < weekKeys.length; wi++) {
+        var wk = weekKeys[wi];
+        // foViews weekKey = lundi (YYYY-MM-DD), deliveryDefects weekKey = samedi (+5j)
+        // Approche tolérante : chercher la semaine DD la plus proche
+        if (a.deliveryDefects[wk]) {
+          for (var sub in a.deliveryDefects[wk]) {
+            if (sub.toLowerCase().indexOf('mismatch') >= 0) { ddWeeks++; break; }
+          }
+        }
+      }
+      if (ddWeeks >= 2) reinforcers.push('BOL Mismatch x' + ddWeeks);
+    }
+    // aged_90 stock dormant — renforçateur désactivé (colonne non mappée, cf. addendum §2)
+    return reinforcers;
+  }
+
+  var sevOrder = { crit: 3, warn: 2, opp: 1 };
+
+  for (var ai = 0; ai < client.asins.length; ai++) {
+    var a = client.asins[ai];
+
+    if (!isActive(a)) {
+      a.suspectTag = null;
+      continue;
+    }
+
+    if (!a.foViews) {
+      a.suspectTag = null;
+      continue;
+    }
+
+    var worstSev = null;
+    var worstDir = null;
+    var worstTrigger = null;
+    var worstMarket = null;
+    var worstDelta = 0;
+    var worstViews = 0;
+    var worstTrend = 'flat';
+    var worstReinforcers = [];
+    var worstScore = 0;
+    var ca = getCaExposed(a);
+
+    var markets = Object.keys(a.foViews);
+    for (var mi = 0; mi < markets.length; mi++) {
+      var market = markets[mi];
+      var mData = a.foViews[market];
+
+      // Collecter les weekKeys hebdo (exclure annuels), trier
+      var allKeys = Object.keys(mData).filter(function(k) { return !isAnnualKey(k); });
+      allKeys.sort();
+
+      if (allKeys.length < 2) continue;
+
+      // Prendre les N dernières semaines (≤ FENETRE)
+      var keys = allKeys.slice(-cfg.FENETRE);
+      var views = keys.map(function(k) { return mData[k].views || 0; });
+      var n = views.length;
+
+      // ── Composante HEBDO : semaines consécutives à 0 depuis la fin ──
+      var zeroConsec = 0;
+      for (var zi = n - 1; zi >= 0; zi--) {
+        if (views[zi] === 0) zeroConsec++;
+        else break;
+      }
+
+      // ── Composante MENSUELLE GLISSANTE ──
+      var deltaMensuel = null;
+      var trend = 'flat';
+      var isApparition = false;
+
+      if (n >= cfg.FENETRE) {
+        var sumA = 0, sumB = 0;
+        for (var bi = 0; bi < halfFen; bi++) sumA += views[bi];
+        for (var bi2 = n - halfFen; bi2 < n; bi2++) sumB += views[bi2];
+
+        if (sumA === 0 && sumB > 0) {
+          isApparition = true;
+          deltaMensuel = 9999;
+        } else if (sumA === 0 && sumB === 0) {
+          deltaMensuel = 0;
+        } else {
+          deltaMensuel = Math.round((sumB - sumA) / sumA * 1000) / 10;
+        }
+        trend = deltaMensuel > 5 ? 'up' : deltaMensuel < -5 ? 'down' : 'flat';
+      } else if (n >= halfFen + 1) {
+        // Fenêtre partielle : utiliser ce qu'on a
+        var half = Math.floor(n / 2);
+        var pSumA = 0, pSumB = 0;
+        for (var pi = 0; pi < half; pi++) pSumA += views[pi];
+        for (var pi2 = n - half; pi2 < n; pi2++) pSumB += views[pi2];
+        if (pSumA === 0 && pSumB > 0) {
+          isApparition = true;
+          deltaMensuel = 9999;
+        } else if (pSumA > 0) {
+          deltaMensuel = Math.round((pSumB - pSumA) / pSumA * 1000) / 10;
+        }
+        trend = deltaMensuel != null ? (deltaMensuel > 5 ? 'up' : deltaMensuel < -5 ? 'down' : 'flat') : 'flat';
+      }
+
+      var reinforcers = getReinforcements(a, keys);
+      var hasReinforcer = reinforcers.length > 0;
+
+      // ── Classification ──
+      var sev = null;
+      var dir = null;
+      var trigger = null;
+
+      // Critique : 0 sur ≥ ZERO_WEEKS_CRIT consécutives
+      if (zeroConsec >= cfg.ZERO_WEEKS_CRIT) {
+        sev = 'crit'; dir = 'defensif'; trigger = 'zero_hebdo';
+      }
+      // Critique : chute mensuelle ≤ T_CHUTE AVEC renforçateur
+      else if (deltaMensuel != null && deltaMensuel <= cfg.T_CHUTE && hasReinforcer) {
+        sev = 'crit'; dir = 'defensif'; trigger = 'chute_mensuelle';
+      }
+      // À surveiller : chute entre T_SURVEILLER et T_CHUTE
+      else if (deltaMensuel != null && deltaMensuel <= cfg.T_SURVEILLER && deltaMensuel > cfg.T_CHUTE) {
+        sev = 'warn'; dir = 'defensif'; trigger = 'chute_mensuelle';
+      }
+      // À surveiller : chute ≤ T_CHUTE SANS renforçateur
+      else if (deltaMensuel != null && deltaMensuel <= cfg.T_CHUTE && !hasReinforcer) {
+        sev = 'warn'; dir = 'defensif'; trigger = 'chute_mensuelle';
+      }
+      // À surveiller : 0 sur 1-2 sem
+      else if (zeroConsec >= 1 && zeroConsec <= cfg.ZERO_WEEKS_WARN_MAX) {
+        sev = 'warn'; dir = 'defensif'; trigger = 'zero_hebdo';
+      }
+      // Apparition (état distinct, pas opp)
+      else if (isApparition) {
+        sev = 'opp'; dir = 'offensif'; trigger = 'apparition';
+      }
+      // Opportunité : hausse ≥ T_HAUSSE soutenue (hors apparition)
+      else if (deltaMensuel != null && deltaMensuel >= cfg.T_HAUSSE && !isApparition) {
+        sev = 'opp'; dir = 'offensif'; trigger = 'hausse_mensuelle';
+      }
+
+      // Renforcement : +1 cran (warn → crit) si renforçateur ET warn défensif
+      if (sev === 'warn' && dir === 'defensif' && hasReinforcer) {
+        sev = 'crit';
+      }
+
+      if (sev === null) continue;
+
+      // ── Worst-market déterministe (§5 addendum) ──
+      var sevScore = sevOrder[sev] || 0;
+      var isBetter = false;
+      if (sevScore > worstScore) {
+        isBetter = true;
+      } else if (sevScore === worstScore) {
+        var curDelta = deltaMensuel != null ? deltaMensuel : 0;
+        var prevDelta = worstDelta || 0;
+        if (curDelta < prevDelta) isBetter = true;
+        else if (curDelta === prevDelta && ca > (getCaExposed(a) || 0)) isBetter = true;
+      }
+
+      if (isBetter) {
+        worstScore = sevScore;
+        worstSev = sev;
+        worstDir = dir;
+        worstTrigger = trigger;
+        worstMarket = market;
+        worstDelta = deltaMensuel;
+        worstViews = views[n - 1];
+        worstTrend = trend;
+        worstReinforcers = reinforcers;
+      }
+    }
+
+    if (worstSev) {
+      a.suspectTag = {
+        severity: worstSev,
+        direction: worstDir,
+        trigger: worstTrigger,
+        marketWorst: worstMarket,
+        foViewsCurrent: worstViews,
+        deltaMensuelPct: worstDelta,
+        trend: worstTrend,
+        reinforcers: worstReinforcers,
+        bbCandidates: [],
+        caExposed: ca,
+        computedAt: new Date().toISOString().slice(0, 10)
+      };
+    } else {
+      a.suspectTag = null;
+    }
+  }
+}
+
 // Injecté via // @import_export dans core.js (build.py)
 // v3.7.4 — déplacement strict depuis core.js (aucune modification fonctionnelle)
 
@@ -4366,6 +4608,8 @@ function mergeImportData(client, parsedFiles) {
   for (const f of parsedFiles) { if (f?.market && !client.markets.includes(f.market)) client.markets.push(f.market); }
   for (const a of client.asins) { if (a.market && !client.markets.includes(a.market)) client.markets.push(a.market); }
   client.markets.sort();
+  // v3.8.0 — Pré-calcul tag suspect (après foViews + deliveryDefects + history consolidés)
+  computeSuspectTags(client);
   // Régénérer le plan d'action après chaque import pour refléter les nouvelles données
   client.weeklyActions = generateWeeklyActions(client);
   log(`🔗 Merge terminé: ${client.asins.length} ASINs hebdo`, 'ok');
