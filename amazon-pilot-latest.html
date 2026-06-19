@@ -608,6 +608,39 @@ a:hover { text-decoration: underline; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   AGENT DÉTECTER v3.8.3 — Fil 3 agents + lentilles
+   ═══════════════════════════════════════════════════════════════ */
+.det-fil { display:flex; gap:10px; margin-bottom:6px; align-items:stretch; flex-wrap:wrap; }
+.det-fil-card { flex:1; min-width:180px; padding:14px 16px; background:var(--s1); border:0.5px solid var(--bd); border-radius:var(--rdl); border-top:3.5px solid var(--bd2); opacity:.55; transition:opacity .15s,border-color .15s; }
+.det-fil-card.det-active { opacity:1; background:var(--s2); border-color:var(--bd3); }
+.det-fil-card[data-agent="detect"] { border-top-color:var(--b); }
+.det-fil-card[data-agent="diagnose"] { border-top-color:var(--r); }
+.det-fil-card[data-agent="act"] { border-top-color:#0F766E; }
+.det-fil-eyebrow { font-family:var(--fm); font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:var(--tx3); margin-bottom:4px; }
+.det-fil-title { font-size:14px; font-weight:600; margin-bottom:3px; }
+.det-fil-desc { font-size:11px; color:var(--tx2); line-height:1.4; }
+.det-fil-maillon { font-family:var(--fm); font-size:9px; color:var(--tx3); margin-top:6px; }
+.det-fil-methode { align-self:center; font-size:11.5px; color:var(--b); cursor:pointer; white-space:nowrap; text-decoration:none; border:0.5px solid var(--b-bd); border-radius:8px; padding:8px 12px; background:var(--b-bg); flex:0 0 auto; }
+.det-fil-methode:hover { background:var(--b-bd); }
+.det-process { display:flex; align-items:center; gap:6px; margin-bottom:14px; padding:6px 0; font-size:10.5px; color:var(--tx3); flex-wrap:wrap; }
+.det-process .step { font-weight:500; }
+.det-process .step.active { color:var(--tx); }
+.det-lens { display:inline-flex; background:var(--s2); border:0.5px solid var(--bd2); border-radius:var(--rdl); padding:3px; margin-bottom:14px; }
+.det-lens-btn { padding:7px 16px; font-size:12px; font-weight:500; border-radius:var(--rd); cursor:pointer; background:transparent; color:var(--tx3); border:none; transition:all .15s; }
+.det-lens-btn:hover { color:var(--tx2); }
+.det-lens-btn.active { background:var(--s1); color:var(--tx); box-shadow:var(--sh); }
+.det-go { font-size:11.5px; font-weight:500; color:#fff; background:var(--tx); border:none; border-radius:8px; padding:7px 13px; cursor:pointer; white-space:nowrap; transition:opacity .15s; }
+.det-go:hover { opacity:.85; }
+[data-theme="light"] .det-go { background:#16262B; }
+.det-stub { max-width:540px; margin:60px auto; text-align:center; padding:40px 24px; background:var(--s1); border:0.5px solid var(--bd); border-radius:var(--rdxl); }
+.det-stub h2 { font-size:20px; font-weight:600; margin:16px 0 8px; }
+.det-stub p { font-size:13px; color:var(--tx2); line-height:1.5; margin:0 0 20px; }
+@media (max-width:900px) {
+  .det-fil { flex-direction:column; }
+  .det-fil-card { min-width:0; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
    MODULE YoY — Analyse comparée v3.6.5
    ═══════════════════════════════════════════════════════════════ */
 
@@ -778,7 +811,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.8.2';
+const APP_VERSION = '3.8.3';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -959,20 +992,25 @@ async function smokeTest(silent) {
     else fail('vital','V4','Buy Box liste', e || corrupt.length + ' alertes retailPct>100');
   } catch(ex) { fail('vital','V4','Buy Box liste', ex.message); }
 
-  // V5 — Buy Box Phase 2 (carnet d'enquête v3.6.1 — dossier sans crash)
+  // V5 — Agent Détecter v3.8.3 (fil 3 agents + lentilles + stub Agent BB)
   try {
-    const refAsin = clientCal?.asinRef?.asin || SMOKE_REF.asinRef.asin;
-    window._buyboxView = null; window._buyboxAsin = null; // reset état UI
-    if (typeof buyboxOpenCase === 'function' && c) buyboxOpenCase(c, refAsin);
-    window._buyboxView = 'case'; window._buyboxAsin = refAsin;
-    if (typeof render === 'function') render();
+    window._buyboxView = null; window._buyboxAsin = null; window._buyboxLens = 'exposition';
+    if (typeof go === 'function') go('buybox');
     await new Promise(r => setTimeout(r, 400));
     const e = getErr();
-    const hasCase = document.body.innerHTML.includes('Carnet d\'enquête') || document.body.innerHTML.includes('Hypothèses');
-    if (!e && hasCase) pass('vital','V5','Buy Box Phase 2 ouvert (' + refAsin + ')');
-    else fail('vital','V5','Buy Box Phase 2', e || 'DOM Carnet enquête absent');
-    // Remettre sur vue liste avant de continuer
-    window._buyboxView = 'list'; window._buyboxAsin = null;
+    const hasFil = !!document.querySelector('[data-testid="det-fil"]');
+    const hasLens = !!document.querySelector('[data-testid="det-lens"]');
+    if (!e && hasFil && hasLens) pass('vital','V5','Agent Détecter (fil 3 agents + lentilles)');
+    else fail('vital','V5','Agent Détecter', e || 'fil=' + hasFil + ' lens=' + hasLens);
+    // Test stub Agent BB
+    const refAsin = clientCal?.asinRef?.asin || SMOKE_REF.asinRef.asin;
+    window._buyboxView = 'agent_stub'; window._buyboxAsin = refAsin;
+    if (typeof render === 'function') render();
+    await new Promise(r => setTimeout(r, 300));
+    const hasStub = !!document.querySelector('[data-testid="agent-stub"]');
+    if (hasStub) pass('vital','V5b','Stub Agent BB (' + refAsin + ')');
+    else fail('vital','V5b','Stub Agent BB', 'DOM agent-stub absent');
+    window._buyboxView = null; window._buyboxAsin = null;
     if (typeof go === 'function') { go('buybox'); await new Promise(r=>setTimeout(r,150)); }
   } catch(ex) { fail('vital','V5','Buy Box Phase 2', ex.message); }
 
@@ -6616,7 +6654,8 @@ function fmtEurK(v) {
   return fmt(Math.round(v)) + ' €';
 }
 
-function renderSuspectsBoard(c) {
+function renderSuspectsBoard(c, opts) {
+  opts = opts || {};
   var total = c.asins.length;
   var actifs = 0, tagged = 0;
   var counts = { crit: 0, warn: 0, opp: 0 };
@@ -6645,16 +6684,17 @@ function renderSuspectsBoard(c) {
 
   var h = '';
 
-  h += '<div class="eyebrow" style="margin-bottom:4px;">Buy Box · Revue hebdomadaire · niveau 1</div>';
-  h += '<h2 style="font-size:22px;font-weight:700;margin:0 0 14px;">ASINs suspects <span style="color:var(--tx3);font-weight:400;">· perte ou réveil d’exposition</span></h2>';
-
-  h += '<div class="sus-funnel">';
-  h += '<div class="sus-fstep"><b>' + fmt(total) + '</b><span>ASINs catalogue</span></div>';
-  h += '<span class="sus-farrow">→</span>';
-  h += '<div class="sus-fstep"><b>' + fmt(actifs) + '</b><span>actifs (exposition + ventes)</span></div>';
-  h += '<span class="sus-farrow">→</span>';
-  h += '<div class="sus-fstep"><b style="color:var(--r);">' + fmt(tagged) + '</b><span>suspects cette semaine</span></div>';
-  h += '</div>';
+  if (!opts.skipHeader) {
+    h += '<div class="eyebrow" style="margin-bottom:4px;">Buy Box · Revue hebdomadaire · niveau 1</div>';
+    h += '<h2 style="font-size:22px;font-weight:700;margin:0 0 14px;">ASINs suspects <span style="color:var(--tx3);font-weight:400;">· perte ou réveil d’exposition</span></h2>';
+    h += '<div class="sus-funnel">';
+    h += '<div class="sus-fstep"><b>' + fmt(total) + '</b><span>ASINs catalogue</span></div>';
+    h += '<span class="sus-farrow">→</span>';
+    h += '<div class="sus-fstep"><b>' + fmt(actifs) + '</b><span>actifs (exposition + ventes)</span></div>';
+    h += '<span class="sus-farrow">→</span>';
+    h += '<div class="sus-fstep"><b style="color:var(--r);">' + fmt(tagged) + '</b><span>suspects cette semaine</span></div>';
+    h += '</div>';
+  }
 
   h += '<div class="sus-triage">';
   var cards = [
@@ -6738,7 +6778,7 @@ function renderSuspectsBoard(c) {
 
     h += '<div class="sus-ca sus-col-hide">' + fmtEurK(t.caExposed || 0) + '<span>CA 12 mois</span></div>';
 
-    h += '<div><button class="sus-go" disabled title="Agent BB niveau 2 — à venir">Diagnostiquer</button></div>';
+    h += '<div><button class="det-go" onclick="window._buyboxView=\'agent_stub\';window._buyboxAsin=\'' + a.asin + '\';render();" title="Lancer l\'Agent BB sur cet ASIN">Lancer l\'Agent BB</button></div>';
 
     h += '</div>';
   });
@@ -6761,269 +6801,264 @@ function renderSuspectsBoard(c) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// BUY BOX v3.6.1 — renderBuyBox() Phase 1 : Identifier
+// AGENT DÉTECTER v3.8.3 — renderBuyBox() — Écran unifié 2 lentilles
 // ═══════════════════════════════════════════════════════════════════
+
+window._buyboxLens = 'exposition';
+window._bbpFilter = 'all';
 
 function renderBuyBox() {
   var c = cl();
   if (!c) return renderWelcome();
   if (!c.asins || !c.asins.length) return '<div class="alr alr-a">Importez d\'abord des données CSV.</div>';
 
-  // Route case view directly (no sub-tab bar needed)
-  if (window._buyboxView === 'case' && window._buyboxAsin) {
-    return renderBuyBoxCase(c, window._buyboxAsin);
+  if (window._buyboxView === 'agent_stub' && window._buyboxAsin) {
+    return renderBuyBoxAgentStub(window._buyboxAsin);
   }
 
-  // Sub-tab bar (Alertes BB default, Suspects secondary)
-  var view = window._buyboxView || 'list';
-  if (view !== 'list' && view !== 'suspects') view = 'list';
-  window._buyboxView = view;
-
-  var bar = '<div class="tabs" style="margin-bottom:16px;">';
-  bar += '<div class="tab' + (view === 'list' ? ' active' : '') + '" onclick="window._buyboxView=\'list\';render();">Alertes BB</div>';
-  bar += '<div class="tab' + (view === 'suspects' ? ' active' : '') + '" onclick="window._buyboxView=\'suspects\';render();">Suspects</div>';
-  bar += '</div>';
-
-  if (view === 'suspects') {
-    return bar + renderSuspectsBoard(c);
+  var cF = c;
+  if (typeof asinSearch !== 'undefined' && asinSearch && asinSearch.trim()) {
+    var fa = getFilteredAsins(c);
+    cF = Object.assign({}, c, { asins: fa });
   }
 
-  // v3.6.2 : appliquer le filtre de recherche transversal
-  var cFiltered = c;
-  if (asinSearch && asinSearch.trim()) {
-    var filteredAsins = getFilteredAsins(c);
-    cFiltered = Object.assign({}, c, { asins: filteredAsins });
-  }
+  var lens = window._buyboxLens || 'exposition';
 
-  var alerts = calcBuyBoxAlerts(cFiltered);
-  var lost        = alerts.critical;
-  var compromised = alerts.warning;
-  // (d.1) fragile : rPct > 0 + delta négatif sur 2 semaines consécutives dans l'historique
-  var fragile = (function() {
-    var result = [];
-    var totalCA = (cFiltered.asins || []).reduce(function(s, x) { return s + (getRevenue(x, c) || 0); }, 0);
-    (cFiltered.asins || []).forEach(function(a) {
-      var rPct = parseNum(String(a.retailPct || '').replace(',', '.').replace(/[^0-9.]/g, ''));
-      if (!(rPct > 0)) return;                     // exclut les Perdus (rPct=0)
-      var hist = a.history || [];
-      if (hist.length < 3) return;                 // pas assez d'historique (< 3 semaines)
-      var s0 = parseNum(String((hist[hist.length - 1].retailPct || '').toString()).replace(',', '.').replace(/[^0-9.]/g, ''));
-      var s1 = parseNum(String((hist[hist.length - 2].retailPct || '').toString()).replace(',', '.').replace(/[^0-9.]/g, ''));
-      var s2 = parseNum(String((hist[hist.length - 3].retailPct || '').toString()).replace(',', '.').replace(/[^0-9.]/g, ''));
-      if ((s0 - s1) < 0 && (s1 - s2) < 0) {
-        var rev = getRevenue(a, c) || 0;
-        result.push({ asin: a.asin, title: a.title, brand: a.brand, market: a.market,
-          rPct: rPct, prevRetail: s1, delta: s0 - s1, cause: 'fragile_trend',
-          revenue: rev, caMonthEst: rev * 4.33, criticite: rev * 4.33 * Math.abs((s0 - s1) / 100),
-          segment: calcSegment(a, totalCA, c),
-          sellableUnits: a.sellableUnits, couvertureSem: null, joursAvantLimite: null, stockUrgent: false });
+  var total = cF.asins.length;
+  var actifs = 0, taggedExp = 0;
+  cF.asins.forEach(function(a) {
+    var act = false;
+    if (a.history && a.history.length) {
+      for (var i = 0; i < a.history.length; i++) {
+        var hi = a.history[i];
+        if ((hi.revenue||0) > 0 || (hi.orderedRevenue||0) > 0 || (hi.units||0) > 0 || (hi.orderedUnits||0) > 0) { act = true; break; }
       }
-    });
-    return result;
-  }());
-
-  // (d.2) recovered : cas Phase 2 fermés success dans les 90 derniers jours + rPct >= 95
-  var recovered = (function() {
-    var NOW = Date.now();
-    var WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
-    var totalCA = (cFiltered.asins || []).reduce(function(s, x) { return s + (getRevenue(x, c) || 0); }, 0);
-    var closedCases = buyboxGetCases(c).filter(function(cs) {
-      if (cs.status !== 'closed') return false;
-      if (!cs.conclusion || cs.conclusion.outcome !== 'success') return false;
-      if (!cs.closedAt) return false;
-      return (NOW - new Date(cs.closedAt).getTime()) <= WINDOW_MS;
-    });
-    return closedCases.map(function(cs) {
-      var a = (cFiltered.asins || []).find(function(x) { return x.asin === cs.asin; });
-      if (!a) return null;
-      var rPct = parseNum(String(a.retailPct || '').replace(',', '.').replace(/[^0-9.]/g, ''));
-      if (rPct < 95) return null;
-      var rev = getRevenue(a, c) || 0;
-      return { asin: a.asin, title: a.title, brand: a.brand, market: a.market,
-        rPct: rPct, prevRetail: null, delta: 0, cause: 'recovered',
-        revenue: rev, caMonthEst: rev * 4.33, criticite: 0,
-        segment: calcSegment(a, totalCA, c),
-        sellableUnits: a.sellableUnits, couvertureSem: null, joursAvantLimite: null, stockUrgent: false };
-    }).filter(Boolean);
-  }());
-
-  // Filtrage marché
-  var marketFilter = window._buyboxMarket || 'all';
-  var byMarket = function(e) { return marketFilter === 'all' || e.market === marketFilter; };
-  var lostF       = lost.filter(byMarket);
-  var compromisedF= compromised.filter(byMarket);
-  var fragileF    = fragile.filter(byMarket);
-  var recoveredF  = recovered.filter(byMarket);
-
-  // Tab actif
-  var activeTab = window._buyboxTab || 'lost';
-  var sortBy = window._buyboxSort || 'criticite';
-  var displayList = (activeTab === 'lost'        ? lostF
-                   : activeTab === 'compromised' ? compromisedF
-                   : activeTab === 'fragile'     ? fragileF
-                   : recoveredF).slice();
-  displayList.sort(function(a, b) {
-    if (sortBy === 'criticite') return (b.criticite || 0) - (a.criticite || 0);
-    return (b.caMonthEst || 0) - (a.caMonthEst || 0);
+    }
+    if (act) actifs++;
+    if (a.suspectTag) taggedExp++;
   });
 
-  // KPIs
-  var asinsInTrouble = lostF.length + compromisedF.length;
-  var totalActiveAsins = (cFiltered.asins || []).filter(function(a) { return getRevenue(a, c) > 0; }).length;
-  var caAtRisk = lostF.reduce(function(s, e) { return s + (e.caMonthEst || 0); }, 0)
-               + compromisedF.reduce(function(s, e) { return s + (e.caMonthEst || 0); }, 0);
-  var openCasesCount = buyboxGetCases(c).filter(function(x) { return x.status !== 'closed'; }).length;
-  var ninetyDaysAgo  = Date.now() - 90 * 24 * 3600 * 1000;
-  var resolved90d    = buyboxGetCases(c).filter(function(x) {
-    return x.status === 'closed' && x.closedAt && new Date(x.closedAt).getTime() >= ninetyDaysAgo && x.conclusion.outcome === 'success';
-  }).length;
-
-  // Formatage CA
-  var fmtCA = function(v) {
-    if (!v) return '—';
-    if (v >= 1000) return Math.round(v / 1000) + ' k€';
-    return Math.round(v) + ' €';
-  };
+  var alerts = calcBuyBoxAlerts(cF);
+  var bbTotal = alerts.critical.length + alerts.warning.length + alerts.suppressed.length;
+  var concernes = lens === 'exposition' ? taggedExp : bbTotal;
 
   var h = '';
 
-  // ── En-tête ──
-  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap;">';
-  h += '<div>';
-  h += '<div class="eyebrow" style="font-size:11px;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;">Phase 1 · Identifier</div>';
-  h += '<div style="font-size:18px;font-weight:600;">Buy Box</div>';
+  // ── Fil des 3 agents ──
+  h += '<div class="det-fil" data-testid="det-fil">';
+  h += '<div class="det-fil-card det-active" data-agent="detect">';
+  h += '<div class="det-fil-eyebrow">Agent · Détecter 01</div>';
+  h += '<div class="det-fil-title">Dashboard suspects</div>';
+  h += '<div class="det-fil-desc">Liste les ASINs dont l\'exposition Featured Offer chute ou se réveille.</div>';
+  h += '<div class="det-fil-maillon">maillon · Trafic / FO views</div>';
   h += '</div>';
-  h += '<div style="display:flex;gap:8px;align-items:center;">';
-  h += '<select style="font-size:12px;padding:5px 8px;background:var(--s2);border:0.5px solid var(--bd2);border-radius:6px;color:var(--tx);cursor:pointer;" onchange="window._buyboxMarket=this.value;render()">';
-  h += '<option value="all"' + (marketFilter === 'all' ? ' selected' : '') + '>Tous les marchés</option>';
-  var mkts = Array.from(new Set((c.asins || []).map(function(a) { return a.market; }).filter(Boolean)));
-  mkts.forEach(function(m) {
-    h += '<option value="' + m + '"' + (marketFilter === m ? ' selected' : '') + '>amazon' + m + '</option>';
+  h += '<div class="det-fil-card" data-agent="diagnose">';
+  h += '<div class="det-fil-eyebrow">Agent · Diagnostiquer 02</div>';
+  h += '<div class="det-fil-title">Agent BB Recovery</div>';
+  h += '<div class="det-fil-desc">Reconstruit la chaîne, classe la cause BB-1 → BB-12, prépare le case.</div>';
+  h += '<div class="det-fil-maillon">maillons · Stock → Buy Box</div>';
+  h += '</div>';
+  h += '<div class="det-fil-card" data-agent="act">';
+  h += '<div class="det-fil-eyebrow">Agent · Agir 03</div>';
+  h += '<div class="det-fil-title">Agent Communication</div>';
+  h += '<div class="det-fil-desc">Génère le case Amazon et force la révélation du blocage.</div>';
+  h += '<div class="det-fil-maillon">maillon · Offre Retail</div>';
+  h += '</div>';
+  h += '<a class="det-fil-methode" onclick="alert(\'Page Processus — intégration à venir\')">Méthode</a>';
+  h += '</div>';
+
+  // ── Barre processus ──
+  h += '<div class="det-process">';
+  h += '<span class="step active">Détecter</span><span>→</span>';
+  h += '<span class="step">Diagnostiquer</span><span>→</span>';
+  h += '<span class="step">Agir</span>';
+  h += '<span style="margin-left:4px;">→</span><span style="font-style:italic;">réponse Amazon</span>';
+  h += '<span>↻</span><span class="step">Re-diagnostiquer</span>';
+  h += '<span>→</span><span class="step">Mesurer</span>';
+  h += '</div>';
+
+  // ── Entonnoir ──
+  h += '<div class="sus-funnel">';
+  h += '<div class="sus-fstep"><b>' + fmt(total) + '</b><span>ASINs catalogue</span></div>';
+  h += '<span class="sus-farrow">→</span>';
+  h += '<div class="sus-fstep"><b>' + fmt(actifs) + '</b><span>actifs (exposition + ventes)</span></div>';
+  h += '<span class="sus-farrow">→</span>';
+  h += '<div class="sus-fstep"><b style="color:var(--r);">' + fmt(concernes) + '</b><span>concernés cette semaine</span></div>';
+  h += '</div>';
+
+  // ── Sélecteur de lentille ──
+  h += '<div class="det-lens" data-testid="det-lens">';
+  h += '<button class="det-lens-btn' + (lens === 'exposition' ? ' active' : '') + '" onclick="window._buyboxLens=\'exposition\';render();">Exposition <span style="font-family:var(--fm);font-size:10px;opacity:.6;margin-left:3px;">' + taggedExp + '</span></button>';
+  h += '<button class="det-lens-btn' + (lens === 'bbperdue' ? ' active' : '') + '" onclick="window._buyboxLens=\'bbperdue\';render();">Buy Box perdue <span style="font-family:var(--fm);font-size:10px;opacity:.6;margin-left:3px;">' + bbTotal + '</span></button>';
+  h += '</div>';
+
+  // ── Board par lentille ──
+  if (lens === 'exposition') {
+    h += renderSuspectsBoard(cF, { skipHeader: true });
+  } else {
+    h += renderBBPerdueBoard(cF, alerts);
+  }
+
+  return h;
+}
+
+// ── Lentille Buy Box perdue — board retailPct ──
+function renderBBPerdueBoard(c, alerts) {
+  var perdue = alerts.suppressed.concat(alerts.critical);
+  var compromise = alerts.warning;
+
+  var fragile = [];
+  (c.asins || []).forEach(function(a) {
+    var rPct = parseNum(String(a.retailPct || '').replace(',', '.').replace(/[^0-9.]/g, ''));
+    if (!(rPct > 0)) return;
+    var hist = a.history || [];
+    if (hist.length < 3) return;
+    var s0 = parseNum(String((hist[hist.length - 1].retailPct || '').toString()).replace(',', '.').replace(/[^0-9.]/g, ''));
+    var s1 = parseNum(String((hist[hist.length - 2].retailPct || '').toString()).replace(',', '.').replace(/[^0-9.]/g, ''));
+    var s2 = parseNum(String((hist[hist.length - 3].retailPct || '').toString()).replace(',', '.').replace(/[^0-9.]/g, ''));
+    if ((s0 - s1) < 0 && (s1 - s2) < 0) {
+      var rev = getRevenue(a, c) || 0;
+      fragile.push({ asin: a.asin, title: a.title, brand: a.brand, market: a.market,
+        rPct: rPct, delta: s0 - s1, cause: 'fragile_trend',
+        revenue: rev, caMonthEst: rev * 4.33, criticite: rev * 4.33 * Math.abs((s0 - s1) / 100) });
+    }
   });
-  h += '</select>';
-  h += '<button class="btn btn-sm" onclick="render()">Recalculer</button>';
-  h += '</div>';
-  h += '</div>';
 
-  // ── Bandeau contexte sectoriel ──
-  h += '<div class="context-banner" style="margin-bottom:14px;">';
-  h += '<div class="context-title">' + BUYBOX_CONTEXT_BANNER.title + '</div>';
-  h += BUYBOX_CONTEXT_BANNER.body + ' <cite style="color:var(--tx3);font-style:normal;">' + BUYBOX_CONTEXT_BANNER.cite + '</cite>';
-  h += '</div>';
+  var recovered = [];
+  if (typeof buyboxGetCases === 'function') {
+    var NOW = Date.now(), WIN = 90 * 24 * 3600 * 1000;
+    buyboxGetCases(c).forEach(function(cs) {
+      if (cs.status !== 'closed' || !cs.conclusion || cs.conclusion.outcome !== 'success' || !cs.closedAt) return;
+      if ((NOW - new Date(cs.closedAt).getTime()) > WIN) return;
+      var a = (c.asins || []).find(function(x) { return x.asin === cs.asin; });
+      if (!a) return;
+      var rPct = parseNum(String(a.retailPct || '').replace(',', '.').replace(/[^0-9.]/g, ''));
+      if (rPct < 95) return;
+      var rev = getRevenue(a, c) || 0;
+      recovered.push({ asin: a.asin, title: a.title, brand: a.brand, market: a.market,
+        rPct: rPct, delta: 0, cause: 'recovered',
+        revenue: rev, caMonthEst: rev * 4.33, criticite: 0 });
+    });
+  }
 
-  // ── KPIs ──
-  h += '<div class="kpis" style="margin-bottom:16px;">';
-  h += '<div class="kpi"><div class="kpi-lb">ASINs en difficulté</div><div class="kpi-v' + (asinsInTrouble > 0 ? ' kpi-danger' : '') + '">' + asinsInTrouble + '</div><div class="kpi-d">sur ' + totalActiveAsins + ' actifs</div></div>';
-  h += '<div class="kpi"><div class="kpi-lb">CA à risque / mois</div><div class="kpi-v' + (caAtRisk > 0 ? ' kpi-danger' : '') + '">' + fmtCA(caAtRisk) + '</div><div class="kpi-d">Perdue + Compromise</div></div>';
-  h += '<div class="kpi"><div class="kpi-lb">Dossiers ouverts</div><div class="kpi-v">' + openCasesCount + '</div><div class="kpi-d">en cours d\'enquête</div></div>';
-  h += '<div class="kpi"><div class="kpi-lb">Résolus (90 j)</div><div class="kpi-v good">' + resolved90d + '</div><div class="kpi-d">avec succès</div></div>';
-  h += '</div>';
+  perdue.forEach(function(e) { e._sev = 'perdue'; });
+  compromise.forEach(function(e) { e._sev = 'compromise'; });
+  fragile.forEach(function(e) { e._sev = 'fragile'; });
+  recovered.forEach(function(e) { e._sev = 'recovered'; });
+  var allItems = perdue.concat(compromise).concat(fragile).concat(recovered);
+  allItems.sort(function(a, b) { return (b.criticite || 0) - (a.criticite || 0); });
 
-  // ── Filtres cycle de vie ──
-  h += '<div class="lc-filters" style="margin-bottom:12px;">';
-  h += '<span style="font-size:11px;color:var(--tx2);margin-right:4px;">Cycle de vie :</span>';
-  var lcFilters = [
-    { id: 'all',  label: 'Tous' },
-    { id: 'best', label: 'Best' },
-    { id: 'perm', label: 'Permanent' },
-    { id: 'fin',  label: 'Fin de vie' }
+  var flt = window._bbpFilter || 'all';
+  var filtered = flt === 'all' ? allItems : allItems.filter(function(e) { return e._sev === flt; });
+
+  var h = '';
+
+  h += '<div class="sus-triage">';
+  var cards = [
+    { key: 'perdue',     n: perdue.length,     label: 'Perdue',      meta: 'Retail % < 80 % ou Buy Box = 0', cls: 'sus-crit' },
+    { key: 'compromise', n: compromise.length,  label: 'Compromise',  meta: 'Retail % < 100 % ou en baisse S-1', cls: 'sus-warn' },
+    { key: 'fragile',    n: fragile.length,     label: 'Fragile',     meta: 'Retail % positif, baisse 2 sem. consécutives', cls: 'sus-warn' },
+    { key: 'recovered',  n: recovered.length,   label: 'Récupérées',  meta: 'Case fermé succès, Retail % ≥ 95 %', cls: 'sus-opp' },
+    { key: 'all',        n: allItems.length,    label: 'Tous',        meta: 'toutes les catégories BB perdue', cls: 'sus-all' }
   ];
-  var curLc = window._buyboxLifecycle || 'all';
-  lcFilters.forEach(function(f) {
-    var active = curLc === f.id;
-    h += '<button class="btn btn-sm' + (active ? ' btn-active' : '') + '" style="' + (active ? 'border-color:var(--b);color:var(--b);' : '') + '" onclick="window._buyboxLifecycle=\'' + f.id + '\';render()">' + f.label + '</button>';
+  cards.forEach(function(cd) {
+    var pressed = flt === cd.key;
+    h += '<button class="sus-tcard ' + cd.cls + (pressed ? ' active' : '') + '" onclick="window._bbpFilter=\'' + cd.key + '\';render();">';
+    h += '<span class="sus-tcard-tag"></span>';
+    h += '<div class="sus-tcard-n">' + cd.n + '</div>';
+    h += '<div class="sus-tcard-lab">' + cd.label + '</div>';
+    h += '<div class="sus-tcard-meta">' + cd.meta + '</div>';
+    h += '</button>';
   });
-  h += '<span style="font-size:10px;color:var(--tx3);margin-left:6px;">(filtrage cycle de vie en v3.6.2)</span>';
   h += '</div>';
 
-  // ── Tri ──
-  h += '<div style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--tx2);margin-bottom:10px;">';
-  h += '<span>Trier par :</span>';
-  h += '<button class="btn btn-sm sort-btn' + (sortBy === 'criticite' ? ' sort-btn-active' : '') + '" onclick="window._buyboxSort=\'criticite\';render()">⚠ Criticité</button>';
-  h += '<button class="btn btn-sm sort-btn' + (sortBy === 'ca' ? ' sort-btn-active' : '') + '" onclick="window._buyboxSort=\'ca\';render()">CA</button>';
+  h += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:14px;margin-bottom:6px;">';
+  h += '<span style="font-family:var(--fm);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx3);">' + filtered.length + ' lignes</span>';
   h += '</div>';
 
-  // ── Tabs ──
-  h += '<div class="tabs" style="margin-bottom:0;">';
-  var tabs = [
-    { id: 'lost',        label: 'Perdue',       count: lostF.length },
-    { id: 'compromised', label: 'Compromise',   count: compromisedF.length },
-    { id: 'fragile',     label: 'Fragile',      count: fragileF.length },
-    { id: 'recovered',   label: 'Récupérées',   count: recoveredF.length }
-  ];
-  tabs.forEach(function(t) {
-    var isActive = activeTab === t.id;
-    h += '<div class="tab' + (isActive ? ' active' : '') + '" style="padding:8px 14px;cursor:pointer;font-size:12px;border-bottom:2px solid ' + (isActive ? 'var(--r)' : 'transparent') + ';color:' + (isActive ? 'var(--r)' : 'var(--tx2)') + ';font-weight:' + (isActive ? '500' : '400') + ';display:flex;align-items:center;gap:6px;" onclick="window._buyboxTab=\'' + t.id + '\';render()">';
-    h += t.label;
-    h += '<span class="tab-badge">' + t.count + '</span>';
+  h += '<div class="sus-board">';
+  h += '<div class="sus-row sus-hdr">';
+  h += '<div></div><div>ASIN · produit</div>';
+  h += '<div class="sus-col-hide">Retail % · tendance</div>';
+  h += '<div class="sus-col-hide">Cause</div>';
+  h += '<div class="sus-col-hide">CA / mois</div>';
+  h += '<div>Action</div>';
+  h += '</div>';
+
+  if (!filtered.length) {
+    h += '<div style="padding:40px 20px;text-align:center;color:var(--tx3);font-size:13px;">Aucun ASIN dans cette catégorie.</div>';
+  }
+
+  filtered.slice(0, 100).forEach(function(e) {
+    var sevCls = e._sev === 'perdue' ? 'sus-sev-crit' : e._sev === 'compromise' ? 'sus-sev-warn' : e._sev === 'recovered' ? 'sus-sev-opp' : 'sus-sev-warn';
+    h += '<div class="sus-row">';
+    h += '<div class="sus-sev ' + sevCls + '"></div>';
+
+    h += '<div>';
+    h += '<div class="sus-asin-code">' + e.asin + '</div>';
+    h += '<div class="sus-asin-title">' + esc((e.title || '').substring(0, 65)) + '</div>';
+    h += '<div class="sus-asin-brand">' + esc(e.brand || '') + '</div>';
+    h += '</div>';
+
+    h += '<div class="sus-col-hide" style="text-align:right;">';
+    var rPctStr = e.rPct != null ? e.rPct + ' %' : '—';
+    var rColor = e.rPct != null && e.rPct < 80 ? 'var(--r)' : 'var(--tx)';
+    h += '<div style="font-family:var(--fm);font-size:14px;font-weight:500;color:' + rColor + ';">' + rPctStr + '</div>';
+    if (e.delta != null && e.delta !== 0) {
+      var dCls = e.delta < 0 ? 'sus-delta-down' : 'sus-delta-up';
+      h += '<span class="sus-delta ' + dCls + '">' + (e.delta > 0 ? '+' : '') + fmtNum(e.delta, 1) + ' pt</span>';
+    }
+    h += '</div>';
+
+    h += '<div class="sus-col-hide">';
+    if (typeof buyboxCauseLabel === 'function') {
+      var cm = buyboxCauseLabel(e.cause);
+      h += '<span style="font-size:11px;color:' + cm.color + ';">' + cm.icon + ' ' + cm.label + '</span>';
+    } else {
+      h += '<span style="font-size:11px;color:var(--tx3);">' + esc(e.cause || '') + '</span>';
+    }
+    h += '</div>';
+
+    h += '<div class="sus-ca sus-col-hide">' + fmtEurK(e.caMonthEst || 0) + '<span>CA / mois est.</span></div>';
+
+    h += '<div><button class="det-go" onclick="window._buyboxView=\'agent_stub\';window._buyboxAsin=\'' + e.asin + '\';render();" title="Lancer l\'Agent BB">Lancer l\'Agent BB</button></div>';
+
     h += '</div>';
   });
-  h += '</div>';
 
-  // ── Tableau ──
-  h += '<div class="bb-table" style="border:0.5px solid var(--bd);border-radius:var(--rdl);overflow:hidden;margin-top:0;">';
-
-  // En-tête tableau
-  h += '<div class="bb-thead" style="display:grid;grid-template-columns:60px 1fr 70px 70px 1fr 80px 110px;padding:8px 14px;background:var(--s2);font-size:11px;color:var(--tx3);font-weight:500;border-bottom:0.5px solid var(--bd);">';
-  h += '<div>Type</div><div>ASIN · Produit</div><div style="text-align:right;">Retail%</div><div style="text-align:right;">Δ S-1</div><div>Cause suspectée</div><div style="text-align:right;">CA / mois (est.)</div><div></div>';
-  h += '</div>';
-
-  if (displayList.length === 0) {
-    h += '<div style="padding:24px;text-align:center;color:var(--tx3);font-size:12px;">Aucun ASIN dans cette catégorie.</div>';
-  } else {
-    var shown = displayList.slice(0, 50);
-    shown.forEach(function(entry) {
-      var asin = entry.asin;
-      var title = (entry.title || asin).slice(0, 55);
-      var rPct = entry.rPct !== null && entry.rPct !== undefined ? entry.rPct : null;
-      var delta = entry.delta !== null && entry.delta !== undefined ? entry.delta : null;
-      var rPctStr = rPct !== null ? rPct + ' %' : '—';
-      var rPctDanger = rPct !== null && rPct < 80;
-      var deltaStr = delta !== null
-        ? (delta >= 0 ? '+' : '') + fmtNum(delta, 2) + ' pt'
-        : '—';
-      var deltaColor = delta !== null && delta < 0 ? 'var(--r)' : delta > 0 ? 'var(--g)' : 'var(--tx3)';
-      var rev = entry.caMonthEst || entry.revenue || 0;
-      var hasCase = buyboxGetCase(c, asin) !== null;
-
-      h += '<div class="bb-trow" style="display:grid;grid-template-columns:60px 1fr 70px 70px 1fr 80px 110px;padding:12px 14px;border-bottom:0.5px solid var(--bd);align-items:center;font-size:12px;">';
-
-      // Colonne badge (cycle de vie — v3.6.2)
-      h += '<div><span style="font-size:10px;color:var(--tx3);">—</span></div>';
-
-      // ASIN + produit
-      h += '<div><div class="bb-product-name" style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + (entry.title || asin) + '">' + title + '</div>';
-      h += '<div style="font-size:10px;color:var(--tx3);font-family:var(--fm);">' + asin + '</div></div>';
-
-      // Retail%
-      h += '<div style="text-align:right;font-weight:500;color:' + (rPctDanger ? 'var(--r)' : 'var(--tx)') + ';">' + rPctStr + '</div>';
-
-      // Δ S-1
-      h += '<div style="text-align:right;color:' + deltaColor + ';">' + deltaStr + '</div>';
-
-      // Cause suspectée (v3.6.3 : dynamique)
-      var causeMeta = buyboxCauseLabel(entry.cause);
-      h += '<div><span style="color:' + causeMeta.color + ';font-size:11px;">' + causeMeta.icon + ' ' + causeMeta.label + '</span></div>';
-
-      // CA/mois
-      h += '<div style="text-align:right;color:var(--tx2);">' + fmtCA(rev) + '</div>';
-
-      // Action
-      h += '<div style="text-align:right;">';
-      h += '<button class="btn btn-sm" style="' + (hasCase ? 'border-color:var(--a);color:var(--a);' : '') + '" onclick="window._buyboxView=\'case\';window._buyboxAsin=\'' + asin + '\';buyboxOpenCase(cl(),\'' + asin + '\');render();">' + (hasCase ? '📂 Dossier' : 'Enquêter →') + '</button>';
-      h += '</div>';
-
-      h += '</div>';
-    });
-
-    if (displayList.length > 50) {
-      h += '<div style="padding:10px 14px;font-size:11px;color:var(--tx3);text-align:center;">Affichage limité à 50 ASINs — ' + (displayList.length - 50) + ' supplémentaires non affichés.</div>';
-    }
+  if (filtered.length > 100) {
+    h += '<div style="padding:10px 18px;font-size:11px;color:var(--tx3);text-align:center;">' + (filtered.length - 100) + ' ASINs supplémentaires non affichés.</div>';
   }
 
   h += '</div>';
+  return h;
+}
 
-  return bar + h;
+// ── Stub Agent BB Recovery ──
+function renderBuyBoxAgentStub(asin) {
+  var c = cl();
+  var a = c ? (c.asins || []).find(function(x) { return x.asin === asin; }) : null;
+  var title = a ? (a.title || asin) : asin;
+
+  var h = '';
+  h += '<div style="margin-bottom:16px;">';
+  h += '<span style="font-size:12px;color:var(--tx3);">Buy Box · Détecter</span>';
+  h += '<span style="font-size:12px;color:var(--tx3);margin:0 6px;">→</span>';
+  h += '<span style="font-size:12px;font-weight:500;">Agent BB Recovery</span>';
+  h += '<span style="font-size:12px;color:var(--tx3);margin:0 6px;">→</span>';
+  h += '<span style="font-size:12px;font-family:var(--fm);">' + esc(asin) + '</span>';
+  h += '</div>';
+
+  h += '<div class="det-stub" data-testid="agent-stub">';
+  h += '<div style="font-size:36px;">🔬</div>';
+  h += '<h2>Agent BB Recovery</h2>';
+  h += '<p>Le diagnostic de <strong>' + esc(asin) + '</strong> sera disponible dans la prochaine version.<br>';
+  h += 'L\'agent reconstituera la chaîne de confiance et classera la cause en faisceau BB-1 → BB-12.</p>';
+  h += '<div style="font-size:12px;color:var(--tx3);font-family:var(--fm);margin-bottom:20px;">' + esc(title.substring(0, 80)) + '</div>';
+  h += '<button class="btn" onclick="window._buyboxView=null;window._buyboxAsin=null;render();">← Retour au Dashboard</button>';
+  h += '</div>';
+
+  return h;
 }
 
 // ═══════════════════════════════════════════════════════════════════
