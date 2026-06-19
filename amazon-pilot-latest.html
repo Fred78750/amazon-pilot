@@ -534,6 +534,80 @@ a:hover { text-decoration: underline; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   SUSPECTS DASHBOARD v3.8.2
+   ═══════════════════════════════════════════════════════════════ */
+.sus-funnel { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin:12px 0 4px; padding:13px 18px; background:var(--s1); border:0.5px solid var(--bd); border-radius:var(--rdl); }
+.sus-fstep { display:flex; flex-direction:column; line-height:1.15; }
+.sus-fstep b { font-weight:700; font-size:20px; }
+.sus-fstep span { font-size:11px; color:var(--tx3); margin-top:1px; }
+.sus-farrow { color:var(--tx3); font-size:18px; font-weight:600; }
+.sus-fnote { margin-left:auto; font-size:11.5px; color:var(--tx3); max-width:34ch; text-align:right; line-height:1.4; }
+
+.sus-triage { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin:12px 0 8px; }
+.sus-tcard { background:var(--s1); border:0.5px solid var(--bd); border-radius:var(--rdl); padding:14px; cursor:pointer; text-align:left; position:relative; transition:border-color .15s; }
+.sus-tcard:hover:not(:disabled) { border-color:var(--bd3); }
+.sus-tcard.active { box-shadow:inset 0 0 0 1.5px var(--tx); border-color:var(--tx); }
+.sus-tcard-n { font-weight:700; font-size:28px; line-height:1; }
+.sus-tcard-lab { font-size:12.5px; color:var(--tx2); margin-top:6px; }
+.sus-tcard-meta { font-family:var(--fm); font-size:10px; color:var(--tx3); margin-top:3px; line-height:1.35; }
+.sus-tcard-tag { position:absolute; top:14px; right:14px; width:9px; height:9px; border-radius:3px; }
+
+.sus-crit .sus-tcard-n { color:var(--r); }
+.sus-crit .sus-tcard-tag { background:var(--r); }
+.sus-warn .sus-tcard-n { color:var(--a); }
+.sus-warn .sus-tcard-tag { background:var(--a); }
+.sus-opp .sus-tcard-n { color:#0F766E; }
+[data-theme="light"] .sus-opp .sus-tcard-n { color:#0D9488; }
+.sus-opp .sus-tcard-tag { background:#0F766E; }
+.sus-all .sus-tcard-n { color:var(--tx); }
+.sus-all .sus-tcard-tag { background:var(--tx3); }
+.sus-tcard:disabled { cursor:not-allowed; opacity:.55; }
+.sus-badge-soon { position:absolute; top:12px; right:12px; font-family:var(--fm); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--tx3); background:var(--s2); border:0.5px solid var(--bd2); border-radius:999px; padding:2px 7px; }
+
+.sus-board { background:var(--s1); border:0.5px solid var(--bd); border-radius:var(--rdl); margin-top:8px; overflow:hidden; }
+.sus-row { display:grid; grid-template-columns:14px 2.2fr 1.6fr 1fr .8fr auto; gap:12px; align-items:center; padding:14px 18px; border-top:0.5px solid var(--bd); }
+.sus-hdr { border-top:0; padding:10px 18px; font-family:var(--fm); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--tx3); }
+.sus-sev { width:10px; height:10px; border-radius:3px; justify-self:center; }
+.sus-sev-crit { background:var(--r); }
+.sus-sev-warn { background:var(--a); }
+.sus-sev-opp { background:#0F766E; }
+.sus-asin-code { font-family:var(--fm); font-size:12px; font-weight:500; }
+.sus-asin-title { font-size:12px; color:var(--tx2); margin-top:2px; max-width:36ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sus-asin-brand { font-family:var(--fm); font-size:10px; color:var(--tx3); text-transform:uppercase; letter-spacing:.08em; margin-top:3px; }
+.sus-trace { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.sus-trig { width:18px; height:18px; border-radius:5px; display:grid; place-items:center; flex:0 0 auto; font-family:var(--fm); font-size:12px; font-weight:600; border:0.5px solid var(--bd2); color:var(--tx3); }
+.sus-trig-zero { background:rgba(239,68,68,.1); border-color:rgba(239,68,68,.25); color:var(--r); }
+.sus-trig-decline { background:var(--s2); color:var(--tx2); }
+.sus-trig-reveal { background:rgba(15,118,110,.08); border-color:rgba(15,118,110,.2); color:#0F766E; }
+.sus-trig-appar { background:transparent; border-style:dashed; border-color:rgba(15,118,110,.2); color:#0F766E; }
+.sus-val { font-family:var(--fm); font-size:12px; text-align:right; min-width:46px; }
+.sus-val b { font-weight:500; font-size:14px; }
+.sus-delta { font-size:10px; display:block; margin-top:1px; }
+.sus-delta-up { color:#0F766E; }
+.sus-delta-down { color:var(--r); }
+.sus-delta-flat { color:var(--tx3); }
+.sus-reinforcers { display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; width:100%; }
+.sus-reinf { font-family:var(--fm); font-size:9px; padding:2px 6px; border-radius:4px; background:rgba(245,158,11,.08); color:var(--a); border:0.5px solid rgba(245,158,11,.2); }
+.sus-hyps { display:flex; flex-wrap:wrap; gap:5px; }
+.sus-bb { font-family:var(--fm); font-size:10.5px; padding:3px 7px; border-radius:6px; border:0.5px solid var(--bd2); color:var(--tx3); white-space:nowrap; }
+.sus-ca { font-family:var(--fm); font-size:13px; text-align:right; }
+.sus-ca span { display:block; font-size:10px; color:var(--tx3); margin-top:1px; }
+.sus-go { font-size:12px; font-weight:500; color:var(--tx3); background:var(--s2); border:0.5px solid var(--bd2); border-radius:8px; padding:8px 12px; cursor:not-allowed; opacity:.6; white-space:nowrap; }
+.sus-legend { display:flex; gap:18px; flex-wrap:wrap; margin-top:16px; padding:14px 16px; background:var(--s1); border:0.5px dashed var(--bd2); border-radius:var(--rdl); font-size:12px; color:var(--tx2); }
+.sus-lg { display:flex; gap:8px; align-items:flex-start; max-width:320px; }
+.sus-lg .sus-dot { width:9px; height:9px; border-radius:3px; margin-top:4px; flex:0 0 auto; }
+.sus-lg-crit .sus-dot { background:var(--r); }
+.sus-lg-warn .sus-dot { background:var(--a); }
+.sus-lg-opp .sus-dot { background:#0F766E; }
+.sus-lg b { font-weight:600; color:var(--tx); }
+
+@media (max-width:900px) {
+  .sus-triage { grid-template-columns:repeat(2,1fr); }
+  .sus-row { grid-template-columns:12px 1fr auto; gap:10px; }
+  .sus-col-hide { display:none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
    MODULE YoY — Analyse comparée v3.6.5
    ═══════════════════════════════════════════════════════════════ */
 
@@ -704,7 +778,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.8.1';
+const APP_VERSION = '3.8.2';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -6492,6 +6566,201 @@ function buyboxCauseLabel(cause) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// SUSPECTS DASHBOARD v3.8.2 — renderSuspectsBoard()
+// ═══════════════════════════════════════════════════════════════════
+
+window._suspectFilter = 'all';
+
+function suspectSparkline(a, tag) {
+  if (!tag.marketWorst || !a.foViews || !a.foViews[tag.marketWorst]) return '';
+  var mData = a.foViews[tag.marketWorst];
+  var keys = Object.keys(mData).filter(function(k) { return !/^\d{4}-01-01$/.test(k); }).sort().slice(-8);
+  if (keys.length < 2) return '';
+  var vals = keys.map(function(k) { return mData[k].views || 0; });
+
+  var W = 130, H = 34, pad = 3;
+  var maxV = Math.max.apply(null, vals.concat([1]));
+  var n = vals.length;
+  function sx(i) { return pad + i * (W - 2 * pad) / (n - 1); }
+  function sy(v) { return H - pad - (v / maxV) * (H - 2 * pad); }
+
+  var pts = vals.map(function(v, i) { return sx(i).toFixed(1) + ',' + sy(v).toFixed(1); }).join(' ');
+  var colHex = tag.severity === 'crit' ? '#DC2626' : tag.severity === 'warn' ? '#D97706' : '#0F766E';
+  var area = pad + ',' + (H - pad) + ' ' + pts + ' ' + (W - pad) + ',' + (H - pad);
+
+  var ex = sx(n - 1), ey = sy(vals[n - 1]);
+  var zero = vals[n - 1] === 0;
+
+  return '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="display:block;">'
+    + '<polygon points="' + area + '" fill="' + colHex + '" opacity="0.08"/>'
+    + '<polyline points="' + pts + '" fill="none" stroke="' + colHex + '" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>'
+    + '<circle cx="' + ex.toFixed(1) + '" cy="' + ey.toFixed(1) + '" r="' + (zero ? 3.2 : 2.6) + '" fill="' + (zero ? '#DC2626' : colHex) + '"/>'
+    + '</svg>';
+}
+
+function suspectTrigBadge(trigger) {
+  var map = {
+    zero_hebdo:        { g: '∅', cls: 'zero',    t: 'Passage à 0 — rupture d’exposition' },
+    chute_mensuelle:   { g: '↘', cls: 'decline', t: 'Chute progressive de l’exposition' },
+    hausse_mensuelle:  { g: '↗', cls: 'reveal',  t: 'Réveil soutenu sur un marché' },
+    apparition:        { g: '✦', cls: 'appar',   t: 'Apparition / réapparition' }
+  };
+  var m = map[trigger];
+  if (!m) return '';
+  return '<span class="sus-trig sus-trig-' + m.cls + '" title="' + m.t + '">' + m.g + '</span>';
+}
+
+function fmtEurK(v) {
+  if (!v) return '0 €';
+  if (v >= 1000) return fmt(Math.round(v / 1000)) + ' k€';
+  return fmt(Math.round(v)) + ' €';
+}
+
+function renderSuspectsBoard(c) {
+  var total = c.asins.length;
+  var actifs = 0, tagged = 0;
+  var counts = { crit: 0, warn: 0, opp: 0 };
+  var suspects = [];
+
+  c.asins.forEach(function(a) {
+    var active = false;
+    if (a.history && a.history.length) {
+      for (var i = 0; i < a.history.length; i++) {
+        var hi = a.history[i];
+        if ((hi.revenue || 0) > 0 || (hi.orderedRevenue || 0) > 0 || (hi.units || 0) > 0 || (hi.orderedUnits || 0) > 0) { active = true; break; }
+      }
+    }
+    if (active) actifs++;
+    var t = a.suspectTag;
+    if (!t) return;
+    tagged++;
+    if (counts[t.severity] !== undefined) counts[t.severity]++;
+    suspects.push(a);
+  });
+
+  suspects.sort(function(a, b) { return (b.suspectTag.caExposed || 0) - (a.suspectTag.caExposed || 0); });
+
+  var flt = window._suspectFilter || 'all';
+  var filtered = flt === 'all' ? suspects : suspects.filter(function(a) { return a.suspectTag.severity === flt; });
+
+  var h = '';
+
+  h += '<div class="eyebrow" style="margin-bottom:4px;">Buy Box · Revue hebdomadaire · niveau 1</div>';
+  h += '<h2 style="font-size:22px;font-weight:700;margin:0 0 14px;">ASINs suspects <span style="color:var(--tx3);font-weight:400;">· perte ou réveil d’exposition</span></h2>';
+
+  h += '<div class="sus-funnel">';
+  h += '<div class="sus-fstep"><b>' + fmt(total) + '</b><span>ASINs catalogue</span></div>';
+  h += '<span class="sus-farrow">→</span>';
+  h += '<div class="sus-fstep"><b>' + fmt(actifs) + '</b><span>actifs (exposition + ventes)</span></div>';
+  h += '<span class="sus-farrow">→</span>';
+  h += '<div class="sus-fstep"><b style="color:var(--r);">' + fmt(tagged) + '</b><span>suspects cette semaine</span></div>';
+  h += '</div>';
+
+  h += '<div class="sus-triage">';
+  var cards = [
+    { key: 'crit', n: counts.crit, label: 'Critiques', meta: 'FO vedette à 0 ≥ 3 sem. · ou −50 % + défaut', cls: 'sus-crit' },
+    { key: 'warn', n: counts.warn, label: 'À surveiller', meta: 'chute −30 % à −50 % · ou 0 sur 1–2 sem.', cls: 'sus-warn' },
+    { key: 'opp',  n: counts.opp,  label: 'Opportunités', meta: 'hausse ≥ +50 % soutenue sur un marché', cls: 'sus-opp' },
+    { key: 'dorm', n: '—',    label: 'Dormants', meta: 'trafic historique + stock, sans mouvement', cls: '', disabled: true },
+    { key: 'all',  n: tagged,      label: 'Tous les suspects', meta: 'critiques + à surveiller + opportunités', cls: 'sus-all' }
+  ];
+  cards.forEach(function(cd) {
+    var pressed = flt === cd.key;
+    if (cd.disabled) {
+      h += '<button class="sus-tcard" disabled>';
+      h += '<span class="sus-badge-soon">à venir</span>';
+    } else {
+      h += '<button class="sus-tcard ' + cd.cls + (pressed ? ' active' : '') + '" onclick="window._suspectFilter=\'' + cd.key + '\';render();">';
+      h += '<span class="sus-tcard-tag"></span>';
+    }
+    h += '<div class="sus-tcard-n">' + cd.n + '</div>';
+    h += '<div class="sus-tcard-lab">' + cd.label + '</div>';
+    h += '<div class="sus-tcard-meta">' + cd.meta + '</div>';
+    h += '</button>';
+  });
+  h += '</div>';
+
+  h += '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:14px;margin-bottom:6px;">';
+  h += '<span style="font-family:var(--fm);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--tx3);">' + filtered.length + ' lignes</span>';
+  h += '</div>';
+
+  h += '<div class="sus-board">';
+  h += '<div class="sus-row sus-hdr">';
+  h += '<div></div>';
+  h += '<div>ASIN · produit</div>';
+  h += '<div class="sus-col-hide">Exposition · 8 sem.</div>';
+  h += '<div class="sus-col-hide">Hypothèses BB</div>';
+  h += '<div class="sus-col-hide">CA exposé</div>';
+  h += '<div>Action</div>';
+  h += '</div>';
+
+  if (!filtered.length) {
+    h += '<div style="padding:40px 20px;text-align:center;color:var(--tx3);font-size:13px;">Aucun ASIN dans cette catégorie.</div>';
+  }
+
+  filtered.slice(0, 100).forEach(function(a) {
+    var t = a.suspectTag;
+    h += '<div class="sus-row">';
+    h += '<div class="sus-sev sus-sev-' + t.severity + '"></div>';
+
+    h += '<div>';
+    h += '<div class="sus-asin-code">' + a.asin + '</div>';
+    h += '<div class="sus-asin-title">' + esc((a.title || '').substring(0, 65)) + '</div>';
+    h += '<div class="sus-asin-brand">' + esc(a.brand || '') + '</div>';
+    h += '</div>';
+
+    h += '<div class="sus-trace sus-col-hide">';
+    h += suspectTrigBadge(t.trigger);
+    h += suspectSparkline(a, t);
+    h += '<div class="sus-val">';
+    h += '<b>' + fmt(t.foViewsCurrent || 0) + '</b>';
+    var dPct = t.deltaMensuelPct;
+    if (dPct != null) {
+      var dCls = dPct >= 0 ? 'up' : 'down';
+      if (Math.abs(dPct) < 3) dCls = 'flat';
+      h += '<span class="sus-delta sus-delta-' + dCls + '">' + (dPct > 0 ? '+' : '') + Math.round(dPct) + ' %</span>';
+    }
+    h += '</div>';
+    if (t.reinforcers && t.reinforcers.length) {
+      h += '<div class="sus-reinforcers">';
+      t.reinforcers.forEach(function(r) { h += '<span class="sus-reinf">' + esc(r) + '</span>'; });
+      h += '</div>';
+    }
+    h += '</div>';
+
+    h += '<div class="sus-hyps sus-col-hide">';
+    if (t.bbCandidates && t.bbCandidates.length) {
+      t.bbCandidates.forEach(function(bb) { h += '<span class="sus-bb">' + esc(bb) + '</span>'; });
+    } else {
+      h += '<span class="sus-bb">à diagnostiquer</span>';
+    }
+    h += '</div>';
+
+    h += '<div class="sus-ca sus-col-hide">' + fmtEurK(t.caExposed || 0) + '<span>CA 12 mois</span></div>';
+
+    h += '<div><button class="sus-go" disabled title="Agent BB niveau 2 — à venir">Diagnostiquer</button></div>';
+
+    h += '</div>';
+  });
+
+  if (filtered.length > 100) {
+    h += '<div style="padding:10px 18px;font-size:11px;color:var(--tx3);text-align:center;">' + (filtered.length - 100) + ' ASINs supplémentaires non affichés.</div>';
+  }
+
+  h += '</div>';
+
+  h += '<div class="sus-legend">';
+  h += '<div style="width:100%;font-family:var(--fm);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--tx3);margin-bottom:10px;">Règles de marquage — calibrées (spec v2.2)</div>';
+  h += '<div class="sus-lg sus-lg-crit"><span class="sus-dot"></span><div><b>Critique.</b> Vues de l’offre vedette = 0 depuis ≥ 3 semaines consécutives, ou chute mensuelle glissante ≤ −50 % conjointe à un défaut livraison / stock dormant.</div></div>';
+  h += '<div class="sus-lg sus-lg-warn"><span class="sus-dot"></span><div><b>À surveiller.</b> Chute mensuelle glissante entre −30 % et −50 %, ou passage à 0 sur 1–2 semaines.</div></div>';
+  h += '<div class="sus-lg sus-lg-opp"><span class="sus-dot"></span><div><b>Opportunité.</b> Hausse mensuelle glissante ≥ +50 % soutenue sur un marché. L’apparition depuis 0 est un état distinct.</div></div>';
+  h += '<div style="width:100%;margin-top:10px;padding-top:10px;border-top:0.5px solid var(--bd);font-family:var(--fm);font-size:10.5px;color:var(--tx3);">Seuils calibrés sur Cogex (compte en déclin) — provisoires.</div>';
+  h += '</div>';
+
+  return h;
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // BUY BOX v3.6.1 — renderBuyBox() Phase 1 : Identifier
 // ═══════════════════════════════════════════════════════════════════
 
@@ -6500,11 +6769,23 @@ function renderBuyBox() {
   if (!c) return renderWelcome();
   if (!c.asins || !c.asins.length) return '<div class="alr alr-a">Importez d\'abord des données CSV.</div>';
 
-  // Réinitialiser la vue si on arrive sur Phase 1
-  if (!window._buyboxView || window._buyboxView === 'list') {
-    window._buyboxView = 'list';
-  } else if (window._buyboxView === 'case' && window._buyboxAsin) {
+  // Route case view directly (no sub-tab bar needed)
+  if (window._buyboxView === 'case' && window._buyboxAsin) {
     return renderBuyBoxCase(c, window._buyboxAsin);
+  }
+
+  // Sub-tab bar (Alertes BB default, Suspects secondary)
+  var view = window._buyboxView || 'list';
+  if (view !== 'list' && view !== 'suspects') view = 'list';
+  window._buyboxView = view;
+
+  var bar = '<div class="tabs" style="margin-bottom:16px;">';
+  bar += '<div class="tab' + (view === 'list' ? ' active' : '') + '" onclick="window._buyboxView=\'list\';render();">Alertes BB</div>';
+  bar += '<div class="tab' + (view === 'suspects' ? ' active' : '') + '" onclick="window._buyboxView=\'suspects\';render();">Suspects</div>';
+  bar += '</div>';
+
+  if (view === 'suspects') {
+    return bar + renderSuspectsBoard(c);
   }
 
   // v3.6.2 : appliquer le filtre de recherche transversal
@@ -6742,7 +7023,7 @@ function renderBuyBox() {
 
   h += '</div>';
 
-  return h;
+  return bar + h;
 }
 
 // ═══════════════════════════════════════════════════════════════════
