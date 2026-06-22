@@ -811,7 +811,7 @@ window.onerror = function(msg, src, line, col) {
 window.addEventListener('unhandledrejection', function(e) {
   console.error('[AP] Unhandled promise rejection:', e.reason);
 });
-const APP_VERSION = '3.8.3';
+const APP_VERSION = '3.8.5';
 const API_BASE_URL = 'https://konuaxmdxjnzcuw2etjqwczrla0xycvt.lambda-url.eu-west-3.on.aws';
 
 // ═══════════════════════════════════════════════════════════════
@@ -872,6 +872,8 @@ const aiUsage = {
       seo_enrich: {calls:0,tokensIn:0,tokensOut:0,costEur:0},
       import: {calls:0,tokensIn:0,tokensOut:0,costEur:0},
       swot:   {calls:0,tokensIn:0,tokensOut:0,costEur:0},
+      bb_capture: {calls:0,tokensIn:0,tokensOut:0,costEur:0},
+      bb_explanation: {calls:0,tokensIn:0,tokensOut:0,costEur:0},
       other:  {calls:0,tokensIn:0,tokensOut:0,costEur:0},
     }
   },
@@ -900,6 +902,8 @@ const aiUsage = {
       appros: 'sonnet_4_6',
       revue: 'opus_4_6',
       buybox: 'sonnet_4_6', import: 'sonnet_4_6', swot: 'sonnet_4_6',
+      bb_capture: 'sonnet_4_6',
+      bb_explanation: 'sonnet_4_6',
     };
     return TIER[feature] || 'sonnet_4_6';
   },
@@ -2181,26 +2185,22 @@ const MARKETPLACES_FULL = [
 
 // 11 hypothèses de cause perte Buy Box (7 maquette + 4 ajouts orchestrateur)
 var BUYBOX_HYPOTHESES = [
-  { id: 'bol-not-transmitted',  label: 'BOL non transmis aux opérationnels',   hint: 'Le numéro de connaissement n\'arrive pas dans les ASN — défauts BOL Mismatch en cascade.' },
-  { id: 'competitor-3p',        label: 'Concurrent 3P prix',                   hint: 'Un vendeur tiers propose un prix inférieur ou détient l\'offre Featured.' },
-  { id: 'stock-insufficient',   label: 'Stock insuffisant',                    hint: 'Stock Amazon < seuil — disponibilité dégradée.' },
-  { id: 'po-not-confirmed',     label: 'PO non confirmé',                      hint: 'PO ouvert mais taux de confirmation < 50 %.' },
-  { id: 'compliance-removed',   label: 'Suppression éligibilité (compliance)', hint: 'Listing retiré pour non-conformité (sécurité, doc, marque).' },
-  { id: 'vendor-auto-pricing',  label: 'Pricing automatique Vendor',           hint: 'Amazon ajuste le retail price en dehors de notre fourchette.' },
-  { id: 'listing-inactive',     label: 'Listing inactif',                      hint: 'Fiche désactivée côté Amazon (statut, image manquante, etc.).' },
-  // Ajouts orchestrateur
-  { id: 'crap-designation',     label: 'CRaP désigné',                         hint: 'Can\'t Realize a Profit — Amazon bloque la Buy Box si la marge devient négative pour eux.' },
-  { id: 'parent-child-shift',   label: 'Variation parent/enfant perdue',       hint: 'L\'enfant a basculé sur un parent qui prend la Featured Offer.' },
-  { id: 'spec-mismatch',        label: 'Spécifications incohérentes',          hint: 'Poids ou dimensions du listing diffèrent du PO — blocage automatique.' },
-  { id: 'market-restriction',   label: 'Restriction marché',                   hint: 'Produit conforme FR mais bloqué sur un autre marché actif.' }
+  { id: 'BB-1',  label: 'Rupture stock (sellable = 0)',             hint: 'Stock Amazon à zéro — produit indisponible à la vente.', porte: 2 },
+  { id: 'BB-2',  label: 'Stock bloqué ou indisponible',             hint: 'Produit marqué indisponible malgré du stock sellable.', porte: 2 },
+  { id: 'BB-3',  label: 'Stock dormant',                            hint: 'Stock présent mais pas de mouvement — produit endormi.', porte: 5 },
+  { id: 'BB-4',  label: 'Anomalie inbound (BOL/ASN)',               hint: 'Défauts de livraison ayant impacté la disponibilité.', porte: 5 },
+  { id: 'BB-5',  label: 'Concurrent 3P prix',                       hint: 'Un vendeur tiers détient la Buy Box avec un prix inférieur.', porte: 3 },
+  { id: 'BB-6',  label: 'Dégradation FO inexpliquée',               hint: 'Exposition Featured Offer dégradée sans cause identifiée.', porte: 6 },
+  { id: 'BB-7',  label: 'Livraison 3P FBA avantageuse',             hint: 'Un 3P FBA offre une meilleure promesse de livraison.', porte: 3 },
+  { id: 'BB-8',  label: 'Rentabilité Amazon insuffisante',          hint: 'PO absent + stock dormant + FO dégradée — Amazon n\'y trouve plus son compte.', porte: 4 },
+  { id: 'BB-9',  label: 'Causes combinées',                         hint: 'Plusieurs causes convergent — faisceau composite.', porte: null },
+  { id: 'BB-10', label: 'Chaîne complète inbound→stock→commercial', hint: 'Anomalies à chaque maillon de la chaîne logistique.', porte: 5 },
+  { id: 'BB-11', label: 'Forme dominante provisoire',               hint: 'FO dégradée sans cause racine déterminée — déclenche la recherche.', porte: 1 },
+  { id: 'BB-12', label: 'Variation parent/enfant',                  hint: 'Problème de mapping variation — jamais auto, à confirmer manuellement.', porte: null }
 ];
 
-// Statuts des hypothèses
-// 'todo'        — non vérifiée
-// 'investigate' — à investiguer (compatible avec les faits, à creuser)
-// 'validated'   — confirmée comme cause
-// 'rejected'    — écartée (faits contradictoires)
-var BUYBOX_HYPO_STATUS = ['todo', 'investigate', 'validated', 'rejected'];
+// 'forte_presomption' = forte présomption auto (fort ≠ confirmed ; confirmed réservé au gate humain)
+var BUYBOX_HYPO_STATUS = ['todo', 'forte_presomption', 'investigate', 'validated', 'rejected'];
 
 // Conditions de déverrouillage de la Conclusion (Phase 2)
 var BUYBOX_CONCLUSION_CONDITIONS = [
@@ -2212,7 +2212,7 @@ var BUYBOX_CONCLUSION_CONDITIONS = [
       return validated >= 1 || rejected >= 3;
     }
   },
-  { id: 'bol-source-known',  label: 'Source du BOL renseignée (fiche client)',               check: function(cs, client) { return !!(client && client.bolSource); } }
+  { id: 'capture-done',      label: 'Capture Buy Box réalisée (faisceau figé)',              check: function(cs) { return !!(cs.faisceau && cs.faisceau.causeDominante); } }
 ];
 
 // Bandeau contexte sectoriel — statique v3.6.1 (TODO v3.7 : zone admin éditable)
@@ -2948,7 +2948,7 @@ function freshClient() {
     bolSource: '',               // 'ERP' | 'CMS' | 'OMS' | 'TRANSPORTEUR' | 'INCONNU' | ''
     bolSourceDetail: '',         // texte libre : 'Navision', 'SAP', 'Shopify Plus', etc.
     // ── Buy Box v3.6.1 — Cas d'enquête ──
-    buyboxCases: [], // [{ id, asin, status, openedAt, closedAt, facts: {snapshot, computedAt}, hypotheses: [{id, status, evidence, updatedAt}], journal: [{ts, type, content, author}], conclusion: {state, proposedAction, outcome, closedAt} }]
+    buyboxCases: [], // [{ id, asin, status, openedAt, closedAt, faisceau: null|bbCandidates[0] (figé APRÈS capture), capture: null|bbCapture, facts: {snapshot, computedAt}, hypotheses: [{id, status, evidence, updatedAt}], journal: [{ts, type, content, author}], conclusion: {state, proposedAction, outcome, closedAt} }]
     // ── YoY Enquête v3.6.8 ──
     brandAliases:         [],   // [{ canonical: string, variants: string[] }] — alias marques pour Section Marques
     enquetePeriodMonths:  4,    // fenêtre PO pour algo classification (slider 1-12, défaut 4)
@@ -4157,6 +4157,1230 @@ function computeSuspectTags(client) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// v3.8.4 — PRÉ-SCORING BB RECOVERY (spec v2 normative, 100 % déterministe)
+// Consomme les signaux du tag suspect — ne les recalcule JAMAIS.
+// Ref: SPEC_pre_scoring_bb_recovery_v2 §3-§7
+// ═══════════════════════════════════════════════════════════════════
+
+var BB_CONFIG = {
+  PO_RECENT_WEEKS: 8,
+  DEFAUTS_BOL_SCORING_WEEKS: 12,
+  DEFAUTS_BOL_CAUSALE_WEEKS: 8
+};
+
+function computeBbCandidates(client) {
+  var pos = client.pos || [];
+  var appts = client.deliveryAppointments || [];
+  var now = new Date();
+  var poRecentCutoff = new Date(now.getTime() - BB_CONFIG.PO_RECENT_WEEKS * 7 * 86400000);
+
+  // ── Index PO→ASINs + ASIN→POs ──
+  var poToAsins = {};
+  var asinToPOs = {};
+  for (var pi = 0; pi < pos.length; pi++) {
+    var p = pos[pi];
+    if (!p.poId || !p.asin) continue;
+    if (!poToAsins[p.poId]) poToAsins[p.poId] = [];
+    if (poToAsins[p.poId].indexOf(p.asin) < 0) poToAsins[p.poId].push(p.asin);
+    if (!asinToPOs[p.asin]) asinToPOs[p.asin] = [];
+    asinToPOs[p.asin].push(p);
+  }
+
+  // ── Index ASIN→appointment issues via PO jointure ──
+  var asinApptIssues = {};
+  for (var ai2 = 0; ai2 < appts.length; ai2++) {
+    var appt = appts[ai2];
+    if (!appt.issues || !appt.issues.length || !appt.po) continue;
+    var linked = poToAsins[appt.po];
+    if (!linked) continue;
+    for (var li = 0; li < linked.length; li++) {
+      if (!asinApptIssues[linked[li]]) asinApptIssues[linked[li]] = [];
+      asinApptIssues[linked[li]] = asinApptIssues[linked[li]].concat(appt.issues);
+    }
+  }
+
+  var niveauOrd = { 'fort': 3, 'modéré': 2, 'à confirmer': 1 };
+
+  for (var ai = 0; ai < client.asins.length; ai++) {
+    var a = client.asins[ai];
+    if (!a.suspectTag) continue;
+    var tag = a.suspectTag;
+
+    // Agent BB = défensif pur (arb.6) — skip offensive ASINs
+    if (tag.direction !== 'defensif') continue;
+
+    // v3.8.4 — Raccourci mono-marché : utilise worstMarket du tag suspect
+    // TODO Jalon futur : multi-marché (Option B) — calculer par marché quand CA YTD par marché disponible
+    var market = tag.marketWorst;
+    if (!market) continue;
+
+    // ══════════════════════════════════════════════════
+    // §2 — Collecte signaux [D] (consommés, pas recalculés)
+    // ══════════════════════════════════════════════════
+    var sig = {};
+
+    // FO signals — lus du tag suspect
+    sig.FO_views_zero  = (tag.trigger === 'zero_hebdo');
+    sig.FO_views_chute = (tag.trigger === 'chute_mensuelle' && tag.direction === 'defensif');
+    // FO_views_hausse impossible ici (direction === 'defensif' filtre en amont)
+    sig.FO_views_hausse = false;
+
+    // Stock dormant — lu du reinforcer
+    sig.stock_dormant = false;
+    for (var ri = 0; ri < tag.reinforcers.length; ri++) {
+      if (tag.reinforcers[ri].indexOf('Stock dormant') >= 0) { sig.stock_dormant = true; break; }
+    }
+
+    // Sellable zero — donnée directe
+    sig.sellable_zero = (typeof a.sellableUnits !== 'undefined' && a.sellableUnits !== null && parseFloat(a.sellableUnits) === 0);
+
+    // Defauts BOL — lu de deliveryDefects (mismatch, récence §7 : scoring 12 sem)
+    var bolScoringCutoff = new Date(now.getTime() - BB_CONFIG.DEFAUTS_BOL_SCORING_WEEKS * 7 * 86400000);
+    sig.defauts_BOL = false;
+    if (a.deliveryDefects) {
+      for (var wk in a.deliveryDefects) {
+        if (!a.deliveryDefects.hasOwnProperty(wk)) continue;
+        var wkDate = new Date(wk);
+        if (isNaN(wkDate.getTime()) || wkDate < bolScoringCutoff) continue;
+        var defects = a.deliveryDefects[wk];
+        for (var sub in defects) {
+          if (defects.hasOwnProperty(sub) && sub.toLowerCase().indexOf('mismatch') >= 0) {
+            sig.defauts_BOL = true; break;
+          }
+        }
+        if (sig.defauts_BOL) break;
+      }
+    }
+
+    // PO recent / absent — c.pos filtré par ASIN, orderDate < 8 sem (spec §7)
+    var myPOs = asinToPOs[a.asin] || [];
+    var hasRecentPO = false;
+    for (var poi = 0; poi < myPOs.length; poi++) {
+      var poDate = myPOs[poi].orderDate ? new Date(myPOs[poi].orderDate) : (myPOs[poi].importedAt ? new Date(myPOs[poi].importedAt) : null);
+      if (poDate && poDate >= poRecentCutoff) { hasRecentPO = true; break; }
+    }
+    sig.PO_recent = hasRecentPO;
+    sig.PO_absent = !hasRecentPO;
+
+    // ASN/CARP anomalie — appointments avec issues, récence 12 sem
+    sig.ASN_CARP_anomalie = false;
+    var myAppts = asinApptIssues[a.asin] || [];
+    if (myAppts.length > 0) {
+      var apptCutoff = new Date(now.getTime() - BB_CONFIG.DEFAUTS_BOL_SCORING_WEEKS * 7 * 86400000);
+      var rawAppts = appts;
+      for (var api = 0; api < rawAppts.length; api++) {
+        var rap = rawAppts[api];
+        if (!rap.issues || !rap.issues.length || !rap.po) continue;
+        var rapLinked = poToAsins[rap.po];
+        if (!rapLinked || rapLinked.indexOf(a.asin) < 0) continue;
+        var rapDate = rap.appointmentCreationDate ? new Date(rap.appointmentCreationDate) : (rap.scheduledArrival ? new Date(rap.scheduledArrival) : null);
+        if (rapDate && !isNaN(rapDate.getTime()) && rapDate >= apptCutoff) { sig.ASN_CARP_anomalie = true; break; }
+      }
+    }
+
+    // ── Signaux [NP] — lus depuis tag.bbCapture (persistés par applyBbCapture AVANT recalcul) ──
+    var cap = tag.bbCapture || null;
+    var hasCapture = (cap && cap.confiance && cap.confiance !== 'basse');
+    var capFields = (cap && cap.fields) ? cap.fields : null;
+    var fieldValidated = function(f) { return capFields && capFields[f] && capFields[f].validationStatus === 'validated'; };
+    sig.detenteur_BB = (capFields ? (fieldValidated('detenteur_BB') ? cap.detenteur_BB : null) : (hasCapture ? cap.detenteur_BB : null));
+    sig.prix_concurrent = (capFields ? (fieldValidated('prix_concurrent') ? cap.prix_concurrent : null) : (hasCapture ? cap.prix_concurrent : null));
+    sig.indisponible = (capFields ? (fieldValidated('indisponible') ? cap.indisponible : null) : (hasCapture ? cap.indisponible : null));
+    var is3P = (sig.detenteur_BB === '3P_FBA' || sig.detenteur_BB === '3P_dropship');
+
+    // ══════════════════════════════════════════════════
+    // §3 — Triage séquentiel par portes (1→6)
+    // Première porte bloquée = cause dominante
+    // Sans capture : porte 1 + porte 3 = needsPaste
+    // ══════════════════════════════════════════════════
+    var candidates = [];
+    var needsAdditionalData = [];
+
+    // Porte 2 — Buyable
+    // BB-1 : sellable_zero → modéré ; + (indisponible OU 3P) → fort
+    if (sig.sellable_zero) {
+      var bb1Niv = 'modéré';
+      if (sig.indisponible === true || is3P) bb1Niv = 'fort';
+      candidates.push({ bb: 'BB-1', porte: 2, niveau: bb1Niv });
+    }
+    // BB-2 : sellable_zero=false requis + indisponible → §4 BB-2
+    if (!sig.sellable_zero && sig.indisponible === true) {
+      var bb2Count = (sig.FO_views_zero ? 1 : 0) + (sig.PO_recent ? 1 : 0) + (sig.ASN_CARP_anomalie ? 1 : 0) + (sig.defauts_BOL ? 1 : 0);
+      var bb2Niv = 'à confirmer';
+      if (sig.indisponible && bb2Count >= 2) bb2Niv = 'fort';
+      else if ((sig.FO_views_zero && sig.PO_recent) || (sig.indisponible && (sig.defauts_BOL || sig.ASN_CARP_anomalie))) bb2Niv = 'modéré';
+      candidates.push({ bb: 'BB-2', porte: 2, niveau: bb2Niv });
+      needsAdditionalData.push('statut_detaille_stock');
+    }
+
+    // Porte 3 — Compétitif
+    // BB-5 : 3P → modéré ; 3P + prix_concurrent → fort ; FO seule → à confirmer
+    if (is3P && sig.prix_concurrent === true) {
+      candidates.push({ bb: 'BB-5', porte: 3, niveau: 'fort' });
+    } else if (is3P) {
+      candidates.push({ bb: 'BB-5', porte: 3, niveau: 'modéré' });
+    } else if (!hasCapture && (sig.FO_views_chute || sig.FO_views_zero)) {
+      candidates.push({ bb: 'BB-5', porte: 3, niveau: 'à confirmer' });
+    }
+    // BB-7 : 3P_FBA + prix_concurrent=false → modéré + needsDeliveryPromise
+    if (sig.detenteur_BB === '3P_FBA' && sig.prix_concurrent === false) {
+      candidates.push({ bb: 'BB-7', porte: 3, niveau: 'modéré' });
+      needsAdditionalData.push('needsDeliveryPromise');
+    } else if (sig.detenteur_BB === '3P_FBA') {
+      candidates.push({ bb: 'BB-7', porte: 3, niveau: 'à confirmer' });
+    }
+
+    // Porte 4 — Rentable
+    // BB-8 : PO_absent + stock_dormant + (FO_views_zero OU chute) → modéré ; jamais fort
+    if (sig.PO_absent && sig.stock_dormant && (sig.FO_views_zero || sig.FO_views_chute)) {
+      candidates.push({ bb: 'BB-8', porte: 4, niveau: 'modéré' });
+    }
+
+    // Porte 5 — Fiable
+    var countInbound = (sig.defauts_BOL ? 1 : 0) + (sig.ASN_CARP_anomalie ? 1 : 0);
+    var countStock = (sig.stock_dormant ? 1 : 0);
+    // sellable_zero admissible dans countStock UNIQUEMENT si stock antérieur positif/dormant (§4 BB-10)
+    if (sig.sellable_zero && sig.stock_dormant) countStock++;
+
+    var countCommercial = (sig.FO_views_zero ? 1 : 0) + (sig.FO_views_chute ? 1 : 0);
+    if (is3P) countCommercial++;
+
+    // BB-4 : inbound + conséquence (sans anomalie stock dominante)
+    var bb4Conseq = (sig.PO_recent ? 1 : 0) + (sig.FO_views_zero ? 1 : 0) + (sig.FO_views_chute ? 1 : 0) + (sig.stock_dormant ? 1 : 0);
+    if (countInbound >= 1 && bb4Conseq >= 1) {
+      var bb4Niv = (sig.defauts_BOL && sig.ASN_CARP_anomalie && bb4Conseq >= 1) ? 'fort' : 'modéré';
+      candidates.push({ bb: 'BB-4', porte: 5, niveau: bb4Niv });
+    }
+
+    // BB-3 : stock dormant sans inbound dominant
+    // Renforçateurs fermés : {FO_views_chute, FO_views_zero, PO_absent, detenteur_BB=3P}
+    if (sig.stock_dormant) {
+      var bb3Renf = 0;
+      if (sig.FO_views_chute) bb3Renf++;
+      if (sig.FO_views_zero)  bb3Renf++;
+      if (sig.PO_absent)      bb3Renf++;
+      if (is3P)               bb3Renf++;
+      var bb3Niv = bb3Renf >= 2 ? 'fort' : bb3Renf >= 1 ? 'modéré' : 'à confirmer';
+      candidates.push({ bb: 'BB-3', porte: 5, niveau: bb3Niv });
+    }
+
+    // BB-10 : stock non trusted (croisement 3 catégories)
+    if (countInbound >= 1 && countStock >= 1 && countCommercial >= 1) {
+      candidates.push({ bb: 'BB-10', porte: 5, niveau: 'fort' });
+    } else if ((countInbound >= 1 && countStock >= 1) || (countInbound >= 1 && countCommercial >= 1) || (countStock >= 1 && countCommercial >= 1)) {
+      // Collision BB-1 : sellable_zero sans stock_dormant ni preuve stock antérieur → BB-1 domine, BB-10 ≤ à confirmer
+      var bb10Niv = 'modéré';
+      if (sig.sellable_zero && !sig.stock_dormant) bb10Niv = 'à confirmer';
+      candidates.push({ bb: 'BB-10', porte: 5, niveau: bb10Niv });
+    }
+
+    // Porte 6 — Éligible
+    // BB-6 : FO dégradé inexpliqué après portes 1-5 → à confirmer + needsAdditionalData
+    // BB-12 : jamais auto → à confirmer + needsVariationData
+    var hasPorte25Candidate = candidates.some(function(c) { return niveauOrd[c.niveau] >= 2; });
+    if ((sig.FO_views_chute || sig.FO_views_zero) && !hasPorte25Candidate) {
+      candidates.push({ bb: 'BB-6', porte: 6, niveau: 'à confirmer' });
+      needsAdditionalData.push('catalogue_conformite');
+    }
+
+    // Porte 1 — Présent (détenteur BB)
+    // Si detenteur_BB = 1P_Amazon → porte 1 franchie (pas de BB-11)
+    // Si detenteur_BB = 3P → porte 1 non résolue, flag présence Retail non confirmée
+    // Sans capture → BB-11 (forme provisoire, pas cause racine)
+    var porte1Franchie = (sig.detenteur_BB === '1P_Amazon');
+    if (is3P) {
+      needsAdditionalData.push('presence_Retail_autres_offres');
+    }
+    if (!porte1Franchie) {
+      if (sig.FO_views_zero) {
+        candidates.push({ bb: 'BB-11', porte: 1, niveau: 'fort' });
+      } else if (sig.FO_views_chute && sig.stock_dormant) {
+        candidates.push({ bb: 'BB-11', porte: 1, niveau: 'fort' });
+      } else if (sig.FO_views_chute) {
+        candidates.push({ bb: 'BB-11', porte: 1, niveau: 'modéré' });
+      }
+    }
+
+    if (candidates.length === 0) continue;
+
+    // ══════════════════════════════════════════════════
+    // §3+§4 — Détermination cause dominante
+    // Causes confirmées (≥ modéré) AVANT les suspicions (à confirmer)
+    // puis porte ascendante, puis niveau descendant
+    // Spec : "première porte CONFIRMÉE bloquée = dominante"
+    // ══════════════════════════════════════════════════
+    candidates.sort(function(x, y) {
+      var xConf = (niveauOrd[x.niveau] || 0) >= 2 ? 1 : 0;
+      var yConf = (niveauOrd[y.niveau] || 0) >= 2 ? 1 : 0;
+      if (xConf !== yConf) return yConf - xConf;
+      if (x.porte !== y.porte) return x.porte - y.porte;
+      return (niveauOrd[y.niveau] || 0) - (niveauOrd[x.niveau] || 0);
+    });
+
+    // §4 BB-11 garde-fou : si une cause BB-1..10 ou BB-12 ≥ modéré → BB-11 NE PEUT PAS être causeDominante
+    var hasStrongerCause = candidates.some(function(c) {
+      return c.bb !== 'BB-11' && (niveauOrd[c.niveau] || 0) >= 2;
+    });
+
+    var causeDominante = null;
+    var porteDominante = null;
+    var formeDominante = null;
+    var causesSecondaires = [];
+    var niveauActuel = 'à confirmer';
+
+    // Trouver le dominant (en respectant le garde-fou BB-11)
+    var dominant = null;
+    for (var ci = 0; ci < candidates.length; ci++) {
+      if (candidates[ci].bb === 'BB-11' && hasStrongerCause) continue;
+      dominant = candidates[ci];
+      break;
+    }
+
+    if (dominant && dominant.bb === 'BB-11') {
+      // BB-11 seul dominant → formeDominante provisoire, causeRacine non déterminée
+      formeDominante = 'BB-11';
+      porteDominante = dominant.porte;
+      niveauActuel = dominant.niveau;
+      causesSecondaires = candidates.filter(function(c) { return c !== dominant; }).map(function(c) { return c.bb; });
+    } else if (dominant) {
+      causeDominante = dominant.bb;
+      porteDominante = dominant.porte;
+      niveauActuel = dominant.niveau;
+      causesSecondaires = candidates.filter(function(c) { return c !== dominant; }).map(function(c) { return c.bb; });
+    }
+
+    // §4 BB-9 : ≥2 causes de portes différentes ≥ modéré → mixte fort
+    var portesModere = {};
+    for (var ci2 = 0; ci2 < candidates.length; ci2++) {
+      if (candidates[ci2].bb !== 'BB-11' && (niveauOrd[candidates[ci2].niveau] || 0) >= 2) {
+        portesModere[candidates[ci2].porte] = true;
+      }
+    }
+    var nbPortesModere = Object.keys(portesModere).length;
+    if (nbPortesModere >= 2) {
+      var sousCauses = candidates.filter(function(c) { return c.bb !== 'BB-11' && (niveauOrd[c.niveau] || 0) >= 2; }).map(function(c) { return c.bb; });
+      causeDominante = 'BB-9';
+      formeDominante = null;
+      niveauActuel = 'fort';
+      porteDominante = Math.min.apply(null, Object.keys(portesModere).map(Number));
+      causesSecondaires = sousCauses;
+    }
+
+    // Dédoublonner causesSecondaires (BB-11 peut apparaître 2 fois)
+    var csSet = {};
+    causesSecondaires = causesSecondaires.filter(function(c) {
+      if (csSet[c]) return false;
+      csSet[c] = true;
+      return true;
+    });
+
+    // §5 principe 5 — Recovery state (FO_views_hausse baisse l'actuel, pas l'historique)
+    // Avec mono-marché défensif, FO_views_hausse = false → recoveryState = 'aucun réveil'
+    var niveauHistorique = niveauActuel;
+    var recoveryState = 'aucun réveil';
+    if (sig.FO_views_hausse) {
+      recoveryState = 'réveil';
+      if (niveauActuel === 'fort') niveauActuel = 'modéré';
+      else if (niveauActuel === 'modéré') niveauActuel = 'à confirmer';
+    }
+
+    // Signaux contradictoires
+    var signauxContradictoires = [];
+    if (sig.FO_views_hausse && sig.stock_dormant) signauxContradictoires.push('FO_views_hausse');
+    if (sig.PO_recent && sig.PO_absent) signauxContradictoires.push('PO_recent'); // ne devrait pas arriver
+
+    // Signaux support (actifs [D])
+    var signauxSupport = [];
+    for (var sk in sig) {
+      if (sig.hasOwnProperty(sk) && sig[sk]) signauxSupport.push(sk);
+    }
+
+    // Signaux manquants (données non disponibles)
+    var signauxManquants = [];
+    if (!a.foViews || !a.foViews[market]) signauxManquants.push('foViews');
+    if (typeof a.sellableUnits === 'undefined' || a.sellableUnits === null) signauxManquants.push('sellableUnits');
+    if (myPOs.length === 0 && pos.length > 0) signauxManquants.push('pos_pour_cet_asin');
+
+    // BB-8 jamais fort sans confirmation
+    if (candidates.some(function(c) { return c.bb === 'BB-8'; })) {
+      needsAdditionalData.push('confirmation_rentabilite');
+    }
+
+    // ══════════════════════════════════════════════════
+    // §6 — Sortie bbCandidates (schéma complet)
+    // ══════════════════════════════════════════════════
+    tag.bbCandidates = [{
+      marche: market,
+      porteDominante: porteDominante,
+      causeDominante: causeDominante,
+      formeDominante: formeDominante,
+      causesSecondaires: causesSecondaires,
+      niveauFaisceauHistorique: niveauHistorique,
+      niveauFaisceauActuel: niveauActuel,
+      recoveryState: recoveryState,
+      signauxSupport: signauxSupport,
+      signauxContradictoires: signauxContradictoires,
+      signauxManquants: signauxManquants,
+      needsPaste: hasCapture ? [] : ['detenteur_BB', 'prix_concurrent', 'indisponible'],
+      needsManualReview: (cap && cap.needsManualReview && cap.needsManualReview.length > 0) ? cap.needsManualReview : [],
+      needsAdditionalData: needsAdditionalData,
+      candidatsDetailles: candidates.slice(),
+      explicationCourte: ''
+    }];
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// v3.8.5 — Boucle auto-réparation capture Buy Box
+// Bloc A : segmentation zones — Bloc C : validateur RF-01→18
+// Bloc D : réparation déterministe
+// ══════════════════════════════════════════════════════════════════
+
+var BB_ZONE_MARKERS_OFFERS = [
+  'Voir toutes les offres', 'Autres vendeurs sur Amazon', 'Autres vendeurs',
+  'Disponible auprès de ces vendeurs', 'Comparer les offres', 'Voir les options d\'achat',
+  'Neuf à partir de', 'D\'occasion à partir de',
+  'Alle Angebote ansehen', 'Andere Verkäufer auf Amazon', 'Neu ab', 'Gebraucht ab',
+  'See all buying options', 'Other sellers on Amazon', 'New from', 'Used from',
+  'Ver todas las opciones de compra', 'Otros vendedores en Amazon', 'Nuevo desde', 'De 2ª mano desde',
+  'Alle aanbiedingen bekijken', 'Andere verkopers op Amazon'
+];
+
+var BB_ZONE_MARKERS_PURCHASE = [
+  'Ajouter au panier', 'Acheter cet article', 'Acheter maintenant', 'Commander',
+  'In den Einkaufswagen', 'Jetzt kaufen',
+  'Add to Cart', 'Add to Basket', 'Buy Now',
+  'Añadir a la cesta', 'Comprar ahora',
+  'In winkelwagen', 'Nu kopen'
+];
+
+var BB_ZONE_MARKERS_SELLER = [
+  'Vendu par', 'Expédié par', 'Vendu et expédié par',
+  'Verkauf durch', 'Versand durch',
+  'Sold by', 'Dispatched by', 'Dispatched from and sold by', 'Fulfilled by',
+  'Vendido por', 'Enviado por', 'Gestionado por',
+  'Verkocht door', 'Verzonden door'
+];
+
+var BB_ZONE_MARKERS_STOCK = [
+  'En stock', 'Il ne reste plus que', 'Quantité :',
+  'Auf Lager', 'Nur noch', 'Menge:',
+  'In stock', 'Only', 'left in stock', 'Qty:',
+  'En stock', 'Solo queda', 'Cantidad:',
+  'Op voorraad', 'Nog maar', 'Aantal:'
+];
+
+var BB_ZONE_MARKERS_UNAVAILABLE = [
+  'Actuellement indisponible', 'Temporairement en rupture de stock',
+  'Nous ne savons pas quand cet article sera de nouveau approvisionné',
+  'Cet article n\'est actuellement pas disponible',
+  'Derzeit nicht verfügbar', 'Vorübergehend nicht auf Lager',
+  'Currently unavailable', 'Temporarily out of stock',
+  'No disponible actualmente', 'Temporalmente sin stock',
+  'Momenteel niet beschikbaar'
+];
+
+var BB_ZONE_OPTIONS_PATTERN = /(\d+)\s*options?\s*(?:à partir de|ab|from|desde|vanaf)/i;
+
+function bbSegmentZones(rawText) {
+  if (!rawText || !rawText.trim()) return [{ zone: 'unknown', start: 0, end: 0, text: '' }];
+
+  var text = rawText;
+  var len = text.length;
+  var events = [];
+
+  for (var mi = 0; mi < BB_ZONE_MARKERS_OFFERS.length; mi++) {
+    var idx = text.indexOf(BB_ZONE_MARKERS_OFFERS[mi]);
+    if (idx >= 0) events.push({ pos: idx, type: 'offers', marker: BB_ZONE_MARKERS_OFFERS[mi] });
+  }
+  var optMatch = text.match(BB_ZONE_OPTIONS_PATTERN);
+  if (optMatch) events.push({ pos: text.indexOf(optMatch[0]), type: 'offers', marker: optMatch[0] });
+
+  var firstOffersPos = Infinity;
+  for (var ei = 0; ei < events.length; ei++) {
+    if (events[ei].type === 'offers' && events[ei].pos < firstOffersPos) firstOffersPos = events[ei].pos;
+  }
+
+  var hasPurchase = false, purchasePos = -1;
+  for (var pi = 0; pi < BB_ZONE_MARKERS_PURCHASE.length; pi++) {
+    var pIdx = text.indexOf(BB_ZONE_MARKERS_PURCHASE[pi]);
+    if (pIdx >= 0 && pIdx < firstOffersPos) { hasPurchase = true; if (purchasePos < 0 || pIdx < purchasePos) purchasePos = pIdx; }
+  }
+
+  var hasSeller = false, sellerPos = -1;
+  for (var si = 0; si < BB_ZONE_MARKERS_SELLER.length; si++) {
+    var sIdx = text.indexOf(BB_ZONE_MARKERS_SELLER[si]);
+    if (sIdx >= 0 && sIdx < firstOffersPos) { hasSeller = true; if (sellerPos < 0 || sIdx < sellerPos) sellerPos = sIdx; }
+  }
+
+  var hasStock = false;
+  for (var sti = 0; sti < BB_ZONE_MARKERS_STOCK.length; sti++) {
+    var stIdx = text.indexOf(BB_ZONE_MARKERS_STOCK[sti]);
+    if (stIdx >= 0 && stIdx < firstOffersPos) { hasStock = true; break; }
+  }
+
+  var hasPrice = false, pricePos = -1;
+  var priceRe = /(?<!\bà partir de\s)(?<!\bab\s)(?<!\bfrom\s)(?<!\bdesde\s)(?<!\bvanaf\s)\d+[.,]\d{2}\s*[€£$]/;
+  var pMatch = text.substring(0, firstOffersPos < Infinity ? firstOffersPos : len).match(priceRe);
+  if (pMatch) { hasPrice = true; pricePos = text.indexOf(pMatch[0]); }
+
+  var categoryCount = (hasPurchase ? 1 : 0) + (hasPrice ? 1 : 0) + (hasSeller ? 1 : 0) + (hasStock ? 1 : 0);
+  var isMainBuyBox = hasPurchase && categoryCount >= 2;
+
+  var zones = [];
+
+  if (isMainBuyBox) {
+    var bbStart = Math.min(
+      purchasePos >= 0 ? purchasePos : Infinity,
+      sellerPos >= 0 ? sellerPos : Infinity,
+      pricePos >= 0 ? pricePos : Infinity
+    );
+    var PROXIMITY = 500;
+    bbStart = Math.max(0, bbStart - 100);
+    var bbEnd = firstOffersPos < Infinity ? firstOffersPos : Math.min(len, bbStart + PROXIMITY);
+    if (purchasePos >= 0) bbEnd = Math.max(bbEnd, purchasePos + 50);
+    if (sellerPos >= 0) bbEnd = Math.max(bbEnd, sellerPos + 80);
+    bbEnd = Math.min(bbEnd, firstOffersPos < Infinity ? firstOffersPos : len);
+
+    if (bbStart > 0) zones.push({ zone: 'productHeader', start: 0, end: bbStart, text: text.substring(0, bbStart) });
+    zones.push({ zone: 'mainBuyBox', start: bbStart, end: bbEnd, text: text.substring(bbStart, bbEnd) });
+    if (firstOffersPos < Infinity) {
+      zones.push({ zone: 'allOffersPanel', start: firstOffersPos, end: len, text: text.substring(firstOffersPos) });
+    } else if (bbEnd < len) {
+      zones.push({ zone: 'unknown', start: bbEnd, end: len, text: text.substring(bbEnd) });
+    }
+  } else if (firstOffersPos < Infinity) {
+    if (firstOffersPos > 0) zones.push({ zone: 'productHeader', start: 0, end: firstOffersPos, text: text.substring(0, firstOffersPos) });
+    zones.push({ zone: 'allOffersPanel', start: firstOffersPos, end: len, text: text.substring(firstOffersPos) });
+  } else {
+    zones.push({ zone: 'unknown', start: 0, end: len, text: text });
+  }
+
+  return zones;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// v3.8.5 Bloc C — Validateur déterministe RF-01→18
+// ══════════════════════════════════════════════════════════════════
+
+function bbNormalizePrice(str) {
+  if (!str && str !== 0) return null;
+  var s = String(str).replace(/\s/g, '').replace(/[€£$]/g, '').replace(/EUR/gi, '').trim();
+  s = s.replace(/(\d+)€(\d{2})/, '$1.$2');
+  s = s.replace(',', '.');
+  var n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+function bbFindQuoteInText(quote, rawText) {
+  if (!quote || !rawText) return false;
+  var q = quote.trim();
+  if (!q) return false;
+  if (rawText.indexOf(q) >= 0) return true;
+  var qNorm = q.replace(/\s+/g, ' ');
+  var tNorm = rawText.replace(/\s+/g, ' ');
+  return tNorm.indexOf(qNorm) >= 0;
+}
+
+function bbQuoteInZone(quote, rawText, zones, allowedZones) {
+  if (!quote || !rawText || !zones || !zones.length) return null;
+  var q = quote.trim();
+  for (var i = 0; i < zones.length; i++) {
+    var z = zones[i];
+    if (z.text.indexOf(q) >= 0 || z.text.replace(/\s+/g, ' ').indexOf(q.replace(/\s+/g, ' ')) >= 0) {
+      return { zone: z.zone, allowed: allowedZones ? allowedZones.indexOf(z.zone) >= 0 : true };
+    }
+  }
+  return null;
+}
+
+function bbHasTextMarker(rawText, markers) {
+  for (var i = 0; i < markers.length; i++) {
+    if (rawText.indexOf(markers[i]) >= 0) return true;
+  }
+  return false;
+}
+
+function bbCountDistinctSellers(rawText) {
+  var sellers = [];
+  var re = /(?:Vendu par|Sold by|Verkauf durch|Vendido por|Verkocht door)\s+([^\n\r,]{2,40})/gi;
+  var m;
+  while ((m = re.exec(rawText)) !== null) {
+    var name = m[1].trim();
+    if (sellers.indexOf(name) < 0) sellers.push(name);
+  }
+  return sellers.length;
+}
+
+function bbCountDistinctPrices(rawText) {
+  var prices = [];
+  var re = /(\d+[.,]\d{2})\s*[€£$]/g;
+  var m;
+  while ((m = re.exec(rawText)) !== null) {
+    var p = bbNormalizePrice(m[1]);
+    if (p !== null && prices.indexOf(p) < 0) prices.push(p);
+  }
+  return prices.length;
+}
+
+var BB_AMAZON_VARIANTS = ['Amazon', 'Amazon EU S.à r.l.', 'Amazon EU', 'Amazon.com', 'Amazon.co.uk', 'Amazon.de', 'Amazon.fr', 'Amazon.es', 'Amazon Retail', 'Amazon.nl', 'Amazon.com.be'];
+
+function bbIsAmazonSeller(name) {
+  if (!name) return false;
+  var n = name.trim();
+  for (var i = 0; i < BB_AMAZON_VARIANTS.length; i++) {
+    if (n === BB_AMAZON_VARIANTS[i] || n.toLowerCase() === BB_AMAZON_VARIANTS[i].toLowerCase()) return true;
+  }
+  return false;
+}
+
+function bbValidateCapture(result, rawText, zones) {
+  var errors = [];
+  var invalidFields = [];
+  var repairableFields = [];
+  var requiresRetry = false;
+
+  if (!result || !rawText) return { isValid: false, errors: ['NO_DATA'], invalidFields: [], repairableFields: [], requiresRetry: false };
+
+  var ev = result.evidence || {};
+  var hasPurchaseAction = bbHasTextMarker(rawText, BB_ZONE_MARKERS_PURCHASE);
+  var hasOffersMarker = bbHasTextMarker(rawText, BB_ZONE_MARKERS_OFFERS) || BB_ZONE_OPTIONS_PATTERN.test(rawText);
+  var hasUnavailMarker = bbHasTextMarker(rawText, BB_ZONE_MARKERS_UNAVAILABLE);
+  var mainBBZone = zones.find(function(z) { return z.zone === 'mainBuyBox'; });
+  var offersZone = zones.find(function(z) { return z.zone === 'allOffersPanel'; });
+  var allowedFeaturedZones = ['mainBuyBox', 'productHeader'];
+  var nbSellers = bbCountDistinctSellers(rawText);
+  var nbPrices = bbCountDistinctPrices(rawText);
+
+  // ── RF-01 : Détenteur sans preuve vendeur ──
+  if (result.detenteur_BB) {
+    var sellerQ = ev.seller && ev.seller.quote;
+    if (!sellerQ || !bbFindQuoteInText(sellerQ, rawText)) {
+      errors.push('RF-01'); invalidFields.push('detenteur_BB');
+    }
+  }
+
+  // ── RF-02 : Classification logistique sans preuve expéditeur ──
+  if (result.detenteur_BB && ['1P_Amazon','3P_FBA','3P_dropship'].indexOf(result.detenteur_BB) >= 0) {
+    var shipQ = ev.shipper && ev.shipper.quote;
+    var sellerQ2 = ev.seller && ev.seller.quote;
+    var hasFused = false;
+    if (sellerQ2) {
+      var fusedMarkers = ['Vendu et expédié par', 'Dispatched from and sold by', 'Sold and shipped by'];
+      for (var fi = 0; fi < fusedMarkers.length; fi++) {
+        if (sellerQ2.indexOf(fusedMarkers[fi]) >= 0) { hasFused = true; break; }
+      }
+    }
+    if (!hasFused && (!shipQ || !bbFindQuoteInText(shipQ, rawText))) {
+      errors.push('RF-02'); if (invalidFields.indexOf('detenteur_BB') < 0) invalidFields.push('detenteur_BB');
+    }
+  }
+
+  // ── RF-03 : Prix absent du texte ──
+  if (result.featuredPrice != null) {
+    var fpNorm = bbNormalizePrice(result.featuredPrice);
+    var fpQ = ev.featuredPrice && ev.featuredPrice.quote;
+    if (!fpQ || !bbFindQuoteInText(fpQ, rawText)) {
+      errors.push('RF-03'); invalidFields.push('featuredPrice');
+    } else if (fpNorm !== null) {
+      var qPrice = bbNormalizePrice(fpQ);
+      if (qPrice !== null && qPrice !== fpNorm) {
+        errors.push('RF-03'); invalidFields.push('featuredPrice');
+      }
+    }
+  }
+
+  // ── RF-04 : Prix « à partir de » traité comme Featured ──
+  if (result.featuredPrice != null) {
+    var aPartirDe = /à partir de|ab\s|from\s|desde\s|vanaf\s/i;
+    var fpQuote = ev.featuredPrice && ev.featuredPrice.quote;
+    var contextAround = rawText;
+    if (fpQuote) {
+      var fpIdx = rawText.indexOf(fpQuote);
+      if (fpIdx >= 0) contextAround = rawText.substring(Math.max(0, fpIdx - 30), fpIdx + fpQuote.length + 10);
+    }
+    if (aPartirDe.test(contextAround)) {
+      errors.push('RF-04'); if (invalidFields.indexOf('featuredPrice') < 0) invalidFields.push('featuredPrice');
+      repairableFields.push('featuredPrice');
+    }
+  }
+
+  // ── RF-05 : Offre listée traitée comme Featured ──
+  if (result.detenteur_BB && ev.seller && ev.seller.quote) {
+    var zInfo = bbQuoteInZone(ev.seller.quote, rawText, zones, allowedFeaturedZones);
+    if (zInfo && !zInfo.allowed) {
+      errors.push('RF-05'); if (invalidFields.indexOf('detenteur_BB') < 0) invalidFields.push('detenteur_BB');
+      repairableFields.push('detenteur_BB');
+    }
+  }
+
+  // ── RF-06 : Confiance haute sans action d'achat Featured ──
+  if (result.detenteur_BB && !hasPurchaseAction && result.confidence === 'haute') {
+    errors.push('RF-06'); invalidFields.push('confidence');
+    if (invalidFields.indexOf('detenteur_BB') < 0) invalidFields.push('detenteur_BB');
+  }
+
+  // ── RF-07 : featuredOfferStatus=none ET detenteur_BB≠null ──
+  if (result.featuredOfferStatus === 'none' && result.detenteur_BB) {
+    errors.push('RF-07'); if (invalidFields.indexOf('detenteur_BB') < 0) invalidFields.push('detenteur_BB');
+  }
+
+  // ── RF-08 : Citation ne soutenant pas la valeur ──
+  if (result.detenteur_BB === '1P_Amazon' && ev.seller && ev.seller.quote) {
+    var amazonInQuote = bbIsAmazonSeller(ev.seller.quote.replace(/Vendu par\s*/i, '').replace(/Sold by\s*/i, '').replace(/Verkauf durch\s*/i, '').trim());
+    if (!amazonInQuote && ev.seller.quote.toLowerCase().indexOf('amazon') < 0) {
+      errors.push('RF-08'); if (invalidFields.indexOf('detenteur_BB') < 0) invalidFields.push('detenteur_BB');
+    }
+  }
+
+  // ── RF-09 : Offres marker + détenteur affirmé sans preuve mainBuyBox ──
+  if (hasOffersMarker && result.detenteur_BB) {
+    if (!mainBBZone) {
+      errors.push('RF-09'); repairableFields.push('detenteur_BB_degrade');
+    } else if (ev.seller && ev.seller.quote) {
+      var zSeller = bbQuoteInZone(ev.seller.quote, rawText, zones, ['mainBuyBox']);
+      if (!zSeller || !zSeller.allowed) {
+        errors.push('RF-09'); repairableFields.push('detenteur_BB_degrade');
+      }
+    }
+  }
+
+  // ── RF-10 : Plusieurs vendeurs → confiance ≠ haute ──
+  if (nbSellers > 1 && result.confidence === 'haute') {
+    if (!mainBBZone) { errors.push('RF-10'); repairableFields.push('confidence'); }
+  }
+
+  // ── RF-11 : Plusieurs prix → featuredPrice=null ──
+  if (nbPrices > 1 && result.featuredPrice != null && !mainBBZone) {
+    errors.push('RF-11'); if (invalidFields.indexOf('featuredPrice') < 0) invalidFields.push('featuredPrice');
+  }
+
+  // ── RF-12 : indisponible=false mais terme présent ──
+  if (result.indisponible === false && hasUnavailMarker) {
+    var unavailQ = ev.unavailable && ev.unavailable.quote;
+    if (!unavailQ) {
+      errors.push('RF-12'); repairableFields.push('indisponible');
+    }
+  }
+  // ── RF-12 étendu : indisponible=true + stock ET indispo présents + pas de sélection prouvée ──
+  var stockMarkers = ['En stock', 'Auf Lager', 'In stock', 'Op voorraad', 'Disponible'];
+  var hasStockText = bbHasTextMarker(rawText, stockMarkers);
+  var hasSelectionProof = /sélectionnée|selected|ausgewählt|seleccionad[ao]|geselecteerd/i.test(rawText);
+  if (result.indisponible === true && hasUnavailMarker && hasStockText && !hasSelectionProof && !hasPurchaseAction) {
+    errors.push('RF-12'); repairableFields.push('indisponible');
+  }
+
+  // ── RF-13 : indisponible=true + bouton panier actif ──
+  if (result.indisponible === true && hasPurchaseAction) {
+    errors.push('RF-13'); repairableFields.push('indisponible');
+  }
+
+  // ── RF-14 : 1P_Amazon mais vendeur non Amazon ──
+  if (result.detenteur_BB === '1P_Amazon' && result.sellerName && !bbIsAmazonSeller(result.sellerName)) {
+    errors.push('RF-14'); if (invalidFields.indexOf('detenteur_BB') < 0) invalidFields.push('detenteur_BB');
+  }
+
+  // ── RF-15 : 3P_FBA mais expéditeur non Amazon ──
+  if (result.detenteur_BB === '3P_FBA' && result.shipperName && !bbIsAmazonSeller(result.shipperName)) {
+    errors.push('RF-15'); repairableFields.push('detenteur_BB_reclass');
+  }
+
+  // ── RF-16 : Donnée non rattachée à la variante sélectionnée ──
+  // (évalué seulement si evidence.zone indique otherVariants)
+  if (ev.seller && ev.seller.zone === 'otherVariants') {
+    errors.push('RF-16'); if (invalidFields.indexOf('detenteur_BB') < 0) invalidFields.push('detenteur_BB');
+  }
+  if (ev.featuredPrice && ev.featuredPrice.zone === 'otherVariants') {
+    errors.push('RF-16'); if (invalidFields.indexOf('featuredPrice') < 0) invalidFields.push('featuredPrice');
+  }
+
+  // ── RF-17 : Citation trop large (>500 car) ──
+  var evKeys = ['seller', 'shipper', 'featuredPrice', 'unavailable'];
+  for (var ek = 0; ek < evKeys.length; ek++) {
+    var evField = ev[evKeys[ek]];
+    if (evField && evField.quote && evField.quote.length > 500) {
+      errors.push('RF-17'); repairableFields.push('confidence');
+    }
+  }
+
+  // ── RF-18 : Donnée résiduelle d'un parse antérieur ──
+  if (result.featuredPrice != null) {
+    var priceStr = String(result.featuredPrice).replace('.', ',');
+    var priceStr2 = String(result.featuredPrice);
+    if (rawText.indexOf(priceStr) < 0 && rawText.indexOf(priceStr2) < 0) {
+      errors.push('RF-18'); if (invalidFields.indexOf('featuredPrice') < 0) invalidFields.push('featuredPrice');
+      repairableFields.push('possible_state_leak');
+    }
+  }
+  if (result.sellerName && rawText.indexOf(result.sellerName) < 0) {
+    errors.push('RF-18'); if (invalidFields.indexOf('detenteur_BB') < 0) invalidFields.push('detenteur_BB');
+    repairableFields.push('possible_state_leak');
+  }
+
+  // ── Décision requiresRetry ──
+  var unrepairedBlocking = invalidFields.filter(function(f) { return repairableFields.indexOf(f) < 0; });
+  if (unrepairedBlocking.length > 0 && nbSellers > 1) requiresRetry = true;
+  if (unrepairedBlocking.length > 0 && nbPrices > 1) requiresRetry = true;
+  if (errors.indexOf('RF-12') >= 0 || errors.indexOf('RF-13') >= 0) requiresRetry = true;
+
+  if (!hasPurchaseAction && !bbHasTextMarker(rawText, BB_ZONE_MARKERS_SELLER)) requiresRetry = false;
+  if (rawText.trim().length < 50) requiresRetry = false;
+  var allRepairable = invalidFields.every(function(f) { return repairableFields.indexOf(f) >= 0; });
+  if (allRepairable && invalidFields.length > 0) requiresRetry = false;
+
+  return {
+    isValid: errors.length === 0,
+    errors: errors,
+    invalidFields: invalidFields,
+    repairableFields: repairableFields,
+    requiresRetry: requiresRetry
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// v3.8.5 Bloc D — Réparation déterministe sans 2e appel IA
+// ══════════════════════════════════════════════════════════════════
+
+function bbRepairCapture(result, validation, rawText, zones) {
+  var repairs = [];
+  var r = JSON.parse(JSON.stringify(result));
+  var errs = validation.errors || [];
+
+  // Prix "à partir de" → lowestListedOfferPrice (sauf si RF-18 = prix halluciné)
+  if (errs.indexOf('RF-04') >= 0 && r.featuredPrice != null) {
+    var priceIsGhost = errs.indexOf('RF-18') >= 0 && validation.invalidFields.indexOf('featuredPrice') >= 0;
+    repairs.push({ field: 'featuredPrice', from: r.featuredPrice, to: null, rule: 'RF-04' });
+    if (!priceIsGhost && r.lowestListedOfferPrice == null) {
+      r.lowestListedOfferPrice = r.featuredPrice;
+      repairs.push({ field: 'lowestListedOfferPrice', from: null, to: r.featuredPrice, rule: 'RF-04-reclassify' });
+    }
+    if (priceIsGhost && r.lowestListedOfferPrice == null) {
+      var apdMatch = rawText.match(/à partir de\s*(\d+[.,]\d{2})\s*[€£$]/i) || rawText.match(/ab\s*(\d+[.,]\d{2})\s*[€£$]/i) || rawText.match(/from\s*(\d+[.,]\d{2})\s*[€£$]/i);
+      if (apdMatch) {
+        var realPrice = bbNormalizePrice(apdMatch[1]);
+        if (realPrice !== null) {
+          r.lowestListedOfferPrice = realPrice;
+          repairs.push({ field: 'lowestListedOfferPrice', from: null, to: realPrice, rule: 'RF-04-extract-from-text' });
+        }
+      }
+    }
+    r.featuredPrice = null;
+  }
+
+  // Offre listée → detenteur_BB=null, conserve dans listedOffers
+  if (errs.indexOf('RF-05') >= 0 && r.detenteur_BB) {
+    var listed = { seller: r.sellerName, fulfillment: r.detenteur_BB === '3P_FBA' ? 'FBA' : r.detenteur_BB === '1P_Amazon' ? '1P' : 'MFN', price: r.featuredPrice };
+    if (!r.listedOffers) r.listedOffers = [];
+    r.listedOffers.push(listed);
+    repairs.push({ field: 'detenteur_BB', from: r.detenteur_BB, to: null, rule: 'RF-05' });
+    r.detenteur_BB = null;
+    r.sellerName = null;
+    r.shipperName = null;
+  }
+
+  // Absence de Featured Offer démontrée
+  var hasOffersM = bbHasTextMarker(rawText, BB_ZONE_MARKERS_OFFERS) || BB_ZONE_OPTIONS_PATTERN.test(rawText);
+  var hasPurchaseM = bbHasTextMarker(rawText, BB_ZONE_MARKERS_PURCHASE);
+  var hasSellerM = bbHasTextMarker(rawText, BB_ZONE_MARKERS_SELLER.slice(0, 3));
+  var mainBB = zones.find(function(z) { return z.zone === 'mainBuyBox'; });
+  if (hasOffersM && !hasPurchaseM && !mainBB) {
+    if (r.detenteur_BB) {
+      repairs.push({ field: 'detenteur_BB', from: r.detenteur_BB, to: null, rule: 'no-featured-proven' });
+      r.detenteur_BB = null;
+    }
+    if (r.featuredPrice != null) {
+      repairs.push({ field: 'featuredPrice', from: r.featuredPrice, to: null, rule: 'no-featured-proven' });
+      r.featuredPrice = null;
+    }
+    if (r.featuredOfferStatus !== 'none') {
+      repairs.push({ field: 'featuredOfferStatus', from: r.featuredOfferStatus, to: 'none', rule: 'no-featured-proven' });
+      r.featuredOfferStatus = 'none';
+    }
+  }
+
+  // RF-07 : contradiction featuredOfferStatus=none + detenteur_BB
+  if (errs.indexOf('RF-07') >= 0 && r.detenteur_BB) {
+    repairs.push({ field: 'detenteur_BB', from: r.detenteur_BB, to: null, rule: 'RF-07' });
+    r.detenteur_BB = null;
+  }
+
+  // RF-09 : détenteur affirmé sans preuve mainBuyBox → degrade
+  if (errs.indexOf('RF-09') >= 0 && r.detenteur_BB && !mainBB) {
+    repairs.push({ field: 'detenteur_BB', from: r.detenteur_BB, to: null, rule: 'RF-09' });
+    r.detenteur_BB = null;
+    if (r.confidence === 'haute') { r.confidence = 'basse'; repairs.push({ field: 'confidence', from: 'haute', to: 'basse', rule: 'RF-09' }); }
+  }
+
+  // Confiance incohérente → basse
+  if (errs.indexOf('RF-06') >= 0 || errs.indexOf('RF-10') >= 0 || errs.indexOf('RF-17') >= 0) {
+    if (r.confidence === 'haute') {
+      repairs.push({ field: 'confidence', from: 'haute', to: 'basse', rule: errs.indexOf('RF-06') >= 0 ? 'RF-06' : errs.indexOf('RF-10') >= 0 ? 'RF-10' : 'RF-17' });
+      r.confidence = 'basse';
+    }
+  }
+
+  // Indisponibilité variante ambiguë (RF-12)
+  if (errs.indexOf('RF-12') >= 0) {
+    repairs.push({ field: 'indisponible', from: r.indisponible, to: null, rule: 'RF-12' });
+    r.indisponible = null;
+    r.variantAvailabilityIssue = true;
+  }
+
+  // Contradiction indispo + panier actif (RF-13)
+  // Si bouton panier actif → variante sélectionnée disponible ; indispo = autre variante
+  if (errs.indexOf('RF-13') >= 0) {
+    var hasUnavailText = bbHasTextMarker(rawText, BB_ZONE_MARKERS_UNAVAILABLE);
+    if (hasUnavailText && bbHasTextMarker(rawText, BB_ZONE_MARKERS_PURCHASE)) {
+      repairs.push({ field: 'indisponible', from: true, to: false, rule: 'RF-13-variant' });
+      r.indisponible = false;
+      r.variantAvailabilityIssue = true;
+    } else {
+      repairs.push({ field: 'indisponible', from: true, to: null, rule: 'RF-13' });
+      r.indisponible = null;
+    }
+    if (r.confidence === 'haute') { r.confidence = 'modérée'; repairs.push({ field: 'confidence', from: 'haute', to: 'modérée', rule: 'RF-13' }); }
+  }
+
+  // RF-15 : 3P_FBA avec expéditeur non Amazon
+  if (errs.indexOf('RF-15') >= 0) {
+    if (r.sellerName && r.shipperName && !bbIsAmazonSeller(r.shipperName) && r.sellerName === r.shipperName) {
+      repairs.push({ field: 'detenteur_BB', from: '3P_FBA', to: '3P_dropship', rule: 'RF-15' });
+      r.detenteur_BB = '3P_dropship';
+    } else {
+      repairs.push({ field: 'detenteur_BB', from: r.detenteur_BB, to: null, rule: 'RF-15' });
+      r.detenteur_BB = null;
+    }
+  }
+
+  // RF-18 : possible_state_leak
+  if (errs.indexOf('RF-18') >= 0) {
+    r.possible_state_leak = true;
+    if (validation.invalidFields.indexOf('featuredPrice') >= 0 && errs.indexOf('RF-18') >= 0) {
+      repairs.push({ field: 'featuredPrice', from: r.featuredPrice, to: null, rule: 'RF-18' });
+      r.featuredPrice = null;
+    }
+  }
+
+  // RF-01, RF-02, RF-08, RF-14 : détenteur invalide sans réparation possible
+  var hardInvalid = ['RF-01', 'RF-02', 'RF-08', 'RF-14'];
+  for (var hi = 0; hi < hardInvalid.length; hi++) {
+    if (errs.indexOf(hardInvalid[hi]) >= 0 && r.detenteur_BB) {
+      repairs.push({ field: 'detenteur_BB', from: r.detenteur_BB, to: null, rule: hardInvalid[hi] });
+      r.detenteur_BB = null;
+      if (r.confidence === 'haute') { r.confidence = 'basse'; repairs.push({ field: 'confidence', from: 'haute', to: 'basse', rule: hardInvalid[hi] }); }
+    }
+  }
+
+  // Évaluer si la réparation est suffisante
+  var remainingInvalid = (validation.invalidFields || []).filter(function(f) {
+    return !repairs.some(function(rp) { return rp.field === f; });
+  });
+  var sufficientRepair = remainingInvalid.length === 0;
+
+  return { result: r, repairs: repairs, sufficientRepair: sufficientRepair };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// v3.8.5 — parseBuyBoxCapture(text, lang) : extraction IA [NP]
+// Pipeline : segmentation → IA → validation → réparation → retry?
+// ══════════════════════════════════════════════════════════════════
+
+function bbSimpleHash(str) {
+  var hash = 5381;
+  for (var i = 0; i < str.length; i++) hash = ((hash << 5) + hash + str.charCodeAt(i)) & 0xFFFFFFFF;
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function bbSanitizeIaResult(parsed) {
+  var r = {};
+  var validDetenteurs = ['1P_Amazon', '3P_FBA', '3P_dropship', null];
+  r.featuredOfferStatus = (['1P', '3P_FBA', '3P_dropship', 'none', null].indexOf(parsed.featuredOfferStatus) >= 0) ? parsed.featuredOfferStatus : null;
+  r.detenteur_BB = (validDetenteurs.indexOf(parsed.detenteur_BB) >= 0) ? parsed.detenteur_BB : null;
+  r.sellerName = (typeof parsed.sellerName === 'string') ? parsed.sellerName : null;
+  r.shipperName = (typeof parsed.shipperName === 'string') ? parsed.shipperName : null;
+  r.featuredPrice = (typeof parsed.featuredPrice === 'number') ? parsed.featuredPrice : (typeof parsed.featuredPrice === 'string' ? (parseFloat(parsed.featuredPrice) || null) : null);
+  r.lowestListedOfferPrice = (typeof parsed.lowestListedOfferPrice === 'number') ? parsed.lowestListedOfferPrice : (typeof parsed.lowestListedOfferPrice === 'string' ? (parseFloat(parsed.lowestListedOfferPrice) || null) : null);
+  r.prix_concurrent = (typeof parsed.prix_concurrent === 'boolean') ? parsed.prix_concurrent : null;
+  r.indisponible = (typeof parsed.indisponible === 'boolean') ? parsed.indisponible : null;
+  r.listedOffers = Array.isArray(parsed.listedOffers) ? parsed.listedOffers : [];
+  var validConf = ['haute', 'modérée', 'basse'];
+  r.confidence = (validConf.indexOf(parsed.confidence) >= 0) ? parsed.confidence : 'basse';
+  r.evidence = (parsed.evidence && typeof parsed.evidence === 'object') ? parsed.evidence : {};
+  r.zones = Array.isArray(parsed.zones) ? parsed.zones : [];
+  r.reasoningSummary = (typeof parsed.reasoningSummary === 'string') ? parsed.reasoningSummary : '';
+  return r;
+}
+
+async function parseBuyBoxCapture(text, lang) {
+  var SAFE_RESULT = { error: null, detenteur_BB: null, prix_concurrent: null, indisponible: null, confiance: 'basse', featuredOfferStatus: null, featuredPrice: null, lowestListedOfferPrice: null, listedOffers: [], needsManualReview: [], parseJournal: null, fields: {} };
+  if (!text || !text.trim()) { SAFE_RESULT.error = 'Texte vide'; return SAFE_RESULT; }
+
+  var rawText = text.trim();
+  var langLabel = { '.fr': 'français', '.de': 'allemand', '.co.uk': 'anglais (UK)', '.es': 'espagnol', '.be': 'français/néerlandais' }[lang] || 'français';
+  var rawTextHash = bbSimpleHash(rawText);
+
+  // ── Étape 0 : Segmentation des zones ──
+  var zones = bbSegmentZones(rawText);
+  var zonesSummary = zones.map(function(z) { return z.zone + ' [' + z.start + '..' + z.end + ']'; }).join(', ');
+  var mainBBFound = zones.some(function(z) { return z.zone === 'mainBuyBox'; });
+  var offersFound = zones.some(function(z) { return z.zone === 'allOffersPanel'; });
+
+  // ── Étape 1 : Prompt enrichi ──
+  var sys = [
+    'Tu es un extracteur de données structurées spécialisé Amazon.',
+    'On te fournit du texte copié-collé depuis une page produit Amazon (' + langLabel + ').',
+    'Le texte a été pré-segmenté en zones. Respecte strictement la segmentation fournie.',
+    '',
+    'RÈGLES IMPÉRATIVES :',
+    '1. N\'affirme AUCUN détenteur sans citation exacte "Vendu par" ET "Expédié par" (ou équivalent linguistique).',
+    '2. Le vendeur et l\'expéditeur doivent appartenir au MÊME BLOC qu\'une action d\'achat Featured (Ajouter au panier, Acheter maintenant…).',
+    '3. Toute offre située APRÈS "Voir toutes les offres", "Autres vendeurs" ou "X options à partir de" est une offre LISTÉE, JAMAIS Featured.',
+    '4. Un prix précédé de "à partir de" n\'est JAMAIS le prix Featured → lowestListedOfferPrice.',
+    '5. Si aucun bloc Featured n\'est prouvé → detenteur_BB=null, featuredPrice=null, featuredOfferStatus="none".',
+    '6. Pour CHAQUE champ extrait, cite un fragment court et exact du texte source (max 200 car).',
+    '7. N\'utilise aucune valeur qui n\'apparaît pas littéralement dans le texte source.',
+    '',
+    'Classification du détenteur :',
+    '- Vendeur = Amazon → "1P_Amazon"',
+    '- Vendeur ≠ Amazon, Expéditeur = Amazon → "3P_FBA"',
+    '- Vendeur ≠ Amazon, Expéditeur ≠ Amazon → "3P_dropship"',
+    '- Bloc d\'achat absent → null',
+    'Variantes Amazon admissibles : Amazon, Amazon EU S.à r.l., Amazon EU, Amazon.com, Amazon.co.uk, Amazon.de, Amazon.fr, Amazon.es, Amazon Retail, Amazon.nl, Amazon.com.be',
+    '',
+    'Termes vendeur/expéditeur par langue :',
+    '- FR/BE-fr : "Vendu par" / "Expédié par" / "Vendu et expédié par"',
+    '- DE : "Verkauf durch" / "Versand durch"',
+    '- UK : "Sold by" / "Dispatched by" / "Fulfilled by"',
+    '- ES : "Vendido por" / "Enviado por" / "Gestionado por"',
+    '- BE-nl : "Verkocht door" / "Verzonden door"',
+    '',
+    'Réponds UNIQUEMENT avec un objet JSON valide (pas de markdown, pas d\'explication) respectant ce schéma :',
+    '{',
+    '  "featuredOfferStatus": "1P" | "3P_FBA" | "3P_dropship" | "none" | null,',
+    '  "detenteur_BB": "1P_Amazon" | "3P_FBA" | "3P_dropship" | null,',
+    '  "sellerName": "nom exact" | null,',
+    '  "shipperName": "nom exact" | null,',
+    '  "featuredPrice": number | null,',
+    '  "lowestListedOfferPrice": number | null,',
+    '  "prix_concurrent": true | false | null,',
+    '  "indisponible": true | false | null,',
+    '  "listedOffers": [{"seller":"...","fulfillment":"FBA"|"MFN"|"1P","price":number}],',
+    '  "confidence": "haute" | "modérée" | "basse",',
+    '  "evidence": {',
+    '    "seller": {"quote":"...","start":N,"end":N,"zone":"mainBuyBox"},',
+    '    "shipper": {"quote":"...","start":N,"end":N,"zone":"mainBuyBox"},',
+    '    "featuredPrice": {"quote":"...","start":N,"end":N,"zone":"mainBuyBox"},',
+    '    "unavailable": {"quote":"...","start":N,"end":N,"zone":"..."} | null',
+    '  },',
+    '  "zones": ["zone1","zone2"],',
+    '  "reasoningSummary": "explication courte de la décision"',
+    '}'
+  ].join('\n');
+
+  var usr = [
+    '=== ZONES SEGMENTÉES (pré-analyse déterministe) ===',
+    zonesSummary,
+    mainBBFound ? 'Bloc d\'achat principal (mainBuyBox) DÉTECTÉ.' : 'AUCUN bloc d\'achat principal détecté.',
+    offersFound ? 'Panneau "Toutes les offres" (allOffersPanel) DÉTECTÉ.' : '',
+    '',
+    '=== TEXTE SOURCE (' + langLabel + ') ===',
+    rawText.substring(0, 8000)
+  ].join('\n');
+
+  // ── Appel IA #1 ──
+  var initialResult;
+  try {
+    var raw = await callAPI(sys, usr, 'bb_capture', null, 800);
+    var jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) { SAFE_RESULT.error = 'Réponse IA non parsable'; return SAFE_RESULT; }
+    initialResult = bbSanitizeIaResult(JSON.parse(jsonMatch[0]));
+  } catch (e) {
+    console.error('[BB Capture] Erreur IA #1:', e);
+    SAFE_RESULT.error = e.message; return SAFE_RESULT;
+  }
+
+  // ── Étape 2 : Validation déterministe ──
+  var validation = bbValidateCapture(initialResult, rawText, zones);
+
+  // ── Étape 3 : Réparation déterministe ──
+  var repair = bbRepairCapture(initialResult, validation, rawText, zones);
+  var currentResult = repair.result;
+  var allRepairs = repair.repairs.slice();
+  var retryTriggered = false;
+  var retryResultRaw = null;
+  var finalValidationErrors = validation.isValid ? [] : validation.errors.slice();
+
+  // ── Étape 4 : Ré-essai conditionnel (max 1 retry = 2 appels IA total) ──
+  if (!repair.sufficientRepair && validation.requiresRetry) {
+    retryTriggered = true;
+    var retrySys = [
+      'Ton premier parse a été rejeté par le validateur déterministe.',
+      '',
+      'Erreurs : ' + validation.errors.join(', '),
+      'Champs invalides : ' + validation.invalidFields.join(', '),
+      '',
+      'Tu dois relire uniquement le texte source fourni.',
+      '',
+      'Règles impératives :',
+      '1. N\'affirme aucun détenteur sans citation exacte "Vendu par" et "Expédié par".',
+      '2. Le vendeur et l\'expéditeur doivent appartenir au même bloc qu\'une action d\'achat Featured.',
+      '3. Toute offre située après "Voir toutes les offres", "Autres vendeurs" ou "X options à partir de" est une offre listée, pas nécessairement Featured.',
+      '4. Un prix précédé de "à partir de" n\'est jamais le prix Featured.',
+      '5. Si aucun bloc Featured n\'est prouvé, retourne detenteur_BB=null, featuredPrice=null et confidence=basse.',
+      '6. Cite un fragment court et exact pour chaque champ.',
+      '7. N\'utilise aucune valeur provenant d\'un parse précédent.',
+      '',
+      'Réponds uniquement avec le schéma JSON demandé (même schéma que la première passe).'
+    ].join('\n');
+
+    var retryUsr = [
+      '=== PREMIER RÉSULTAT (REJETÉ) ===',
+      JSON.stringify(initialResult, null, 2),
+      '',
+      '=== ZONES SEGMENTÉES ===',
+      zonesSummary,
+      mainBBFound ? 'Bloc d\'achat principal (mainBuyBox) DÉTECTÉ.' : 'AUCUN bloc d\'achat principal détecté.',
+      offersFound ? 'Panneau "Toutes les offres" (allOffersPanel) DÉTECTÉ.' : '',
+      '',
+      '=== TEXTE SOURCE (' + langLabel + ') ===',
+      rawText.substring(0, 8000)
+    ].join('\n');
+
+    try {
+      var raw2 = await callAPI(retrySys, retryUsr, 'bb_capture', null, 800);
+      var jsonMatch2 = raw2.match(/\{[\s\S]*\}/);
+      if (jsonMatch2) {
+        retryResultRaw = bbSanitizeIaResult(JSON.parse(jsonMatch2[0]));
+        var retryValidation = bbValidateCapture(retryResultRaw, rawText, zones);
+        var retryRepair = bbRepairCapture(retryResultRaw, retryValidation, rawText, zones);
+        currentResult = retryRepair.result;
+        allRepairs = allRepairs.concat(retryRepair.repairs);
+        finalValidationErrors = retryValidation.errors.slice();
+
+        if (!retryRepair.sufficientRepair) {
+          if (currentResult.detenteur_BB) { currentResult.detenteur_BB = null; }
+          currentResult.confidence = 'basse';
+        }
+      }
+    } catch (e2) {
+      console.error('[BB Capture] Erreur IA retry:', e2);
+    }
+  }
+
+  // ── Étape 5 : Construire l'objet fields avec validationStatus par champ ──
+  var fieldNames = ['detenteur_BB', 'featuredPrice', 'indisponible', 'lowestListedOfferPrice', 'prix_concurrent'];
+  var fields = {};
+  var needsManualReview = [];
+  for (var fi = 0; fi < fieldNames.length; fi++) {
+    var fn = fieldNames[fi];
+    var val = currentResult[fn];
+    var wasInvalid = (validation.invalidFields || []).indexOf(fn) >= 0;
+    var wasRepaired = allRepairs.some(function(rp) { return rp.field === fn; });
+    var stillInvalid = (finalValidationErrors || []).length > 0 && wasInvalid && !wasRepaired;
+    var vStatus = 'validated';
+    var reason = '';
+    if (val == null && wasInvalid) { vStatus = 'contradicted'; reason = 'Invalidé par RF: ' + validation.errors.filter(function(e) { return e.indexOf('RF-') === 0; }).join(', '); }
+    else if (wasRepaired) { vStatus = 'validated'; reason = 'Réparé par: ' + allRepairs.filter(function(rp) { return rp.field === fn; }).map(function(rp) { return rp.rule; }).join(', '); }
+    else if (stillInvalid) { vStatus = 'ambiguous'; reason = 'Non résolu après validation'; needsManualReview.push(fn); }
+    else if (val == null && !wasInvalid) { vStatus = 'unproven'; reason = 'Non extrait'; }
+    var evKey = fn === 'detenteur_BB' ? 'seller' : fn === 'featuredPrice' ? 'featuredPrice' : fn === 'indisponible' ? 'unavailable' : null;
+    var evData = evKey ? (currentResult.evidence || {})[evKey] || null : null;
+    fields[fn] = { value: val, confidence: currentResult.confidence, evidence: evData, validationStatus: vStatus, reason: reason };
+  }
+
+  if (currentResult.variantAvailabilityIssue) needsManualReview.push('variantAvailabilityIssue');
+  if (currentResult.possible_state_leak) needsManualReview.push('possible_state_leak');
+
+  // ── Étape 6 : Journal ──
+  var parseJournal = {
+    parseVersion: 'v3.8.5',
+    rawTextHash: rawTextHash,
+    initialResult: initialResult,
+    validationErrors: validation.errors,
+    deterministicRepairs: allRepairs,
+    retryTriggered: retryTriggered,
+    retryResult: retryResultRaw,
+    finalValidationErrors: finalValidationErrors,
+    finalResult: currentResult,
+    manualReviewRequired: needsManualReview.length > 0
+  };
+
+  console.log('[BB Capture] Journal:', JSON.stringify({ hash: rawTextHash, errors: validation.errors, repairs: allRepairs.length, retry: retryTriggered, manualReview: needsManualReview }));
+
+  // ── Étape 7 : Résultat enrichi + champs plats compat v3.8.4 ──
+  var confiance = currentResult.confidence === 'modérée' ? 'moyenne' : currentResult.confidence;
+  return {
+    detenteur_BB: currentResult.detenteur_BB,
+    vendeur: currentResult.sellerName,
+    expediteur: currentResult.shipperName,
+    prix: currentResult.featuredPrice,
+    prix_concurrent: currentResult.prix_concurrent,
+    indisponible: currentResult.indisponible,
+    confiance: confiance,
+    raw_indices: currentResult.reasoningSummary || '',
+    featuredOfferStatus: currentResult.featuredOfferStatus,
+    featuredPrice: currentResult.featuredPrice,
+    lowestListedOfferPrice: currentResult.lowestListedOfferPrice,
+    listedOffers: currentResult.listedOffers || [],
+    sellerName: currentResult.sellerName,
+    shipperName: currentResult.shipperName,
+    confidence: currentResult.confidence,
+    variantAvailabilityIssue: currentResult.variantAvailabilityIssue || false,
+    possible_state_leak: currentResult.possible_state_leak || false,
+    fields: fields,
+    needsManualReview: needsManualReview,
+    parseJournal: parseJournal,
+    error: null
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// v3.8.5 — applyBbCapture(client, asin, captureResult)
+// Persiste les signaux [NP] enrichis sur le tag PUIS recalcule.
+// Accepte schema v3.8.5 (fields, parseJournal, needsManualReview)
+// ET schema v3.8.4 legacy (confiance flat).
+// ══════════════════════════════════════════════════════════════════
+
+function applyBbCapture(client, asin, captureResult) {
+  if (!captureResult) return false;
+  var hasFields = captureResult.fields && typeof captureResult.fields === 'object';
+  var confiance = captureResult.confiance || (captureResult.confidence === 'modérée' ? 'moyenne' : captureResult.confidence) || 'basse';
+  if (confiance === 'basse' && !hasFields) return false;
+
+  var a = (client.asins || []).find(function(x) { return x.asin === asin; });
+  if (!a || !a.suspectTag) return false;
+  var tag = a.suspectTag;
+
+  tag.bbCapture = {
+    detenteur_BB: captureResult.detenteur_BB,
+    vendeur: captureResult.vendeur || captureResult.sellerName || null,
+    expediteur: captureResult.expediteur || captureResult.shipperName || null,
+    prix: captureResult.prix || captureResult.featuredPrice || null,
+    prix_concurrent: captureResult.prix_concurrent,
+    indisponible: captureResult.indisponible,
+    confiance: confiance,
+    raw_indices: captureResult.raw_indices || '',
+    capturedAt: new Date().toISOString(),
+    featuredOfferStatus: captureResult.featuredOfferStatus || null,
+    featuredPrice: captureResult.featuredPrice || null,
+    lowestListedOfferPrice: captureResult.lowestListedOfferPrice || null,
+    listedOffers: captureResult.listedOffers || [],
+    sellerName: captureResult.sellerName || null,
+    shipperName: captureResult.shipperName || null,
+    variantAvailabilityIssue: captureResult.variantAvailabilityIssue || false,
+    possible_state_leak: captureResult.possible_state_leak || false,
+    fields: captureResult.fields || {},
+    needsManualReview: captureResult.needsManualReview || [],
+    parseJournal: captureResult.parseJournal || null
+  };
+
+  computeBbCandidates(client);
+  buyboxFigeFaisceau(client, asin);
+
+  return true;
+}
+
 // Injecté via // @import_export dans core.js (build.py)
 // v3.7.4 — déplacement strict depuis core.js (aucune modification fonctionnelle)
 
@@ -4728,6 +5952,8 @@ function mergeImportData(client, parsedFiles) {
   client.markets.sort();
   // v3.8.0 — Pré-calcul tag suspect (après foViews + deliveryDefects + history consolidés)
   computeSuspectTags(client);
+  // v3.8.4 — Pré-scoring BB Recovery (après suspectTags, consomme les signaux)
+  computeBbCandidates(client);
   // Régénérer le plan d'action après chaque import pour refléter les nouvelles données
   client.weeklyActions = generateWeeklyActions(client);
   log(`🔗 Merge terminé: ${client.asins.length} ASINs hebdo`, 'ok');
@@ -6310,6 +7536,7 @@ function buyboxGetCase(c, asin) {
 }
 
 // Ouvre un nouveau cas pour un ASIN. Si déjà ouvert → retourne l'existant.
+// Faisceau = null à l'ouverture ; figé APRÈS capture (buyboxFigeFaisceau).
 function buyboxOpenCase(c, asin) {
   var existing = buyboxGetCase(c, asin);
   if (existing) return existing;
@@ -6321,6 +7548,8 @@ function buyboxOpenCase(c, asin) {
     status: 'open',
     openedAt: nowISO,
     closedAt: null,
+    faisceau: null,
+    capture: null,
     facts: { snapshot: null, computedAt: null },
     hypotheses: BUYBOX_HYPOTHESES.map(function(h) {
       return { id: h.id, status: 'todo', evidence: '', updatedAt: null };
@@ -6330,7 +7559,6 @@ function buyboxOpenCase(c, asin) {
     ],
     conclusion: { state: 'locked', proposedAction: '', outcome: null, closedAt: null }
   };
-  // Pré-évaluation automatique de 3 hypothèses
   var autoEvals = buyboxAutoEvaluateHypotheses(c, asin);
   for (var ke = 0; ke < autoEvals.length; ke++) {
     var ev = autoEvals[ke];
@@ -6341,18 +7569,113 @@ function buyboxOpenCase(c, asin) {
     h.auto      = true;
     h.updatedAt = nowISO;
     var hypoLabel = (BUYBOX_HYPOTHESES.find(function(x) { return x.id === ev.id; }) || {}).label || ev.id;
-    var verb = ev.status === 'investigate' ? 'orientée vers À investiguer (auto)'
-             : ev.status === 'rejected'    ? 'écartée automatiquement (auto)'
-             :                              'pré-évaluée (auto)';
+    var verb = ev.status === 'forte_presomption' ? 'forte présomption (auto)'
+             : ev.status === 'investigate'       ? 'à investiguer (auto)'
+             : ev.status === 'rejected'          ? 'écartée (auto)'
+             :                                     'pré-évaluée (auto)';
     newCase.journal.push({
       ts: nowISO, type: 'auto',
-      content: 'Hypothèse "' + hypoLabel + '" ' + verb + ' — ' + ev.evidence,
+      content: 'Hypothèse « ' + hypoLabel + ' » ' + verb + ' — ' + ev.evidence,
       author: 'system'
     });
   }
   buyboxGetCases(c).push(newCase);
   save();
   return newCase;
+}
+
+// Fige le faisceau + capture dans le case APRÈS capture (correction Fred : pas à l'ouverture).
+function buyboxFigeFaisceau(c, asin) {
+  var cs = buyboxGetCase(c, asin);
+  if (!cs) return;
+  var a = (c.asins || []).find(function(x) { return x.asin === asin; });
+  if (!a || !a.suspectTag) return;
+  var tag = a.suspectTag;
+  cs.faisceau = (tag.bbCandidates && tag.bbCandidates.length) ? JSON.parse(JSON.stringify(tag.bbCandidates[0])) : null;
+  cs.capture  = tag.bbCapture ? JSON.parse(JSON.stringify(tag.bbCapture)) : null;
+  var autoEvals = buyboxAutoEvaluateHypotheses(c, asin);
+  var nowISO = new Date().toISOString();
+  for (var ke = 0; ke < autoEvals.length; ke++) {
+    var ev = autoEvals[ke];
+    var h = cs.hypotheses.find(function(x) { return x.id === ev.id; });
+    if (!h) continue;
+    if (!h.auto && h.status !== 'todo') continue;
+    h.status    = ev.status;
+    h.evidence  = ev.evidence;
+    h.auto      = true;
+    h.updatedAt = nowISO;
+  }
+  cs.journal.push({
+    ts: nowISO, type: 'system',
+    content: 'Faisceau figé après capture — ' + (cs.faisceau ? cs.faisceau.causeDominante || cs.faisceau.formeDominante || '—' : '—'),
+    author: 'system'
+  });
+  save();
+  buyboxGenerateExplication(c, asin);
+}
+
+async function buyboxGenerateExplication(c, asin) {
+  var cs = buyboxGetCase(c, asin);
+  if (!cs || !cs.faisceau) return;
+  var fsc = cs.faisceau;
+  var cap = cs.capture;
+
+  var signaux = [];
+  if (fsc.candidatsDetailles) {
+    for (var i = 0; i < fsc.candidatsDetailles.length; i++) {
+      var cd = fsc.candidatsDetailles[i];
+      var def = BUYBOX_HYPOTHESES.find(function(x) { return x.id === cd.bb; });
+      signaux.push(cd.bb + ' (' + (def ? def.label : cd.bb) + ') — porte ' + cd.porte + ', niveau ' + cd.niveau);
+    }
+  }
+  if (fsc.signauxSupport) {
+    for (var j = 0; j < fsc.signauxSupport.length; j++) signaux.push('Signal support : ' + fsc.signauxSupport[j]);
+  }
+  if (fsc.signauxContradictoires) {
+    for (var k = 0; k < fsc.signauxContradictoires.length; k++) signaux.push('Signal contradictoire : ' + fsc.signauxContradictoires[k]);
+  }
+
+  var captureInfo = '';
+  if (cap) {
+    captureInfo = 'Détenteur BB : ' + (cap.detenteur_BB || '?');
+    if (cap.prix) captureInfo += ', prix ' + cap.prix + '€';
+    if (cap.prix_concurrent) captureInfo += ', concurrent prix détecté';
+    if (cap.indisponible) captureInfo += ', produit marqué indisponible';
+    captureInfo += ', confiance ' + (cap.confiance || '?');
+  }
+
+  var sys = 'Tu es un analyste Buy Box Amazon. '
+    + 'Tu reçois un faisceau de signaux déjà calculé par un moteur déterministe. '
+    + 'Tu dois RACONTER ce faisceau en 2-3 phrases claires pour un gestionnaire de compte. '
+    + 'Tu ne dois JAMAIS re-diagnostiquer, contredire ou nuancer les résultats du moteur. '
+    + 'Tu décris ce que le faisceau montre, pas ce que tu penses. '
+    + 'Pas de formule de politesse, pas de « je ». Style factuel, direct.';
+
+  var usr = 'ASIN : ' + asin + '\n'
+    + 'Cause dominante : ' + (fsc.causeDominante || fsc.formeDominante || '—') + '\n'
+    + 'Niveau faisceau : ' + (fsc.niveauFaisceauActuel || '—') + '\n'
+    + 'Porte dominante : ' + (fsc.porteDominante || '?') + '\n'
+    + (fsc.causesSecondaires && fsc.causesSecondaires.length ? 'Causes secondaires : ' + fsc.causesSecondaires.join(', ') + '\n' : '')
+    + (fsc.recoveryState && fsc.recoveryState !== 'aucun réveil' ? 'Recovery : ' + fsc.recoveryState + '\n' : '')
+    + 'Signaux :\n' + signaux.join('\n') + '\n'
+    + (captureInfo ? 'Capture page : ' + captureInfo + '\n' : '')
+    + '\nRaconte ce faisceau en 2-3 phrases. Pas de diagnostic, pas de recommandation.';
+
+  try {
+    var raw = await callAPI(sys, usr, 'bb_explanation', null, 300);
+    if (raw && raw.trim()) {
+      cs.faisceau.explicationCourte = raw.trim();
+      cs.journal.push({
+        ts: new Date().toISOString(), type: 'auto',
+        content: 'Explication IA générée — narration du faisceau',
+        author: 'system'
+      });
+      save();
+      render();
+    }
+  } catch(e) {
+    console.warn('[BB] explicationCourte failed:', e.message);
+  }
 }
 
 function buyboxUpdateHypothesis(c, caseId, hypoId, fields) {
@@ -6368,13 +7691,13 @@ function buyboxUpdateHypothesis(c, caseId, hypoId, fields) {
     if (Object.prototype.hasOwnProperty.call(fields, k)) h[k] = fields[k];
   }
   h.updatedAt = new Date().toISOString();
-  // Auto-journal si validation/rejet
-  if (fields.status === 'validated' || fields.status === 'rejected') {
+  if (fields.status && fields.status !== 'todo') {
     var hypoLabel = (BUYBOX_HYPOTHESES.find(function(x) { return x.id === hypoId; }) || {}).label || hypoId;
+    var verbMap = { validated: 'validée (gate humain)', rejected: 'écartée', forte_presomption: 'forte présomption', investigate: 'à investiguer' };
     cs.journal.push({
       ts: new Date().toISOString(),
       type: 'auto',
-      content: 'Hypothèse "' + hypoLabel + '" ' + (fields.status === 'validated' ? 'validée' : 'écartée'),
+      content: 'Hypothèse « ' + hypoLabel + ' » ' + (verbMap[fields.status] || fields.status),
       author: 'system'
     });
   }
@@ -6429,83 +7752,45 @@ function buyboxCloseCase(c, caseId, outcome, proposedAction) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// BUY BOX v3.6.1.3 — Pré-évaluation automatique de 3 hypothèses
+// BUY BOX v3.8.4 — Pré-évaluation automatique BB-1→12 depuis bbCandidates
+// fort → forte_presomption (confirmed réservé au gate humain — correction Fred)
 // ═══════════════════════════════════════════════════════════════════
 
 function buyboxAutoEvaluateHypotheses(c, asin) {
   var a = (c.asins || []).find(function(x) { return x.asin === asin; });
-  if (!a) return [];
+  if (!a || !a.suspectTag) return [];
+  var tag = a.suspectTag;
+  var bb = (tag.bbCandidates && tag.bbCandidates.length) ? tag.bbCandidates[0] : null;
+  if (!bb) return [];
 
   var evaluations = [];
-  var hist = a.history || [];
+  var cands = bb.candidatsDetailles || [];
 
-  // ── Stock insuffisant — algorithme dynamique v3.6.1.4 ─────────────
-  var stock = parseNum(a.sellableUnits) || 0;
-  var poQty = parseNum(a.openPOQty) || 0;
+  for (var i = 0; i < cands.length; i++) {
+    var cd = cands[i];
+    var status = 'todo';
+    if (cd.niveau === 'fort')        status = 'forte_presomption';
+    else if (cd.niveau === 'modéré') status = 'investigate';
 
-  var recentUnits = hist.slice(-4).map(function(h) { return parseNum(h.units) || 0; });
-  var v = recentUnits.length > 0
-    ? recentUnits.reduce(function(s, u) { return s + u; }, 0) / recentUnits.length
-    : null;
+    var evidence = 'Porte ' + cd.porte + ' · niveau ' + cd.niveau;
+    if (cd.bb === bb.causeDominante) evidence += ' · cause dominante';
+    else if (cd.bb === bb.formeDominante) evidence += ' · forme dominante provisoire';
 
-  var longHist = hist.slice(-16, -4).map(function(h) { return parseNum(h.units) || 0; });
-  var hl = longHist.length > 0
-    ? longHist.reduce(function(s, u) { return s + u; }, 0) / longHist.length
-    : 0;
+    evaluations.push({ id: cd.bb, status: status, evidence: evidence });
+  }
 
-  var couvStock  = (v !== null && v > 0) ? stock / v : null;
-  var couvTotale = (v !== null && v > 0) ? (stock + poQty) / v : null;
-
-  var stockStatus   = null;
-  var stockEvidence = '';
-
-  if (v === null) {
-    stockStatus = null; // pas d'historique — pas de marquage
-  } else if (v === 0) {
-    if (hl >= 5) {
-      stockStatus   = null; // ambigü — reste 'todo'
-    } else {
-      stockStatus   = 'rejected';
-      stockEvidence = 'Aucune vente (v=0) et historique faible — produit dormant.';
+  // BB non détectés par le moteur : écartés par les données actuelles
+  var detectedBBs = {};
+  for (var j = 0; j < cands.length; j++) detectedBBs[cands[j].bb] = true;
+  var sigSupport = bb.signauxSupport || [];
+  for (var k = 0; k < BUYBOX_HYPOTHESES.length; k++) {
+    var hypo = BUYBOX_HYPOTHESES[k];
+    if (detectedBBs[hypo.id]) continue;
+    if (hypo.id === 'BB-12') continue; // jamais auto
+    if (hypo.id === 'BB-9') continue;  // composite, pas écarté individuellement
+    if (sigSupport.length >= 3) {
+      evaluations.push({ id: hypo.id, status: 'rejected', evidence: 'Non détecté par le moteur — signaux insuffisants.' });
     }
-  } else if (couvStock < 2 && couvTotale < 4) {
-    stockStatus   = 'investigate';
-    stockEvidence = 'Stock ' + stock + ' u. (' + fmtNum(couvStock, 1) + ' sem) + PO ' + poQty + ' u. = couv totale ' + fmtNum(couvTotale, 1) + ' sem — rupture imminente.';
-  } else if (couvStock < 2 && couvTotale >= 4) {
-    stockStatus   = 'rejected';
-    stockEvidence = 'Stock ' + stock + ' u. (' + fmtNum(couvStock, 1) + ' sem) mais PO ' + poQty + ' u. couvre ' + fmtNum(couvTotale, 1) + ' sem — pas d\'urgence stock.';
-  } else if (couvStock < 4 && couvTotale < 6) {
-    stockStatus   = 'investigate';
-    stockEvidence = 'Stock ' + stock + ' u. (' + fmtNum(couvStock, 1) + ' sem), couv totale ' + fmtNum(couvTotale, 1) + ' sem — tension à surveiller.';
-  } else if (couvTotale > 12) {
-    stockStatus   = 'rejected';
-    stockEvidence = 'Couv totale ' + fmtNum(couvTotale, 1) + ' sem — surplus, stock pas le sujet.';
-  }
-
-  if (stockStatus !== null) {
-    evaluations.push({ id: 'stock-insufficient', status: stockStatus, evidence: stockEvidence });
-  }
-
-  // ── PO non confirmé ───────────────────────────────────────────────
-  // (poQty déjà déclaré ci-dessus)
-  if (poQty > 0) {
-    evaluations.push({ id: 'po-not-confirmed', status: 'rejected',
-      evidence: 'PO ouvert ' + poQty + ' u. — hypothèse non pertinente.' });
-  } else if (poQty === 0 && stock < 30) {
-    evaluations.push({ id: 'po-not-confirmed', status: 'investigate',
-      evidence: 'Aucun PO ouvert · stock ' + stock + ' u. — risque rupture.' });
-  }
-
-  // ── Listing inactif ───────────────────────────────────────────────
-  var gvS0 = parseNum(a.glanceViews) || 0;
-  var gvS1 = hist.length >= 2 ? (parseNum(hist[hist.length - 2].glanceViews) || 0) : 0;
-
-  if (gvS0 === 0 && gvS1 === 0) {
-    evaluations.push({ id: 'listing-inactive', status: 'investigate',
-      evidence: 'GV S-0 et S-1 à 0 — listing potentiellement inactif.' });
-  } else if (gvS0 > 100) {
-    evaluations.push({ id: 'listing-inactive', status: 'rejected',
-      evidence: 'GV ' + gvS0 + ' cette semaine — listing actif.' });
   }
 
   return evaluations;
@@ -6770,7 +8055,12 @@ function renderSuspectsBoard(c, opts) {
 
     h += '<div class="sus-hyps sus-col-hide">';
     if (t.bbCandidates && t.bbCandidates.length) {
-      t.bbCandidates.forEach(function(bb) { h += '<span class="sus-bb">' + esc(bb) + '</span>'; });
+      t.bbCandidates.forEach(function(bb) {
+        var lbl = (typeof bb === 'object') ? (bb.causeDominante || bb.formeDominante || '—') : bb;
+        var niv = (typeof bb === 'object') ? bb.niveauFaisceauActuel : '';
+        var nivCls = niv === 'fort' ? 'color:var(--r)' : niv === 'modéré' ? 'color:var(--or)' : 'color:var(--tx3)';
+        h += '<span class="sus-bb" style="' + nivCls + '">' + esc(lbl) + (niv ? ' · ' + esc(niv) : '') + '</span>';
+      });
     } else {
       h += '<span class="sus-bb">à diagnostiquer</span>';
     }
@@ -6813,7 +8103,7 @@ function renderBuyBox() {
   if (!c.asins || !c.asins.length) return '<div class="alr alr-a">Importez d\'abord des données CSV.</div>';
 
   if (window._buyboxView === 'agent_stub' && window._buyboxAsin) {
-    return renderBuyBoxAgentStub(window._buyboxAsin);
+    return renderBuyBoxCase(c, window._buyboxAsin);
   }
 
   var cF = c;
@@ -7034,13 +8324,68 @@ function renderBBPerdueBoard(c, alerts) {
   return h;
 }
 
-// ── Stub Agent BB Recovery ──
-function renderBuyBoxAgentStub(asin) {
-  var c = cl();
-  var a = c ? (c.asins || []).find(function(x) { return x.asin === asin; }) : null;
-  var title = a ? (a.title || asin) : asin;
+// ── Agent BB Recovery — Handler capture (global, car innerHTML n'exécute pas <script>) ──
+window._bbCaptureRun = async function(asin, mkt, formId) {
+  var bloc = document.getElementById(formId + '-bloc').value.trim();
+  var edit = document.getElementById(formId + '-edit').value.trim();
+  var btn = document.getElementById(formId + '-btn');
+  var status = document.getElementById(formId + '-status');
+  if (!bloc) { status.textContent = 'Le bloc d\'achat est obligatoire.'; status.style.color = 'var(--r)'; return; }
+  btn.disabled = true; status.textContent = 'Analyse IA en cours…'; status.style.color = 'var(--tx3)';
+  try {
+    var text = '=== BLOC D\'ACHAT ===\n' + bloc;
+    if (edit) text += '\n\n=== CONTENU ÉDITORIAL ===\n' + edit;
+    var result = await parseBuyBoxCapture(text, mkt);
+    if (result.error) { status.textContent = 'Erreur : ' + result.error; status.style.color = 'var(--r)'; btn.disabled = false; return; }
+    var hasValidFields = result.fields && Object.keys(result.fields).some(function(k) { return result.fields[k].validationStatus === 'validated'; });
+    if (result.confiance === 'basse' && !hasValidFields) { status.textContent = 'Bloc d\'achat non identifié — vérifiez que vous avez copié la zone prix/vendeur, pas la page entière.'; status.style.color = 'var(--a)'; btn.disabled = false; return; }
+    var c = cl();
+    var ok = applyBbCapture(c, asin, result);
+    if (ok) {
+      save();
+      var msg = 'Capture appliquée — faisceau recalculé.';
+      if (result.needsManualReview && result.needsManualReview.length > 0) { msg += ' ⚠ Revue manuelle requise (' + result.needsManualReview.length + ' champs).'; status.style.color = 'var(--or)'; }
+      else { status.style.color = 'var(--g)'; }
+      status.textContent = msg;
+      setTimeout(function(){ render(); }, 800);
+    }
+    else { status.textContent = 'Échec application (ASIN non défensif ou confiance basse).'; status.style.color = 'var(--r)'; btn.disabled = false; }
+  } catch(e) {
+    status.textContent = 'Erreur : ' + e.message; status.style.color = 'var(--r)'; btn.disabled = false;
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// BUY BOX v3.8.4 — renderBuyBoxCase() : écran unifié Diagnostiquer
+// Capture au centre, faisceau, chaîne de confiance, hypothèses BB-1→12
+// ═══════════════════════════════════════════════════════════════════
+
+function renderBuyBoxCase(c, asin) {
+  if (!c || !asin) { window._buyboxView = null; window._buyboxAsin = null; return renderBuyBox(); }
+
+  var cs = buyboxGetCase(c, asin);
+  if (!cs) {
+    cs = buyboxOpenCase(c, asin);
+    cs = buyboxGetCase(c, asin);
+    if (!cs) { window._buyboxView = null; window._buyboxAsin = null; return renderBuyBox(); }
+  }
+
+  var caseId = cs.id;
+  var asinData = (c.asins || []).find(function(a) { return a.asin === asin; });
+  var title = asinData ? (asinData.title || asin) : asin;
+  var tag = asinData ? asinData.suspectTag : null;
+  var cap = tag ? tag.bbCapture : null;
+  var bb = (tag && tag.bbCandidates && tag.bbCandidates.length) ? tag.bbCandidates[0] : null;
+  var market = tag ? (tag.marketWorst || c.mainMarket || '.fr') : (c.mainMarket || '.fr');
+  var fsc = cs.faisceau || bb;
+  var hasFaisceau = !!(cs.faisceau);
+
+  var conclusionCheck = buyboxCheckConclusionReady(c, caseId);
+  var journal = cs.journal || [];
 
   var h = '';
+
+  // ── Fil d'Ariane ──
   h += '<div style="margin-bottom:16px;">';
   h += '<span style="font-size:12px;color:var(--tx3);">Buy Box · Détecter</span>';
   h += '<span style="font-size:12px;color:var(--tx3);margin:0 6px;">→</span>';
@@ -7049,156 +8394,239 @@ function renderBuyBoxAgentStub(asin) {
   h += '<span style="font-size:12px;font-family:var(--fm);">' + esc(asin) + '</span>';
   h += '</div>';
 
-  h += '<div class="det-stub" data-testid="agent-stub">';
-  h += '<div style="font-size:36px;">🔬</div>';
-  h += '<h2>Agent BB Recovery</h2>';
-  h += '<p>Le diagnostic de <strong>' + esc(asin) + '</strong> sera disponible dans la prochaine version.<br>';
-  h += 'L\'agent reconstituera la chaîne de confiance et classera la cause en faisceau BB-1 → BB-12.</p>';
-  h += '<div style="font-size:12px;color:var(--tx3);font-family:var(--fm);margin-bottom:20px;">' + esc(title.substring(0, 80)) + '</div>';
-  h += '<button class="btn" onclick="window._buyboxView=null;window._buyboxAsin=null;render();">← Retour au Dashboard</button>';
+  // ── En-tête ASIN + pré-score ──
+  h += '<div style="background:var(--s1);border:0.5px solid var(--bd);border-radius:var(--rdl);padding:16px 20px;margin-bottom:14px;">';
+  h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">';
+  h += '<span style="font-size:24px;">🔬</span>';
+  h += '<div style="flex:1;min-width:0;">';
+  h += '<div style="font-size:14px;font-weight:600;">Diagnostiquer — ' + esc(asin) + '</div>';
+  h += '<div style="font-size:11px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(title.substring(0, 80)) + '</div>';
+  h += '</div>';
+  h += '<button class="btn btn-sm" onclick="window._buyboxView=null;window._buyboxAsin=null;go(\'buybox\');">← Retour</button>';
   h += '</div>';
 
-  return h;
-}
+  if (fsc) {
+    var lbl = fsc.causeDominante || fsc.formeDominante || '—';
+    var niv = fsc.niveauFaisceauActuel || '';
+    var nivClr = niv === 'fort' ? 'var(--r)' : niv === 'modéré' ? 'var(--or)' : 'var(--tx3)';
+    h += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px;">';
+    h += '<span style="padding:3px 8px;border-radius:4px;background:var(--s2);font-weight:500;color:' + nivClr + ';">' + esc(lbl) + ' · ' + esc(niv) + '</span>';
+    h += '<span style="color:var(--tx3);">Porte ' + (fsc.porteDominante || '?') + '</span>';
+    if (fsc.causesSecondaires && fsc.causesSecondaires.length) {
+      h += '<span style="color:var(--tx3);">+ ' + fsc.causesSecondaires.join(', ') + '</span>';
+    }
+    if (hasFaisceau) {
+      h += '<span style="padding:2px 6px;border-radius:3px;background:var(--g-bg);color:var(--g);font-size:10px;">Faisceau figé</span>';
+    } else if (bb && bb.needsManualReview && bb.needsManualReview.length) {
+      h += '<span style="padding:2px 6px;border-radius:3px;background:var(--r-bg);color:var(--r);font-size:10px;">Revue manuelle (' + bb.needsManualReview.length + ')</span>';
+    } else if (bb && bb.needsPaste && bb.needsPaste.length) {
+      h += '<span style="padding:2px 6px;border-radius:3px;background:var(--a-bg);color:var(--a);font-size:10px;">Capture requise (' + bb.needsPaste.length + ' signaux)</span>';
+    } else if (cap) {
+      h += '<span style="padding:2px 6px;border-radius:3px;background:var(--g-bg);color:var(--g);font-size:10px;">Capture OK</span>';
+    }
+    h += '</div>';
+  }
+  h += '</div>';
 
-// ═══════════════════════════════════════════════════════════════════
-// BUY BOX v3.6.1 — renderBuyBoxCase() Phase 2 : Carnet d'enquête
-// ═══════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════
+  // ZONE CAPTURE — CENTRALE (feedback Fred : au centre, pas en option)
+  // ══════════════════════════════════════════════════════════════════
+  h += '<div style="background:var(--s1);border:0.5px solid var(--bd);border-radius:var(--rdl);padding:16px 20px;margin-bottom:14px;">';
+  h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:12px;padding-bottom:8px;border-bottom:0.5px solid var(--bd);">';
+  h += '<span style="font-size:14px;">📋</span>';
+  h += '<span style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;">Capture Buy Box</span>';
+  if (cap) {
+    h += '<span style="margin-left:auto;font-size:10px;color:var(--g);font-weight:500;">Capturé le ' + new Date(cap.capturedAt).toLocaleDateString('fr-FR') + '</span>';
+  } else {
+    h += '<span style="margin-left:auto;font-size:10px;color:var(--a);font-weight:500;">En attente de capture</span>';
+  }
+  h += '</div>';
 
-function renderBuyBoxCase(c, asin) {
-  if (!c || !asin) { window._buyboxView = 'list'; return renderBuyBox(); }
-
-  // Récupérer ou créer le cas
-  var cs = buyboxGetCase(c, asin);
-  if (!cs) {
-    cs = buyboxOpenCase(c, asin);
-    // Après save(), recharger depuis l'objet courant
-    cs = buyboxGetCase(c, asin);
-    if (!cs) { window._buyboxView = 'list'; return renderBuyBox(); }
+  var capHasData = cap && (cap.confiance !== 'basse' || (cap.fields && Object.keys(cap.fields).some(function(k) { return cap.fields[k].validationStatus === 'validated'; })));
+  if (capHasData) {
+    if (cap.needsManualReview && cap.needsManualReview.length > 0) {
+      h += '<div style="background:var(--r-bg);border:1px solid var(--r);border-radius:var(--rds);padding:8px 12px;margin-bottom:10px;font-size:11px;display:flex;align-items:center;gap:6px;">';
+      h += '<span style="color:var(--r);font-weight:600;">Revue manuelle requise</span>';
+      h += '<span style="color:var(--r);">— ' + cap.needsManualReview.join(', ') + '</span>';
+      h += '</div>';
+    }
+    var detLbl = cap.detenteur_BB === '1P_Amazon' ? '1P Amazon (Retail)' : cap.detenteur_BB === '3P_FBA' ? '3P FBA — ' + esc(cap.vendeur || cap.sellerName || '?') : cap.detenteur_BB === '3P_dropship' ? '3P Dropship — ' + esc(cap.vendeur || cap.sellerName || '?') : '—';
+    var detClr = cap.detenteur_BB === '1P_Amazon' ? 'var(--g)' : cap.detenteur_BB ? 'var(--r)' : 'var(--tx3)';
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:11px;margin-bottom:12px;">';
+    h += '<div style="color:var(--tx2);">Détenteur Buy Box</div>';
+    h += '<div style="text-align:right;font-weight:500;color:' + detClr + ';">' + detLbl + '</div>';
+    if (cap.featuredOfferStatus) {
+      h += '<div style="color:var(--tx2);">Featured Offer</div>';
+      h += '<div style="text-align:right;">' + esc(cap.featuredOfferStatus) + '</div>';
+    }
+    h += '<div style="color:var(--tx2);">Prix Featured</div>';
+    h += '<div style="text-align:right;">' + (cap.featuredPrice ? cap.featuredPrice.toFixed(2) + ' €' : (cap.prix ? cap.prix.toFixed(2) + ' €' : '—')) + '</div>';
+    if (cap.lowestListedOfferPrice) {
+      h += '<div style="color:var(--tx2);">Prix listed (min)</div>';
+      h += '<div style="text-align:right;">' + cap.lowestListedOfferPrice.toFixed(2) + ' €</div>';
+    }
+    h += '<div style="color:var(--tx2);">Concurrent prix</div>';
+    h += '<div style="text-align:right;color:' + (cap.prix_concurrent ? 'var(--r)' : 'var(--g)') + ';">' + (cap.prix_concurrent === true ? 'Oui' : cap.prix_concurrent === false ? 'Non' : '—') + '</div>';
+    h += '<div style="color:var(--tx2);">Indisponible</div>';
+    h += '<div style="text-align:right;color:' + (cap.indisponible ? 'var(--r)' : 'var(--g)') + ';">' + (cap.indisponible === true ? 'Oui' : cap.indisponible === false ? 'Non' : '—') + '</div>';
+    if (cap.variantAvailabilityIssue) {
+      h += '<div style="color:var(--tx2);">Variante ambigüé</div>';
+      h += '<div style="text-align:right;color:var(--or);">Oui</div>';
+    }
+    h += '<div style="color:var(--tx2);">Confiance IA</div>';
+    h += '<div style="text-align:right;">' + esc(cap.confiance) + '</div>';
+    if (cap.possible_state_leak) {
+      h += '<div style="color:var(--tx2);">State leak</div>';
+      h += '<div style="text-align:right;color:var(--r);">Détecté</div>';
+    }
+    if (cap.raw_indices) {
+      h += '<div style="color:var(--tx2);">Indices sources</div>';
+      h += '<div style="text-align:right;font-size:10px;color:var(--tx3);font-family:var(--fm);">' + esc(cap.raw_indices.substring(0, 120)) + '</div>';
+    }
+    h += '</div>';
+    if (cap.listedOffers && cap.listedOffers.length > 0) {
+      h += '<div style="font-size:10px;color:var(--tx3);margin-bottom:8px;">Offres listées : ' + cap.listedOffers.map(function(o) { return esc(o.seller || '?') + ' (' + esc(o.fulfillment || '?') + ') ' + (o.price ? o.price.toFixed(2) + '€' : ''); }).join(' · ') + '</div>';
+    }
+    h += '<button class="btn btn-sm" onclick="document.getElementById(\'bb-cap-redo-' + esc(asin) + '\').style.display=\'block\';this.style.display=\'none\';">Refaire la capture</button>';
+    h += '<div id="bb-cap-redo-' + esc(asin) + '" style="display:none;margin-top:12px;">';
   }
 
-  var caseId = cs.id;
-  var asinData = (c.asins || []).find(function(a) { return a.asin === asin; });
-  var title = asinData ? (asinData.title || asin) : asin;
+  // Formulaire capture
+  if (!cap || capHasData) {
+    var formId = 'bb-cap-form-' + asin.replace(/[^a-zA-Z0-9]/g, '');
+    h += '<div style="margin-bottom:10px;">';
+    h += '<div style="font-size:11px;font-weight:500;margin-bottom:4px;color:var(--tx);">Copie 2 — Bloc d\'achat <span style="color:var(--r);">*obligatoire</span></div>';
+    h += '<div style="font-size:10px;color:var(--tx3);margin-bottom:4px;">Sélectionnez le bloc d\'achat Amazon (zone prix + "Vendu par" + "Expédié par" + bouton "Ajouter au panier"). ';
+    h += 'Un Ctrl+A copie toute la page — le bloc d\'achat ne sera pas identifié.</div>';
+    h += '<textarea id="' + formId + '-bloc" style="width:100%;height:100px;font-size:11px;font-family:var(--fm);border:1px solid var(--bd);border-radius:var(--rds);padding:8px;resize:vertical;background:var(--bg);" placeholder="Collez ici le bloc d\'achat (zone prix, vendu par, expédié par, ajouter au panier)…"></textarea>';
+    h += '</div>';
+    h += '<div style="margin-bottom:10px;">';
+    h += '<div style="font-size:11px;font-weight:500;margin-bottom:4px;color:var(--tx);">Copie 1 — Page éditoriale <span style="color:var(--tx3);font-weight:400;">(optionnel)</span></div>';
+    h += '<div style="font-size:10px;color:var(--tx3);margin-bottom:4px;">Titre, bullets, description — complète le diagnostic mais n\'est pas suffisant seul.</div>';
+    h += '<textarea id="' + formId + '-edit" style="width:100%;height:60px;font-size:11px;font-family:var(--fm);border:1px solid var(--bd);border-radius:var(--rds);padding:8px;resize:vertical;background:var(--bg);" placeholder="(Optionnel) Collez ici le contenu éditorial de la fiche…"></textarea>';
+    h += '</div>';
+    h += '<div style="display:flex;gap:8px;align-items:center;">';
+    h += '<button class="btn" id="' + formId + '-btn" onclick="window._bbCaptureRun(\'' + esc(asin) + '\',\'' + esc(market) + '\',\'' + formId + '\')">Analyser la capture</button>';
+    h += '<span id="' + formId + '-status" style="font-size:11px;color:var(--tx3);"></span>';
+    h += '</div>';
+  }
 
-  // Bloc Faits
-  var facts = computeBuyboxFacts(c, asin);
-
-  // Statut Buy Box pour badge header
-  var alerts = calcBuyBoxAlerts(c);
-  var allAlerts = alerts.suppressed.concat(alerts.critical, alerts.warning);
-  var alertEntry = allAlerts.find(function(e) { return e.asin === asin; });
-  var bbStatus = alertEntry
-    ? (alerts.suppressed.find(function(e) { return e.asin === asin; }) ? '⊘ Buy Box supprimée'
-    : alerts.critical.find(function(e) { return e.asin === asin; })    ? '⊘ Buy Box perdue'
-    : '⚠ Buy Box compromise')
-    : '✓ Buy Box normale';
-  var bbStatusColor = alertEntry
-    ? (alerts.critical.find(function(e) { return e.asin === asin; }) || alerts.suppressed.find(function(e) { return e.asin === asin; }) ? 'var(--r)' : 'var(--a)')
-    : 'var(--g)';
-
-  // Date d'ouverture
-  var openedDate = cs.openedAt ? new Date(cs.openedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) : '—';
-
-  // Conditions conclusion
-  var conclusionCheck = buyboxCheckConclusionReady(c, caseId);
-
-  var h = '';
-
-  // ── En-tête ──
-  h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap;">';
-  h += '<div style="display:flex;align-items:center;gap:10px;min-width:0;">';
-  h += '<button class="btn btn-sm" onclick="window._buyboxView=\'list\';window._buyboxAsin=null;render();">← Retour liste</button>';
-  h += '<div style="min-width:0;">';
-  h += '<div class="eyebrow" style="font-size:11px;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;">Phase 2 · Comprendre — Carnet d\'enquête</div>';
-  h += '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">';
-  h += '<span style="font-size:11px;color:var(--tx2);font-family:var(--fm);">' + asin + '</span>';
-  h += '<span style="font-size:14px;font-weight:500;">' + title.slice(0, 60) + '</span>';
-  h += '</div>';
-  h += '</div>';
-  h += '</div>';
-  h += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">';
-  h += '<span style="background:var(--r-bg);color:' + bbStatusColor + ';font-size:11px;padding:4px 10px;border-radius:4px;font-weight:500;">' + bbStatus + '</span>';
-  h += '<span style="font-size:11px;padding:4px 10px;color:var(--tx2);background:var(--s2);border-radius:4px;">Dossier ouvert le ' + openedDate + '</span>';
-  h += '</div>';
+  if (capHasData) {
+    h += '</div>';
+  }
   h += '</div>';
 
-  // ── Bandeau contexte sectoriel ──
-  h += '<div class="context-banner" style="margin-bottom:14px;">';
-  h += '<div class="context-title">' + BUYBOX_CONTEXT_BANNER.title + '</div>';
-  h += BUYBOX_CONTEXT_BANNER.body + ' <cite style="color:var(--tx3);font-style:normal;">' + BUYBOX_CONTEXT_BANNER.cite + '</cite>';
-  h += '</div>';
-
-  // ── Grille 2 colonnes ──
+  // ══════════════════════════════════════════════════════════════════
+  // GRILLE 2 COLONNES : Diagnostic + Investigation
+  // ══════════════════════════════════════════════════════════════════
   h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">';
 
-  // ══ COLONNE GAUCHE ══
+  // ══ COLONNE GAUCHE : Faisceau + Chaîne + Hypothèses ══
   h += '<div>';
 
-  // ── Carte Faits ──
-  h += '<div class="bb-card" style="background:var(--s1);border:0.5px solid var(--bd);border-radius:var(--rdl);padding:14px 16px;margin-bottom:14px;">';
+  // ── Carte Faisceau ──
+  h += '<div style="background:var(--s1);border:0.5px solid var(--bd);border-radius:var(--rdl);padding:14px 16px;margin-bottom:14px;">';
   h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding-bottom:8px;border-bottom:0.5px solid var(--bd);">';
-  h += '<span style="font-size:14px;">⚙</span>';
-  h += '<span style="font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Faits</span>';
-  h += '<span style="font-size:10px;color:var(--tx3);margin-left:auto;">Auto · calculé maintenant</span>';
+  h += '<span style="font-size:14px;">🎯</span>';
+  h += '<span style="font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Faisceau</span>';
+  h += '<span style="font-size:10px;color:var(--tx3);margin-left:auto;">' + (hasFaisceau ? 'Figé après capture' : 'Provisoire — en attente capture') + '</span>';
   h += '</div>';
-  if (facts) {
-    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;font-size:11px;">';
-    var rPctNow = facts.retailPct.current;
-    var rPct9w  = facts.retailPct.nineWeeksAgo;
-    var rPctStr = rPctNow !== null && rPctNow !== undefined ? rPctNow + ' %' : '—';
-    var rPct9Str = rPct9w !== null && rPct9w !== undefined ? '(était ' + rPct9w + '% S-9)' : '';
-    h += '<div style="color:var(--tx2);">Retail% actuel</div>';
-    h += '<div style="text-align:right;font-weight:500;color:' + (rPctNow < 80 ? 'var(--r)' : 'var(--tx)') + ';">' + rPctStr + ' <span style="color:var(--tx3);font-weight:400;font-size:10px;">' + rPct9Str + '</span></div>';
-    h += '<div style="color:var(--tx2);">Stock Amazon</div>';
-    var couvFmtF = (facts.stockAmazon.couverture !== null && facts.stockAmazon.couverture !== undefined)
-      ? fmtNum(facts.stockAmazon.couverture, 1) + ' sem'
-      : null;
-    var velFmtF  = facts.stockAmazon.velocityFormatted && facts.stockAmazon.velocityFormatted !== '—'
-      ? facts.stockAmazon.velocityFormatted : null;
-    var stockDetail = [velFmtF ? 'vél. ' + velFmtF : null, couvFmtF ? 'couv. ' + couvFmtF : null].filter(Boolean).join(' · ');
-    h += '<div style="text-align:right;">' + facts.stockAmazon.units + ' u.' + (stockDetail ? ' · ' + stockDetail : '') + '</div>';
-    h += '<div style="color:var(--tx2);">PO ouvert</div>';
-    h += '<div style="text-align:right;">' + facts.po.event + '</div>';
-    h += '<div style="color:var(--tx2);">Défauts livraison</div>';
-    h += '<div style="text-align:right;color:' + (facts.defects.count > 0 ? 'var(--a)' : 'var(--tx)') + ';font-weight:' + (facts.defects.count > 0 ? '500' : '400') + ';">' + facts.defects.label + '</div>';
-    h += '<div style="color:var(--tx2);">Prix actuel</div>';
-    h += '<div style="text-align:right;">' + (facts.price ? facts.price + ' €' : '—') + '</div>';
-    h += '<div style="color:var(--tx2);">Concurrent 3P</div>';
-    h += '<div style="text-align:right;color:var(--tx3);">' + facts.competitor3P + '</div>';
-    h += '<div style="color:var(--tx2);">Dernière modif fiche</div>';
-    h += '<div style="text-align:right;color:var(--tx3);">' + facts.lastFicheUpdate + '</div>';
-    h += '<div style="color:var(--tx2);">Cycle de vie ERP</div>';
-    h += '<div style="text-align:right;color:var(--tx3);">' + facts.codeVie + '</div>';
-    h += '<div style="color:var(--tx2);">Saisonnalité N-1</div>';
-    h += '<div style="text-align:right;color:var(--tx3);">' + facts.seasonality + '</div>';
-    h += '</div>';
-    h += '<div style="display:flex;gap:6px;margin-top:10px;padding-top:8px;border-top:0.5px solid var(--bd);">';
-    h += '<button class="btn btn-sm" onclick="openAmazonProduct(\'' + asin + '\',\'' + (c.mainMarket || '.fr') + '\')">↗ Voir dans Vendor Central</button>';
+
+  if (fsc) {
+    var dom = fsc.causeDominante || fsc.formeDominante || '—';
+    var domNiv = fsc.niveauFaisceauActuel || '—';
+    var domHist = fsc.niveauFaisceauHistorique || '—';
+    var domClr = domNiv === 'fort' ? 'var(--r)' : domNiv === 'modéré' ? 'var(--or)' : 'var(--tx3)';
+    h += '<div style="font-size:11px;margin-bottom:8px;">';
+    h += '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:var(--tx2);">Cause dominante</span><span style="font-weight:600;color:' + domClr + ';">' + esc(dom) + '</span></div>';
+    h += '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:var(--tx2);">Niveau actuel</span><span style="font-weight:500;color:' + domClr + ';">' + esc(domNiv) + '</span></div>';
+    if (domHist !== domNiv) {
+      h += '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:var(--tx2);">Niveau historique</span><span style="color:var(--tx3);">' + esc(domHist) + '</span></div>';
+    }
+    h += '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:var(--tx2);">Porte dominante</span><span>' + (fsc.porteDominante || '?') + '</span></div>';
+    if (fsc.recoveryState && fsc.recoveryState !== 'aucun réveil') {
+      h += '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:var(--tx2);">Recovery</span><span style="color:var(--g);">' + esc(fsc.recoveryState) + '</span></div>';
+    }
+    if (fsc.causesSecondaires && fsc.causesSecondaires.length) {
+      h += '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:var(--tx2);">Secondaires</span><span style="color:var(--tx3);">' + fsc.causesSecondaires.join(', ') + '</span></div>';
+    }
+    if (fsc.signauxContradictoires && fsc.signauxContradictoires.length) {
+      h += '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:var(--tx2);">Contradictoires</span><span style="color:var(--a);">' + fsc.signauxContradictoires.join(', ') + '</span></div>';
+    }
+    if (fsc.explicationCourte) {
+      h += '<div style="margin-top:8px;padding:8px;background:var(--s2);border-radius:var(--rds);font-size:10px;color:var(--tx2);line-height:1.5;font-style:italic;">' + esc(fsc.explicationCourte) + '</div>';
+    }
     h += '</div>';
   } else {
-    h += '<div style="color:var(--tx3);font-size:11px;">ASIN introuvable dans les données importées.</div>';
+    h += '<div style="color:var(--tx3);font-size:11px;">Aucun candidat détecté. Vérifiez les données importées.</div>';
   }
   h += '</div>';
 
-  // ── Carte Hypothèses ──
-  h += '<div class="bb-card" style="background:var(--s1);border:0.5px solid var(--bd);border-radius:var(--rdl);padding:14px 16px;margin-bottom:14px;">';
+  // ── Carte Chaîne de confiance ──
+  h += '<div style="background:var(--s1);border:0.5px solid var(--bd);border-radius:var(--rdl);padding:14px 16px;margin-bottom:14px;">';
   h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding-bottom:8px;border-bottom:0.5px solid var(--bd);">';
-  h += '<span style="font-size:14px;">⌕</span>';
-  h += '<span style="font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Hypothèses</span>';
-  var validatedCount  = (cs.hypotheses || []).filter(function(h2) { return h2.status === 'validated'; }).length;
-  var investigateCount= (cs.hypotheses || []).filter(function(h2) { return h2.status === 'investigate'; }).length;
-  var rejectedCount   = (cs.hypotheses || []).filter(function(h2) { return h2.status === 'rejected'; }).length;
-  var testedCount = validatedCount + rejectedCount + investigateCount;
-  h += '<span style="font-size:10px;color:var(--tx3);margin-left:auto;">' + testedCount + ' traitées · ' + (11 - testedCount) + ' ouvertes</span>';
+  h += '<span style="font-size:14px;">🔗</span>';
+  h += '<span style="font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Chaîne de confiance</span>';
   h += '</div>';
 
-  // Statut options
+  var porteLabels = [
+    { p: 1, label: 'Présent',    icon: '👁' },
+    { p: 2, label: 'Buyable',    icon: '📦' },
+    { p: 3, label: 'Compétitif', icon: '⚔' },
+    { p: 4, label: 'Rentable',   icon: '💰' },
+    { p: 5, label: 'Fiable',     icon: '🚚' },
+    { p: 6, label: 'Éligible',   icon: '✓' }
+  ];
+  var cands = fsc ? (fsc.candidatsDetailles || []) : [];
+  var porteBloquee = fsc ? fsc.porteDominante : null;
+
+  h += '<div style="display:flex;gap:4px;align-items:stretch;font-size:10px;">';
+  for (var pi = 0; pi < porteLabels.length; pi++) {
+    var pl = porteLabels[pi];
+    var porteCands = cands.filter(function(cd) { return cd.porte === pl.p; });
+    var isBloquee = (pl.p === porteBloquee);
+    var isFranchie = (fsc && fsc.porteDominante && pl.p < porteBloquee && porteCands.length === 0);
+    var bgColor = isBloquee ? 'var(--r-bg)' : isFranchie ? 'var(--g-bg)' : 'var(--s2)';
+    var borderColor = isBloquee ? 'var(--r)' : isFranchie ? 'var(--g)' : 'var(--bd)';
+    var textColor = isBloquee ? 'var(--r)' : isFranchie ? 'var(--g)' : 'var(--tx3)';
+
+    h += '<div style="flex:1;background:' + bgColor + ';border:1px solid ' + borderColor + ';border-radius:6px;padding:6px 4px;text-align:center;">';
+    h += '<div style="font-size:14px;margin-bottom:2px;">' + pl.icon + '</div>';
+    h += '<div style="font-weight:500;color:' + textColor + ';margin-bottom:2px;">' + pl.label + '</div>';
+    h += '<div style="font-size:9px;color:' + textColor + ';">P' + pl.p + '</div>';
+    if (porteCands.length) {
+      for (var pci = 0; pci < porteCands.length; pci++) {
+        var pcNivClr = porteCands[pci].niveau === 'fort' ? 'var(--r)' : porteCands[pci].niveau === 'modéré' ? 'var(--or)' : 'var(--tx3)';
+        h += '<div style="font-size:9px;font-weight:500;color:' + pcNivClr + ';margin-top:2px;">' + porteCands[pci].bb + '</div>';
+      }
+    }
+    h += '</div>';
+    if (pi < porteLabels.length - 1) {
+      h += '<div style="display:flex;align-items:center;color:' + (isBloquee ? 'var(--r)' : 'var(--tx3)') + ';font-size:12px;">' + (isBloquee ? '✕' : '→') + '</div>';
+    }
+  }
+  h += '</div>';
+  h += '</div>';
+
+  // ── Carte Hypothèses BB-1→12 ──
+  h += '<div style="background:var(--s1);border:0.5px solid var(--bd);border-radius:var(--rdl);padding:14px 16px;margin-bottom:14px;">';
+  h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding-bottom:8px;border-bottom:0.5px solid var(--bd);">';
+  h += '<span style="font-size:14px;">⌕</span>';
+  h += '<span style="font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Hypothèses BB</span>';
+  var validatedCount  = (cs.hypotheses || []).filter(function(h2) { return h2.status === 'validated'; }).length;
+  var fpCount         = (cs.hypotheses || []).filter(function(h2) { return h2.status === 'forte_presomption'; }).length;
+  var investigateCount= (cs.hypotheses || []).filter(function(h2) { return h2.status === 'investigate'; }).length;
+  var rejectedCount   = (cs.hypotheses || []).filter(function(h2) { return h2.status === 'rejected'; }).length;
+  var activeCount = validatedCount + fpCount + investigateCount;
+  h += '<span style="font-size:10px;color:var(--tx3);margin-left:auto;">' + activeCount + ' actives · ' + rejectedCount + ' écartées</span>';
+  h += '</div>';
+
   var statusOpts = [
-    { val: 'todo',        label: 'À vérifier' },
-    { val: 'investigate', label: 'À investiguer' },
-    { val: 'validated',   label: 'Validée' },
-    { val: 'rejected',    label: 'Écartée' }
+    { val: 'todo',               label: 'À vérifier' },
+    { val: 'forte_presomption',  label: 'Forte présomption' },
+    { val: 'investigate',        label: 'À investiguer' },
+    { val: 'validated',          label: 'Validée (gate)' },
+    { val: 'rejected',           label: 'Écartée' }
   ];
 
   var hypoData = cs.hypotheses || [];
@@ -7207,85 +8635,109 @@ function renderBuyBoxCase(c, asin) {
     if (!def) return;
     var isRejected  = hypo.status === 'rejected';
     var isValidated = hypo.status === 'validated';
-    var iconHtml = isRejected  ? '<span style="color:var(--g);font-size:13px;">✓</span>'
-                 : isValidated ? '<span style="color:var(--a);font-size:13px;">⚠</span>'
-                 :               '<span style="color:var(--tx3);font-size:13px;">○</span>';
-    var statusColor = hypo.status === 'todo'        ? 'background:var(--s2);color:var(--tx2);'
-                    : hypo.status === 'investigate' ? 'background:var(--a-bg);color:var(--a);'
-                    : hypo.status === 'validated'   ? 'background:var(--a-bg);color:var(--a);'
-                    : 'background:var(--g-bg);color:var(--g);';
+    var isFP        = hypo.status === 'forte_presomption';
+    var iconHtml = isRejected  ? '<span style="color:var(--g);font-size:16px;">✓</span>'
+                 : isValidated ? '<span style="color:var(--r);font-size:16px;">⚠</span>'
+                 : isFP        ? '<span style="color:var(--or);font-size:16px;">◉</span>'
+                 : hypo.status === 'investigate' ? '<span style="color:var(--a);font-size:16px;">◎</span>'
+                 :               '<span style="color:var(--tx3);font-size:16px;">○</span>';
+    var statusColor = hypo.status === 'todo'               ? 'background:var(--s2);color:var(--tx2);border:1px solid var(--bd2);'
+                    : hypo.status === 'forte_presomption'  ? 'background:var(--or-bg,rgba(255,149,0,.12));color:var(--or);border:1px solid var(--or);'
+                    : hypo.status === 'investigate'        ? 'background:var(--a-bg);color:var(--a);border:1px solid var(--a);'
+                    : hypo.status === 'validated'          ? 'background:var(--r-bg);color:var(--r);border:1px solid var(--r);'
+                    : 'background:var(--g-bg);color:var(--g);border:1px solid var(--g);';
     var statusLabel = statusOpts.find(function(s) { return s.val === hypo.status; });
     var statusLabelStr = statusLabel ? statusLabel.label : hypo.status;
-    var rowOpacity = isRejected ? 'opacity:0.6;' : '';
+    var rowOpacity = isRejected ? 'opacity:0.55;' : '';
 
-    h += '<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:0.5px solid var(--bd);font-size:11px;' + rowOpacity + '">';
-    h += '<div style="width:16px;flex-shrink:0;text-align:center;margin-top:1px;">' + iconHtml + '</div>';
+    h += '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:0.5px solid var(--bd);font-size:12px;' + rowOpacity + '">';
+    h += '<div style="width:20px;flex-shrink:0;text-align:center;margin-top:2px;">' + iconHtml + '</div>';
     h += '<div style="flex:1;min-width:0;">';
-    h += '<div style="font-weight:500;margin-bottom:1px;' + (isRejected ? 'text-decoration:line-through;text-decoration-color:var(--tx3);' : '') + '">' + def.label + '</div>';
-    h += '<div style="color:var(--tx3);font-size:10px;">' + def.hint + '</div>';
-    // Select statut
-    h += '<div style="margin-top:4px;display:flex;gap:4px;align-items:center;flex-wrap:wrap;">';
+    h += '<div style="font-weight:600;font-size:13px;margin-bottom:2px;' + (isRejected ? 'text-decoration:line-through;text-decoration-color:var(--tx3);' : '') + '">' + def.label + '</div>';
+    h += '<div style="color:var(--tx3);font-size:11px;margin-bottom:4px;">' + def.hint + '</div>';
+    h += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">';
     if (hypo.auto) {
-      h += '<span style="display:inline-block;padding:2px 6px;font-size:10px;background:var(--b-bg,rgba(0,122,255,.08));color:var(--b);border-radius:4px;flex-shrink:0;" title="Évaluée automatiquement à l\'ouverture du dossier">⚙ auto</span>';
+      h += '<span style="display:inline-block;padding:3px 8px;font-size:10px;font-weight:500;background:var(--b-bg,rgba(0,122,255,.08));color:var(--b);border-radius:4px;flex-shrink:0;">⚙ auto</span>';
     }
-    h += '<select style="font-size:10px;padding:2px 4px;background:var(--s2);border:0.5px solid var(--bd2);border-radius:4px;color:var(--tx);" onchange="buyboxUpdateHypothesis(cl(),\'' + caseId + '\',\'' + hypo.id + '\',{status:this.value});render();">';
+    h += '<select style="font-size:12px;padding:4px 8px;background:var(--s2);border:1px solid var(--bd2);border-radius:6px;color:var(--tx);font-weight:500;cursor:pointer;" onchange="buyboxUpdateHypothesis(cl(),\'' + caseId + '\',\'' + hypo.id + '\',{status:this.value});render();">';
     statusOpts.forEach(function(opt) {
       h += '<option value="' + opt.val + '"' + (hypo.status === opt.val ? ' selected' : '') + '>' + opt.label + '</option>';
     });
     h += '</select>';
     if (hypo.evidence) {
-      h += '<span style="font-size:10px;color:var(--tx3);font-style:italic;">' + hypo.evidence.slice(0, 40) + (hypo.evidence.length > 40 ? '…' : '') + '</span>';
+      h += '<span style="font-size:11px;color:var(--tx3);font-style:italic;">' + esc(hypo.evidence.slice(0, 60)) + (hypo.evidence.length > 60 ? '…' : '') + '</span>';
     }
     h += '</div>';
     h += '</div>';
-    h += '<span style="font-size:9px;padding:2px 5px;border-radius:3px;font-weight:500;white-space:nowrap;' + statusColor + '">' + statusLabelStr + '</span>';
+    h += '<span style="font-size:12px;padding:5px 10px;border-radius:6px;font-weight:600;white-space:nowrap;letter-spacing:.02em;' + statusColor + '">' + statusLabelStr + '</span>';
     h += '</div>';
   });
-
-  // .ai-suggestion — présente mais masquée en v3.6.1 (réactivation v3.6.3)
-  h += '<div style="display:none;" class="bb-ai-suggestion"><!-- AI suggestion v3.6.3 --></div>';
   h += '</div>';
 
   h += '</div>'; // fin col gauche
 
-  // ══ COLONNE DROITE ══
+  // ══ COLONNE DROITE : Journal + Conclusion ══
   h += '<div>';
 
+  // ── Carte Timeline ──
+  h += '<div style="background:var(--s1);border:0.5px solid var(--bd);border-radius:var(--rdl);padding:14px 16px;margin-bottom:14px;">';
+  h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding-bottom:8px;border-bottom:0.5px solid var(--bd);">';
+  h += '<span style="font-size:14px;">📅</span>';
+  h += '<span style="font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Timeline</span>';
+  h += '</div>';
+  var timelineEvents = [];
+  if (cs.openedAt) timelineEvents.push({ date: cs.openedAt, label: 'Dossier ouvert' });
+  if (cap && cap.capturedAt) timelineEvents.push({ date: cap.capturedAt, label: 'Capture Buy Box' });
+  if (hasFaisceau) timelineEvents.push({ date: cap ? cap.capturedAt : cs.openedAt, label: 'Faisceau figé — ' + (fsc.causeDominante || fsc.formeDominante || '—') });
+  var facts = computeBuyboxFacts(c, asin);
+  if (facts && facts.defects.count > 0) timelineEvents.push({ date: null, label: facts.defects.label });
+  if (facts) timelineEvents.push({ date: null, label: 'Stock ' + facts.stockAmazon.units + ' u. · ' + facts.po.event });
+  h += '<div style="font-size:11px;">';
+  for (var ti = 0; ti < timelineEvents.length; ti++) {
+    var te = timelineEvents[ti];
+    var teDate = te.date ? new Date(te.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) : '—';
+    h += '<div style="display:flex;gap:8px;padding:4px 0;border-bottom:0.5px solid var(--bd);">';
+    h += '<span style="width:60px;flex-shrink:0;color:var(--tx3);font-size:10px;font-family:var(--fm);">' + teDate + '</span>';
+    h += '<span style="color:var(--tx2);">' + esc(te.label) + '</span>';
+    h += '</div>';
+  }
+  h += '</div>';
+  h += '</div>';
+
   // ── Carte Journal ──
-  h += '<div class="bb-card" style="background:var(--s1);border:0.5px solid var(--bd);border-radius:var(--rdl);padding:14px 16px;margin-bottom:14px;">';
+  h += '<div style="background:var(--s1);border:0.5px solid var(--bd);border-radius:var(--rdl);padding:14px 16px;margin-bottom:14px;">';
   h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding-bottom:8px;border-bottom:0.5px solid var(--bd);">';
   h += '<span style="font-size:14px;">📓</span>';
   h += '<span style="font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Journal</span>';
+  h += '<span style="font-size:10px;color:var(--tx3);margin-left:4px;">' + journal.length + '</span>';
   h += '<button class="btn btn-sm" style="margin-left:auto;" onclick="var txt=prompt(\'Ajouter une entrée journal :\');if(txt&&txt.trim()){buyboxAddJournalEntry(cl(),\'' + caseId + '\',txt.trim(),\'manual\');render();}">+ Ajouter</button>';
   h += '</div>';
 
-  var journal = cs.journal || [];
   if (journal.length === 0) {
-    h += '<div style="color:var(--tx3);font-size:11px;">Aucune entrée. Cliquez "+ Ajouter" pour commencer.</div>';
+    h += '<div style="color:var(--tx3);font-size:11px;">Aucune entrée.</div>';
   } else {
-    journal.slice().reverse().forEach(function(entry) {
+    var journalSlice = journal.slice().reverse().slice(0, 10);
+    journalSlice.forEach(function(entry) {
       var ts = entry.ts ? new Date(entry.ts) : null;
       var tsStr = ts ? ts.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) + ' · ' + ts.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '—';
       var isSystem = entry.type === 'system' || entry.type === 'auto';
       var iconColor = isSystem ? 'color:var(--g);' : 'color:var(--a);';
       var iconChar  = isSystem ? '✓' : '◷';
-      h += '<div style="display:flex;gap:8px;padding:7px 0;border-bottom:0.5px solid var(--bd);font-size:11px;">';
-      h += '<div style="flex-shrink:0;width:75px;color:var(--tx3);font-size:10px;font-family:var(--fm);">' + tsStr + '</div>';
-      h += '<div style="font-size:13px;flex-shrink:0;margin-top:1px;' + iconColor + '">' + iconChar + '</div>';
-      h += '<div style="flex:1;min-width:0;">';
-      h += entry.content;
-      if (isSystem) {
-        h += '<div style="color:var(--tx3);font-size:10px;margin-top:1px;">système</div>';
-      }
-      h += '</div>';
+      h += '<div style="display:flex;gap:8px;padding:5px 0;border-bottom:0.5px solid var(--bd);font-size:11px;">';
+      h += '<div style="flex-shrink:0;width:70px;color:var(--tx3);font-size:10px;font-family:var(--fm);">' + tsStr + '</div>';
+      h += '<div style="font-size:12px;flex-shrink:0;margin-top:1px;' + iconColor + '">' + iconChar + '</div>';
+      h += '<div style="flex:1;min-width:0;">' + esc(entry.content) + '</div>';
       h += '</div>';
     });
+    if (journal.length > 10) {
+      h += '<div style="font-size:10px;color:var(--tx3);padding:4px 0;">… et ' + (journal.length - 10) + ' entrées précédentes</div>';
+    }
   }
   h += '</div>';
 
   // ── Carte Conclusion ──
   h += '<div style="background:var(--s2);border:0.5px dashed var(--bd2);border-radius:var(--rdl);padding:14px;">';
-  h += '<div style="display:flex;align-items:center;gap:6px;padding-bottom:0;margin-bottom:10px;">';
+  h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">';
   h += '<span style="font-size:14px;">🏁</span>';
   h += '<span style="font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;">Conclusion</span>';
   var conclusionState = cs.conclusion && cs.conclusion.state === 'closed' ? 'Finalisée' : 'Non finalisée';
@@ -7294,18 +8746,16 @@ function renderBuyBoxCase(c, asin) {
   h += '</div>';
 
   if (cs.conclusion && cs.conclusion.state !== 'closed') {
-    h += '<div style="font-size:11px;color:var(--tx2);margin-bottom:12px;line-height:1.5;">';
-    h += '<span style="color:var(--tx3);">🔒</span> Cette section s\'activera quand le faisceau d\'éléments sera suffisant. Conditions actuelles :';
+    h += '<div style="font-size:11px;color:var(--tx2);margin-bottom:10px;line-height:1.5;">';
+    h += '🔒 Conditions de déverrouillage :';
     h += '</div>';
-
-    h += '<div style="font-size:11px;margin-bottom:12px;">';
+    h += '<div style="font-size:11px;margin-bottom:10px;">';
     conclusionCheck.conditions.forEach(function(cond) {
       var iconCheck = cond.met ? '<span style="color:var(--g);font-size:13px;">✓</span>' : '<span style="color:var(--tx3);font-size:13px;">○</span>';
-      // Calcul du statut
       var condStatusStr = '';
-      if (cond.id === 'min-journal')       condStatusStr = journal.length + ' / 3';
+      if (cond.id === 'min-journal')          condStatusStr = journal.length + ' / 3';
       else if (cond.id === 'hypotheses-tested') condStatusStr = validatedCount + ' val. · ' + rejectedCount + ' écart.';
-      else if (cond.id === 'bol-source-known')  condStatusStr = c.bolSource ? c.bolSource : 'en attente';
+      else if (cond.id === 'capture-done')      condStatusStr = hasFaisceau ? 'oui' : 'en attente';
       h += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;">';
       h += iconCheck;
       h += '<span>' + cond.label + '</span>';
@@ -7313,20 +8763,19 @@ function renderBuyBoxCase(c, asin) {
       h += '</div>';
     });
     h += '</div>';
-
     var btnDisabled = !conclusionCheck.ready;
-    h += '<button class="btn" ' + (btnDisabled ? 'disabled' : '') + ' style="width:100%;padding:7px 14px;" onclick="showToast(\'Phase 3 disponible en v3.6.2\', \'alr-a\', 4000);">Passer en phase 3 — Proposer →</button>';
+    h += '<button class="btn" ' + (btnDisabled ? 'disabled' : '') + ' style="width:100%;padding:7px 14px;" onclick="showToast(\'Préparer le case — disponible prochaine version\', \'alr-a\', 4000);">Préparer le case →</button>';
   } else if (cs.conclusion && cs.conclusion.state === 'closed') {
     h += '<div style="font-size:11px;color:var(--tx2);margin-bottom:8px;">Dossier clôturé — <strong>' + (cs.conclusion.outcome === 'success' ? 'succès' : cs.conclusion.outcome === 'failure' ? 'échec' : 'inconclusif') + '</strong></div>';
     if (cs.conclusion.proposedAction) {
-      h += '<div style="font-size:11px;color:var(--tx3);">' + cs.conclusion.proposedAction + '</div>';
+      h += '<div style="font-size:11px;color:var(--tx3);">' + esc(cs.conclusion.proposedAction) + '</div>';
     }
   }
 
   h += '<div style="margin-top:10px;padding:9px 11px;background:var(--s1);border-radius:var(--rd);font-size:10px;color:var(--tx3);line-height:1.5;">';
-  h += '🛡 L\'outil ne propose pas de conclusion automatique — c\'est à l\'utilisateur de trancher quand il juge le faisceau suffisant. L\'IA n\'a pas le droit de précipiter.';
+  h += '🛡 L\'outil ne propose pas de conclusion automatique — c\'est à l\'utilisateur de trancher. L\'IA n\'a pas le droit de précipiter.';
   h += '</div>';
-  h += '</div>'; // fin conclusion-card
+  h += '</div>';
 
   h += '</div>'; // fin col droite
   h += '</div>'; // fin grid
