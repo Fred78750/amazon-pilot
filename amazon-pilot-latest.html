@@ -8382,7 +8382,21 @@ function renderSuspectsBoard(c, opts) {
     suspects.push(a);
   });
 
-  suspects.sort(function(a, b) { return (b.suspectTag.caExposed || 0) - (a.suspectTag.caExposed || 0); });
+  var sevOrder = { critical: 0, warning: 1, opportunity: 2 };
+  suspects.sort(function(a, b) {
+    var sa = sevOrder[a.suspectTag.severity] !== undefined ? sevOrder[a.suspectTag.severity] : 9;
+    var sb = sevOrder[b.suspectTag.severity] !== undefined ? sevOrder[b.suspectTag.severity] : 9;
+    if (sa !== sb) return sa - sb;
+    return (b.suspectTag.caExposed || 0) - (a.suspectTag.caExposed || 0);
+  });
+
+  var top15 = {};
+  var sevCount = {};
+  suspects.forEach(function(a) {
+    var sev = a.suspectTag.severity;
+    sevCount[sev] = (sevCount[sev] || 0) + 1;
+    if (sevCount[sev] <= 15) top15[a.asin] = true;
+  });
 
   var flt = window._suspectFilter || 'all';
   var filtered = flt === 'all' ? suspects : suspects.filter(function(a) { return a.suspectTag.severity === flt; });
@@ -8486,7 +8500,9 @@ function renderSuspectsBoard(c, opts) {
     }
     h += '</div>';
 
-    h += '<div class="sus-ca sus-col-hide">' + fmtEurK(t.caExposed || 0) + '<span>CA 12 mois</span></div>';
+    h += '<div class="sus-ca sus-col-hide">' + fmtEurK(t.caExposed || 0) + '<span>CA 12 mois</span>'
+      + (top15[a.asin] ? '<span style="display:inline-block;margin-top:4px;font-size:9px;font-weight:700;letter-spacing:.05em;padding:1px 6px;border-radius:3px;background:var(--a);color:#fff;">PRIORITAIRE</span>' : '')
+      + '</div>';
 
     h += '<div><button class="det-go" onclick="window._buyboxView=\'agent_stub\';window._buyboxAsin=\'' + a.asin + '\';render();" title="Lancer l\'Agent BB sur cet ASIN">Lancer l\'Agent BB</button></div>';
 
